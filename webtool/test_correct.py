@@ -1896,6 +1896,41 @@ def test_cmd_diarize_writes_sidecar(project, monkeypatch):
     assert side["turns"] and side["audio"] == "S1.mp3"
 
 
+def test_diarization_model_switch_rebuilds_sidecar(project, monkeypatch):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    from webtool import diarize, nemotron_diarize
+    selected = {"diarization_model": "pyannote"}
+    monkeypatch.setattr(correct.settings, "load", lambda: selected)
+    monkeypatch.setattr(diarize, "diarize_file", lambda *a, **kw: _fake_turns())
+    nemotron_calls = []
+    monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda audio: nemotron_calls.append(audio) or _fake_turns())
+
+    assert correct.cmd_diarize("Demo") == 1
+    assert correct.cmd_diarize("Demo") == 0
+    selected["diarization_model"] = "nemotron3"
+    assert correct.cmd_diarize("Demo") == 1
+    assert len(nemotron_calls) == 1
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert side["diarization_model"] == "nemotron3"
+    assert side["segments"] == [{"id": 0, "speaker": "Sprecher 1"}]
+
+
+def test_failed_model_switch_does_not_reuse_old_speakers(project, monkeypatch):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    from webtool import diarize, nemotron_diarize
+    selected = {"diarization_model": "pyannote"}
+    monkeypatch.setattr(correct.settings, "load", lambda: selected)
+    monkeypatch.setattr(diarize, "diarize_file", lambda *a, **kw: _fake_turns())
+    assert correct.cmd_diarize("Demo") == 1
+
+    selected["diarization_model"] = "nemotron3"
+    monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda _audio: (_ for _ in ()).throw(RuntimeError("NeMo fehlt")))
+    assert correct.cmd_diarize("Demo") == 0
+    assert not (t / "S1.diar.json").exists()
+
+
 def test_diagnose_landet_im_sidecar(project, monkeypatch):
     """#275: was `diarize_file` in das mitgegebene dict schreibt, steht danach in der
     `.diar.json`. Ohne diesen Weg waere die Diagnose gemessen und weggeworfen."""

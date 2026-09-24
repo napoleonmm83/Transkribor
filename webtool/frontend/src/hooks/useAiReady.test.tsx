@@ -9,6 +9,8 @@ vi.mock('@/lib/api')
 const BASIS = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false,
   env_key: '', whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [],
+  diarization_model: 'pyannote', nemotron_da: false,
+  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '' },
   providers: [], ai_ready: true, ai_reason: '', kaputt: '', projekte_pfad: '/tmp/projekte',
   parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '', parallel_env_wirksam: '',
   ytdlp_auto: '1', ytdlp: { unlesbar: false, version: '2026.8.12', geprueft: '', auto: true, env: false, laeuft: false, ergebnis: '', ungeschuetzt: false, unterbrochen: false, ejs_unlesbar: false },

@@ -92,6 +92,7 @@ DEFAULTS = {"provider": "claude-cli", "model": "", "base_url": "", "api_key": ""
             # Whisper-Stufe und -Sprache. large-v3/de ist das bisherige Verhalten —
             # eine Verhaltensaenderung fuer Bestandsnutzer waere unnoetig.
             "whisper_model": "large-v3", "whisper_lang": "de",
+            "diarization_model": "pyannote",
             # yt-dlp-Selbstaktualisierung: der Schalter bleibt eine Nutzereinstellung; der
             # Pruef-Merker ist seit #281 venv-Buchhaltung als Datei (ytdlp_update._kalender_merker)
             # und hier GELOESCHT — ein Alt-Bestand wird beim nächsten save() herausgefiltert.
@@ -215,6 +216,8 @@ def _lesen() -> tuple:
                           if k in DEFAULTS and isinstance(v, str)}}
     if cfg["whisper_model"] not in KNOWN_WHISPER_MODELS:
         cfg["whisper_model"] = DEFAULTS["whisper_model"]
+    if cfg["diarization_model"] not in ("pyannote", "nemotron3"):
+        cfg["diarization_model"] = DEFAULTS["diarization_model"]
     # NORMALISIERT, nicht nur validiert — und das schliesst zwei Loecher auf einmal.
     #
     # (1) `"03"` ist fuer `parallel_ok` gueltig und wurde unveraendert weitergereicht. Die
@@ -289,6 +292,7 @@ def public(cfg: dict = None) -> dict:
             # sonst holt niemand den Key zurueck, der dort noch drinsteht.
             "kaputt": kaputt_pfad(),
             "whisper_model": cfg["whisper_model"], "whisper_lang": cfg["whisper_lang"],
+            "diarization_model": cfg["diarization_model"],
             # Der gespeicherte Wert plus Grenze und Standard — beide vom Server, weil eine
             # im Frontend verdrahtete 16 (oder 3) beim naechsten Anfassen falsch waere
             # (dasselbe Muster wie `sprecher_max` im Datei-Endpunkt). `parallel_default`

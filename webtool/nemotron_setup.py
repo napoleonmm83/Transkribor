@@ -1,8 +1,16 @@
-"""Optionale NeMo-Pakete installieren und den offiziellen Quellstand nachziehen.
+"""Optionale NeMo-Pakete installieren — automatisch nur die GEPRUEFTE Fassung.
 
 Der PyPI-Stand 3.0.0 kann Nemotron 3 (RoPE) nicht laden. Darum wird eine
-konkrete Revision des offiziellen NVIDIA-Repos installiert. Erst ein neuer,
-vollstaendig gepruefter Stand wird als aktuell vermerkt.
+konkrete Revision des offiziellen NVIDIA-Repos installiert.
+
+Entscheidung Marcus 2026-09-24: die Automatik (Serverstart, Auswahl in den
+Einstellungen) installiert ausschliesslich `GEPRUEFTE_REVISION` und fragt GitHub
+nie. Vorher zog sie alle 14 Tage den jeweils neuesten, ungeprueften main-Stand
+und ersetzte dabei eine funktionierende Installation. Den neuesten Stand holt nur
+der Knopf (`force=True`); eine so geholte Fassung traegt `quelle: "knopf"` und
+wird von der Automatik nie angefasst. Eine neuere gepruefte Fassung kommt mit
+einem Transkribor-Update: dann ist der Pin ein anderer, und eine Automatik-
+Installation (auch ein Alt-Marker ohne `quelle`) wird darauf gehoben.
 """
 
 import datetime as dt
@@ -18,8 +26,7 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
-BASELINE_REVISION = "cf724ac337d1ebc7d0dda1e23fb80916f52927a5"
-INTERVALL_TAGE = 14
+GEPRUEFTE_REVISION = "cf724ac337d1ebc7d0dda1e23fb80916f52927a5"
 _GITHUB_API = "https://api.github.com/repos/NVIDIA-NeMo/Speech/commits/main"
 _TRITON = {"2.10": "3.6.0.post26", "2.11": "3.6.0.post26",
            "2.12": "3.7.1.post27", "2.13": "3.7.1.post27",
@@ -70,7 +77,7 @@ def _bereit(marker: dict) -> bool:
             or not _version("torch")):
         return False
     if not (marker.get("revision") and marker.get("version") == nemo
-            or BASELINE_REVISION[:7] in nemo):
+            or GEPRUEFTE_REVISION[:7] in nemo):
         return False
     try:
         pin = _triton_pin()
@@ -88,14 +95,22 @@ def zustand() -> dict:
             **lauf}
 
 
+def _heute() -> str:
+    return dt.date.today().isoformat()
+
+
 def _faellig() -> bool:
-    if not _bereit(_marker()):
+    """Muss die AUTOMATIK etwas tun? Der Knopf fragt das nicht."""
+    marker = _marker()
+    if marker.get("fehlgeschlagen"):
+        # Tagesbremse: ohne sie startete jeder Serverstart nach einem Fehlschlag
+        # (offline, kaputter Stand) erneut ein bis zu 900 s langes pip.
+        return marker.get("am") != _heute()
+    if not _bereit(marker):
         return True
-    try:
-        tag = dt.date.fromisoformat(_marker()["geprueft"])
-    except (KeyError, ValueError):
-        return True
-    return (dt.date.today() - tag).days >= INTERVALL_TAGE
+    if marker.get("quelle", "auto") == "knopf":
+        return False
+    return marker.get("revision") != GEPRUEFTE_REVISION
 
 
 def _latest_revision() -> str:
@@ -122,14 +137,14 @@ def _run(args: list[str], timeout: int) -> str | None:
 def _marker_entwerten() -> None:
     path = _marker_path()
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"fehlgeschlagen": True}), encoding="utf-8")
+    tmp.write_text(json.dumps({"fehlgeschlagen": True, "am": _heute()}), encoding="utf-8")
     os.replace(tmp, path)
 
 
 def _install_gesperrt(force: bool = False) -> str:
     if not force and not _faellig():
         return "aktuell"
-    revision = _latest_revision()
+    revision = _latest_revision() if force else GEPRUEFTE_REVISION
     marker = _marker()
     url = f"https://codeload.github.com/NVIDIA-NeMo/Speech/zip/{revision}"
     if _bereit(marker) and (marker.get("revision") == revision
@@ -184,8 +199,11 @@ def _install_gesperrt(force: bool = False) -> str:
             raise RuntimeError(f"NeMo-Pruefung: {error}")
     path = _marker_path()
     tmp = path.with_suffix(".tmp")
+    # Holt der Knopf genau den Pin, gilt die Fassung als Automatik-Fassung — sonst
+    # erreichte ein spaeterer Pin-Wechsel diese Installation nie mehr.
+    quelle = "auto" if revision == GEPRUEFTE_REVISION else "knopf"
     tmp.write_text(json.dumps({"revision": revision, "version": _version("nemo-toolkit"),
-                               "geprueft": dt.date.today().isoformat()}),
+                               "geprueft": _heute(), "quelle": quelle}),
                    encoding="utf-8")
     os.replace(tmp, path)
     return result

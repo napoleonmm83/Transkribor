@@ -175,6 +175,8 @@ export type DateiEinstellungen = ProjectEinstellungen & {
    *  beim Lauf. Runtime-Guard wie beim Schwesterfeld: `=== false`, ein aelterer Server
    *  ohne das Feld gilt als verfuegbar (Rueckfall zum bisherigen Verhalten). */
   pyannote_da: boolean
+  nemotron_da: boolean
+  diarization_model: 'pyannote' | 'nemotron3'
 };
 /** `sprache: null` / `mehrsprachig: null` heisst AUSDRUECKLICH „Override entfernen" — das Feld
  *  wegzulassen laesst ihn stehen (Partial-Update). Unterschieden wird serverseitig an
@@ -197,6 +199,10 @@ export type Settings = {
   provider: string; model: string; base_url: string; has_key: boolean;
   providers: ProviderInfo[]; env_key: string;
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
+  diarization_model: 'pyannote' | 'nemotron3';
+  nemotron_da: boolean;
+  nemotron: { bereit: boolean; version: string; revision: string; geprueft: string;
+              laeuft: boolean; ergebnis: string; fehler: string };
   /** Gleichzeitige Korrektur-Anfragen an die KI ("1".."parallel_max"). Wie `ytdlp_auto` der
    *  GESPEICHERTE Wert; er gilt, solange `parallel_env` leer ist — sonst gewinnt die
    *  Umgebung, und die wirksame Zahl steht in `parallel_env_wirksam`. (Hier stand „was

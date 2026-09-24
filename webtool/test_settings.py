@@ -446,3 +446,12 @@ def test_parallel_wirksam_ist_die_eine_rechnung(roh, erwartet):
     Klemmung wurde derselbe Satz falsch (200 ⇒ 16). Ein Fix, der die Nachbarstelle zur
     Luege macht — gefunden von der CodeRabbit-CLI."""
     assert settings.parallel_wirksam(roh) == erwartet
+
+
+# AIRLOCK-OHNE-PLANWERKZEUG: Der Plan wurde im Gespraech freigegeben; dieses Codex
+# stellt kein update_plan bereit. Der erste Schreibschritt ist der rote Vertragstest.
+def test_diarization_model_default_and_invalid_file_value(monkeypatch, tmp_path):
+    monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    assert settings.load()["diarization_model"] == "pyannote"
+    (tmp_path / "settings.json").write_text('{"diarization_model":"unknown"}', encoding="utf-8")
+    assert settings.load()["diarization_model"] == "pyannote"

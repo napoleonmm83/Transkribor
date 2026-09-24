@@ -19,6 +19,8 @@ vi.mock('sonner', () => ({
 const BASIS: Settings = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false, env_key: '',
   whisper_model: 'large-v3', whisper_lang: 'de',
+  diarization_model: 'pyannote', nemotron_da: false,
+  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '' },
   whisper_choices: [
     { id: 'turbo', label: 'Schnell und gut', hint: 'nahe large-Qualität' },
     { id: 'large-v3', label: 'Beste Qualität', hint: 'bester Dialekt' },
@@ -51,6 +53,33 @@ const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name:
 }
 
 describe('SettingsPage', () => {
+  it('speichert Nemotron 3 und zeigt die optionale Einrichtung', async () => {
+    vi.mocked(api.saveSettings).mockResolvedValue({
+      ...GESPEICHERT, diarization_model: 'nemotron3', nemotron_da: false,
+    })
+    zeige()
+    const auswahl = await screen.findByRole('combobox', { name: 'Diarisierungsmodell' })
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: /NVIDIA Nemotron 3/ }))
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ diarization_model: 'nemotron3' }))
+    expect(await screen.findByText(/NeMo fehlt/)).toBeInTheDocument()
+  })
+  it('prüft NeMo per Knopf und zeigt den laufenden Paketabgleich', async () => {
+    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, bereit: false, version: '', revision: '', geprueft: '', laeuft: true, ergebnis: '', fehler: '' })
+    zeige({ diarization_model: 'nemotron3' })
+    const knopf = await screen.findByRole('button', { name: /Neuesten NeMo-Stand holen/ })
+    // Entscheidung 2026-09-24: automatisch nur die geprüfte Fassung — und das Modell ist
+    // nicht zugangsbeschränkt; ein Hinweis auf eine Anmeldung wäre falsch.
+    expect(screen.getByText(/nur die von uns geprüfte NeMo-Fassung/)).toBeInTheDocument()
+    expect(screen.queryByText(/Hugging-Face-Anmeldung/)).not.toBeInTheDocument()
+    vi.mocked(api.getSettings).mockResolvedValue({
+      ...BASIS, diarization_model: 'nemotron3',
+      nemotron: { ...BASIS.nemotron, laeuft: true },
+    })
+    fireEvent.click(knopf)
+    await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledTimes(1))
+    expect(await screen.findByText(/NeMo-Pakete werden geprüft und installiert/)).toBeInTheDocument()
+  })
   // Der Automock von '@/lib/api' liefert sonst `undefined` — eine Antwort, die die echte
   // API nie gibt. Seit die Seite von selbst laedt, traefe die JEDEN Test mit Anbieter.
   beforeEach(() => {

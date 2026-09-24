@@ -29,6 +29,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Neu**
+- In den Einstellungen lässt sich für die Sprecher-Erkennung optional NVIDIA Nemotron 3 wählen; pyannote bleibt die Voreinstellung.
+- Bei Auswahl von Nemotron 3 richtet Transkribor die benötigten NeMo-Pakete in einer von uns geprüften Fassung selbst ein; den neuesten Stand von NVIDIA holt auf Wunsch ein Knopf in den Einstellungen.
 - Fehlerberichte lassen sich jetzt mit einer Vorschau direkt an uns senden; ein Mailprogramm ist dafür nicht mehr nötig.
 - Sind automatische Fehlerberichte eingeschaltet, werden jetzt auch Fehler in der Oberfläche gemeldet; Benutzerpfade sowie die Namen vorhandener Projekte und Aufnahmen werden dabei unkenntlich gemacht.
 

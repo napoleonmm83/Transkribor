@@ -2079,11 +2079,14 @@ def test_settings_modellwechsel_behaelt_den_key(client):
     # Vergleich unten auf jedem zweiten Rechner um. Fehlt eines, wirft schon das `pop`.
     # DASS es dieselben sind wie im GET, prueft `test_settings_put_liefert_denselben_rumpf…`.
     umgebung = {k: body.pop(k) for k in ("providers", "env_key", "whisper_choices",
-                                         "projekte_pfad", "ai_ready", "ai_reason")}
+                                         "projekte_pfad", "ai_ready", "ai_reason",
+                                         "nemotron_da", "nemotron")}
     assert umgebung["providers"], "die Anbieterliste kommt live und darf nicht leer sein"
+    assert isinstance(umgebung["nemotron_da"], bool)
     assert body == {"provider": "anthropic", "model": "claude-sonnet-5",
                     "base_url": "", "has_key": True,
                     "whisper_model": "large-v3", "whisper_lang": "de",
+                    "diarization_model": "pyannote",
                     # Der Korrektur-Deckel, seine Grenze und der Ausgangswert. "3" ist der
                     # bisherige, fest verdrahtete Wert — wer den Regler nicht anfasst, merkt
                     # nichts. `parallel_env` steht MIT im Vergleich (statt oben weggepoppt zu
@@ -2110,10 +2113,11 @@ def test_settings_rumpf_traegt_alle_felder_die_das_frontend_tippt(client):
     assert set(client.get("/api/settings").json()) == {
         # aus settings.public()
         "provider", "model", "base_url", "has_key", "kaputt",
-        "whisper_model", "whisper_lang", "ytdlp_auto",
+        "whisper_model", "whisper_lang", "diarization_model", "ytdlp_auto",
         "parallel", "parallel_max", "parallel_default",
         # Umgebung, die das Frontend braucht
-        "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason",
+        "providers", "env_key", "whisper_choices", "ai_ready", "ai_reason", "nemotron_da",
+        "nemotron",
         # wo die Arbeit des Nutzers liegt (#218)
         "projekte_pfad",
         # ob TRANSKRIBOR_PARALLEL den gespeicherten Deckel ueberstimmt (roh + wirksam)
@@ -2180,6 +2184,24 @@ def test_settings_put_liefert_denselben_rumpf_wie_der_get(client):
     # Beide Richtungen: `ungeschuetzt` beschreibt EINEN Schreibvorgang (#194) — im GET waere
     # es sinnlos, und im `Settings`-Typ bliebe die Warnung bis zum Neuladen stehen.
     assert "ungeschuetzt" in put and "ungeschuetzt" not in get
+
+
+def test_diarization_model_roundtrip_and_validation(client, tmp_projekt, monkeypatch):
+    from webtool import nemotron_setup
+    starts = []
+    monkeypatch.setattr(nemotron_setup, "starten", lambda force=False: starts.append(force) or True)
+    assert client.get("/api/settings").json()["diarization_model"] == "pyannote"
+    saved = client.put("/api/settings", json={"diarization_model": "nemotron3"})
+    assert saved.status_code == 200
+    assert saved.json()["diarization_model"] == "nemotron3"
+    assert starts == [False]
+    assert client.get("/api/settings").json()["diarization_model"] == "nemotron3"
+    file_settings = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()
+    assert file_settings["diarization_model"] == "nemotron3"
+    assert isinstance(file_settings["nemotron_da"], bool)
+    invalid = client.put("/api/settings", json={"diarization_model": "unbekannt"})
+    assert invalid.status_code == 400
+    assert client.get("/api/settings").json()["diarization_model"] == "nemotron3"
 
 
 def test_settings_put_sagt_es_wenn_ungeschuetzt_geschrieben_wurde(client, monkeypatch):

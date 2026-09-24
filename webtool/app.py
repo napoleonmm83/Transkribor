@@ -35,6 +35,7 @@ from . import auth
 from . import correct as _correct
 from . import device
 from . import diarize as _diarize
+from . import nemotron_setup
 from . import fehlerberichte
 from . import fetch as fetch_mod
 from . import jobs
@@ -180,6 +181,8 @@ async def _lifespan(app: FastAPI):
     # Selbstaktualisierer laesst den Server trotzdem hochkommen.
     if ytdlp_update.beim_start():
         print("[ytdlp] Kalenderpruefung faellig — aktualisiere im Hintergrund", flush=True)
+    if settings.load()["diarization_model"] == "nemotron3":
+        nemotron_setup.starten()
     _weg_aufraeumen_starten()
     yield
     # Beim Herunterfahren die Kinder mitnehmen. Die Desktop-App schickt dem Server beim
@@ -198,6 +201,8 @@ async def _lifespan(app: FastAPI):
     if ytdlp_update.beim_ende():
         print("[ytdlp] Selbstaktualisierung lief noch — Sperre bleibt, bis die Frist sie "
               "freigibt", flush=True)
+    if nemotron_setup.beim_ende():
+        print("[nemotron] Paketinstallation lief noch — Sperre bleibt bis zur Frist", flush=True)
 
 
 app = FastAPI(title="Transkribor Editor", lifespan=_lifespan)
@@ -724,7 +729,9 @@ def dateieinstellungen(project: str, base: str):
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
             "sprecher_max": _sprachen.SPRECHER_MAX,
             "diarisierung_aktiv": _correct.diarize_enabled(),
-            "pyannote_da": _diarize.verfuegbar()}
+            "pyannote_da": _diarize.verfuegbar(),
+            "nemotron_da": nemotron_setup.zustand()["bereit"],
+            "diarization_model": settings.load()["diarization_model"]}
 
 
 @app.put("/api/projects/{project}/files/{base}/einstellungen")
@@ -2295,6 +2302,7 @@ class SettingsBody(BaseModel):
     base_url: str | None = None
     api_key: str | None = None          # weggelassen = gespeicherten Key behalten
     whisper_model: str | None = None    # Qualitaetsstufe der Transkription
+    diarization_model: str | None = None
     parallel: str | None = None          # gleichzeitige LLM-Aufrufe der Korrektur, "1".."16"
     ytdlp_auto: str | None = None        # "1"/"0" — yt-dlp automatisch aktualisieren
     # whisper_lang fehlt hier bewusst: es hat keine UI, und ein ueber die API gesetztes
@@ -2341,9 +2349,14 @@ def _settings_body(cfg: dict | None = None) -> dict:
     # liegen koennen, sagt die Antwort ohnehin ausdruecklich.)
     cfg = cfg if cfg is not None else settings.load()
     ai_ready, ai_reason = llm.available(cfg)
+    # Einmal fragen: `bereit` und der Rest stammen so aus DEMSELBEN Blick auf die Pakete
+    # (zweimal kostete ~11 ms je Aufruf, und dazwischen konnte ein Installationslauf enden).
+    nemotron = nemotron_setup.zustand()
     return {**settings.public(cfg), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
             "whisper_choices": list(settings.WHISPER_CHOICES),
+            "nemotron_da": nemotron["bereit"],
+            "nemotron": nemotron,
             # Wo die Arbeit des Nutzers liegt (#218). Der Server ist die richtige Quelle: in
             # der gepackten App setzt `electron/backend.js` `TRANSKRIBOR_PROJEKTE` aus
             # `P.projekte`, und `paths.projekte_root()` liest genau das — Anzeige und
@@ -2380,6 +2393,8 @@ def put_settings(body: SettingsBody):
     if "whisper_model" in patch and patch["whisper_model"] not in settings.KNOWN_WHISPER_MODELS:
         raise HTTPException(status_code=400,
                             detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
+    if "diarization_model" in patch and patch["diarization_model"] not in ("pyannote", "nemotron3"):
+        raise HTTPException(status_code=400, detail="unbekanntes Diarisierungsmodell")
     if "parallel" in patch and not settings.parallel_ok(patch["parallel"]):
         raise HTTPException(
             status_code=400,
@@ -2399,7 +2414,15 @@ def put_settings(body: SettingsBody):
     # des Servers; im GET waere es sinnlos, und im `Settings`-Typ bliebe die Warnung bis zum
     # Neuladen stehen. Kein 5xx: geschrieben IST worden, ein Fehler waere die zweite Unwahrheit.
     cfg, gehalten = settings.save(patch)
+    if patch.get("diarization_model") == "nemotron3":
+        nemotron_setup.starten()
     return {**_settings_body(cfg), "ungeschuetzt": not gehalten}
+
+
+@app.post("/api/settings/nemotron/update")
+def settings_nemotron_update():
+    gestartet = nemotron_setup.starten(force=True)
+    return {"gestartet": gestartet, **nemotron_setup.zustand()}
 
 
 @app.delete("/api/settings/kaputt")

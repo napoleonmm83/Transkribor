@@ -373,6 +373,10 @@ export async function verwerfeKaputt(): Promise<void> {
 export async function updateYtdlp(): Promise<{ gestartet: boolean } & YtdlpStand> {
   return jn(await post('/api/settings/ytdlp/update'))
 }
+
+export async function updateNemotron(): Promise<{ gestartet: boolean } & Settings['nemotron']> {
+  return jn(await post('/api/settings/nemotron/update'))
+}
 export async function listModels(): Promise<ModelInfo[]> {
   return (await jn<{ models: ModelInfo[] }>(await fetch('/api/settings/models'))).models
 }
