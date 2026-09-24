@@ -643,6 +643,15 @@ def _lock_stale() -> float:
     Preis: ein Lock OHNE Auskunft (fremder Rechner, unschreibbarer Merker) gilt entsprechend
     spaeter als verwaist — ein toter lokaler Halter wird weiterhin sofort erkannt, die Uhr
     ist nur der Rueckfall.
+
+    **Seit Nemotron (2026-09-24) teilt sich die NeMo-Einrichtung diese Sperre** — beide
+    schreiben in dieselbe venv. Die Zusage muss deshalb auch deren Haltedauer decken: der
+    laengste NeMo-Weg sind 1750 s (Probe-Fehlschlag plus drei Reparaturen, von
+    `test_sperrfrist_deckt_den_laengsten_weg_durch_die_installation` GEFAHREN), daher
+    `PIP_SHARED_STALE = 1900` und `frist()` = 1905 s. Die aelteren Zahlen in diesem Modul
+    (155/215/220 s, ">=340 s") beschreiben den Stand davor. Folgen, benannt: ein Lock ohne
+    Auskunft gilt bis ~32 min als "laeuft", und ein yt-dlp-Lauf wartet waehrend einer
+    NeMo-Einrichtung bis zu deren Ende — die Einstellungsseite sagt das (`nemo_haelt`).
     """
     return max(PIP_TIMEOUT + 30 + sperre.frist(), PIP_SHARED_STALE)
 
@@ -1000,7 +1009,8 @@ def aktualisiere(nur_wenn_faellig: bool = False) -> tuple[bool | None, bool]:
         # Sperrerwerb ausgewertet, und genau dazwischen kann der andere seinen ganzen Lauf
         # gefahren haben: zwei Serverprozesse starten gleichzeitig (gepackte App neben
         # Entwickler-uvicorn), beide sehen `faellig()`, der zweite sitzt bis zu
-        # `sperre.frist()` = 220 s ab und macht danach ein pip, das „Requirement already
+        # `sperre.frist(_lock_stale())` ab (220 s bis 2026-09-24, seit der mit NeMo geteilten
+        # Sperre 1905 s) und macht danach ein pip, das „Requirement already
         # satisfied" meldet — waehrend seine Einstellungsseite die ganze Zeit „Eine
         # Aktualisierung laeuft gerade" zeigt.
         #
@@ -1284,7 +1294,8 @@ def beim_start() -> bool:
         # **Drittes Tor, nur fuer diesen Weg** (CodeRabbit-Bot an PR #255, Major): starten zwei
         # Serverprozesse gleichzeitig — gepackte App neben Entwickler-Checkout teilen sich
         # Sperre und Merker (#254) —, sehen beide `faellig()` und starten je einen Lauf. Der
-        # zweite sitzt bis zu `sperre.frist()` ≈ 220 s an der Sperre ab und macht danach ein
+        # zweite sitzt bis zu `sperre.frist(_lock_stale())` an der Sperre ab (≈ 220 s bis
+        # 2026-09-24, seit der mit NeMo geteilten Sperre 1905 s) und macht danach ein
         # pip, das „Requirement already satisfied" meldet. Dieselbe Klasse wie #176, auf dem
         # neuen Weg.
         #
@@ -1373,9 +1384,14 @@ def zustand() -> dict:
     g = geprueft()
     v, unlesbar = _fassung_und_lesbarkeit()
     laeuft, ergebnis, ungeschuetzt = hintergrund_zustand()
+    from . import nemotron_setup   # lazy: nemotron_setup importiert dieses Modul ebenfalls lazy
     return {"version": v, "unlesbar": unlesbar, "geprueft": g.isoformat() if g else "",
             "auto": auto_an(), "env": env_override() is not None,
             "laeuft": laeuft_gerade(laeuft),
+            # Die pip-Sperre ist mit NeMo GETEILT: haelt die NeMo-Einrichtung sie, meldet
+            # `laeuft` True, obwohl kein yt-dlp-Lauf existiert. Ohne dieses Feld sagte die
+            # Seite "Eine Aktualisierung laeuft gerade" — eine Anzeige, die luegt (#243).
+            "nemo_haelt": nemotron_setup.haelt_pip_sperre(),
             "ergebnis": ergebnis, "ungeschuetzt": ungeschuetzt,
             "unterbrochen": v is None and _pip_unterbrochen(),
             "ejs_unlesbar": _ejs_untauglich_und_lesbarkeit()[1]}

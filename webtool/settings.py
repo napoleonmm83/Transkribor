@@ -17,6 +17,11 @@ from . import paths, sperre
 # Alle Namen, die faster-whisper akzeptiert (identisch zu denen von openai-whisper — sie
 # werden auf `Systran/faster-whisper-<name>` abgebildet). Ein handverdrehtes "base" soll
 # funktionieren, ein vertipptes "larg-v3" aber nicht erst beim Modell-Laden auffallen.
+# Die EINE Liste der Diarisierungsmodelle — gelesen von `_lesen` (Rueckfall) UND vom PUT
+# (400). Stand vorher als Literal an beiden Stellen; ein drittes Modell an nur einer davon
+# waere dort still zurueckgesetzt bzw. abgewiesen worden.
+DIARIZATION_MODELS = ("pyannote", "nemotron3")
+
 KNOWN_WHISPER_MODELS = (
     "tiny.en", "tiny", "base.en", "base", "small.en", "small", "medium.en", "medium",
     "large-v1", "large-v2", "large-v3", "large", "large-v3-turbo", "turbo",
@@ -216,7 +221,7 @@ def _lesen() -> tuple:
                           if k in DEFAULTS and isinstance(v, str)}}
     if cfg["whisper_model"] not in KNOWN_WHISPER_MODELS:
         cfg["whisper_model"] = DEFAULTS["whisper_model"]
-    if cfg["diarization_model"] not in ("pyannote", "nemotron3"):
+    if cfg["diarization_model"] not in DIARIZATION_MODELS:
         cfg["diarization_model"] = DEFAULTS["diarization_model"]
     # NORMALISIERT, nicht nur validiert — und das schliesst zwei Loecher auf einmal.
     #

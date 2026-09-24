@@ -374,8 +374,12 @@ export async function updateYtdlp(): Promise<{ gestartet: boolean } & YtdlpStand
   return jn(await post('/api/settings/ytdlp/update'))
 }
 
-export async function updateNemotron(): Promise<{ gestartet: boolean } & Settings['nemotron']> {
-  return jn(await post('/api/settings/nemotron/update'))
+/** `geprueft` richtet die geprüfte NeMo-Fassung ein, `neuester` holt den ungeprüften
+ *  NVIDIA-Stand (zwei Knöpfe, Entscheidung 2026-09-24). */
+export async function updateNemotron(
+  ziel: 'geprueft' | 'neuester',
+): Promise<{ gestartet: boolean } & Settings['nemotron']> {
+  return jn(await post('/api/settings/nemotron/update', { ziel }))
 }
 export async function listModels(): Promise<ModelInfo[]> {
   return (await jn<{ models: ModelInfo[] }>(await fetch('/api/settings/models'))).models

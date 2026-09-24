@@ -1912,9 +1912,10 @@ def test_sidecar_modell_ohne_zeichenkette_passt_zu_keinem_modell(tmp_path, wert,
 def test_diarization_model_switch_rebuilds_sidecar(project, monkeypatch):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
-    from webtool import diarize, nemotron_diarize
+    from webtool import diarize, nemotron_diarize, nemotron_setup
     selected = {"diarization_model": "pyannote"}
     monkeypatch.setattr(correct.settings, "load", lambda: selected)
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: {"bereit": True})
     monkeypatch.setattr(diarize, "diarize_file", lambda *a, **kw: _fake_turns())
     nemotron_calls = []
     monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda audio: nemotron_calls.append(audio) or _fake_turns())
@@ -1929,19 +1930,47 @@ def test_diarization_model_switch_rebuilds_sidecar(project, monkeypatch):
     assert side["segments"] == [{"id": 0, "speaker": "Sprecher 1"}]
 
 
-def test_failed_model_switch_does_not_reuse_old_speakers(project, monkeypatch):
+# Entscheidung Marcus 2026-09-24: Nemotron gewaehlt, aber nicht nutzbar -> pyannote rechnet.
+# Vorher loeschte der Wechsel das gueltige pyannote-Sidecar, und die Aufnahme lief ohne jede
+# Sprechertrennung (belegt vom Pruefer "was erlaubt der Fix neu", B5).
+def test_nicht_bereites_nemotron_behaelt_das_pyannote_sidecar(project, monkeypatch, capsys):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
-    from webtool import diarize, nemotron_diarize
+    from webtool import diarize, nemotron_diarize, nemotron_setup
     selected = {"diarization_model": "pyannote"}
     monkeypatch.setattr(correct.settings, "load", lambda: selected)
     monkeypatch.setattr(diarize, "diarize_file", lambda *a, **kw: _fake_turns())
     assert correct.cmd_diarize("Demo") == 1
+    vorher = (t / "S1.diar.json").read_bytes()
 
     selected["diarization_model"] = "nemotron3"
-    monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda _audio: (_ for _ in ()).throw(RuntimeError("NeMo fehlt")))
-    assert correct.cmd_diarize("Demo") == 0
-    assert not (t / "S1.diar.json").exists()
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: {"bereit": False})
+    aufgerufen = []
+    monkeypatch.setattr(nemotron_diarize, "diarize_file", lambda audio: aufgerufen.append(audio))
+    capsys.readouterr()
+    assert correct.cmd_diarize("Demo") == 0          # vorhandenes pyannote-Sidecar gilt weiter
+    assert aufgerufen == []
+    assert (t / "S1.diar.json").read_bytes() == vorher
+    assert "Nemotron 3 ist noch nicht bereit" in capsys.readouterr().out
+
+
+def test_scheiterndes_nemotron_faellt_auf_pyannote_zurueck(project, monkeypatch, capsys):
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    from webtool import diarize, nemotron_diarize, nemotron_setup
+    monkeypatch.setattr(correct.settings, "load", lambda: {"diarization_model": "nemotron3"})
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: {"bereit": True})
+    pyannote_calls = []
+    monkeypatch.setattr(diarize, "diarize_file",
+                        lambda *a, **kw: pyannote_calls.append(kw) or _fake_turns())
+    monkeypatch.setattr(nemotron_diarize, "diarize_file",
+                        lambda _audio: (_ for _ in ()).throw(RuntimeError("Download scheitert")))
+    assert correct.cmd_diarize("Demo") == 1
+    assert len(pyannote_calls) == 1
+    side = json.loads((t / "S1.diar.json").read_text(encoding="utf-8"))
+    assert side["diarization_model"] == "pyannote"   # was WIRKLICH gerechnet hat
+    assert side["min_speakers"] == correct.DIARIZE_MIN_SPEAKERS
+    assert "Nemotron 3 fehlgeschlagen (RuntimeError)" in capsys.readouterr().out
 
 
 def test_diagnose_landet_im_sidecar(project, monkeypatch):

@@ -44,6 +44,9 @@ const SETTINGS = {
   providers: [], env_key: '',
   whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [{ model: 'large-v3', label: 'large-v3' }],
   diarization_model: 'pyannote', nemotron_da: false,
+  // Pflicht: die Einstellungsseite liest `nemotron.laeuft` im Effekt — ohne das Objekt warf
+  // sie dort und die Reflow-Probe auf /einstellungen fiel um (CodeRabbit-CLI).
+  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '' },
   parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '', parallel_env_wirksam: '3',
   ai_ready: false, ai_reason: 'Testlauf ohne Anbieter',
   ytdlp_auto: '1', ytdlp: { laeuft: false, ergebnis: null, unlesbar: false, ejs_unlesbar: false, auto: true },
