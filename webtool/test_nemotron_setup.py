@@ -76,6 +76,35 @@ def _kein_github():
     raise AssertionError("die Automatik darf den neuesten NVIDIA-Stand nie abfragen")
 
 
+@pytest.mark.parametrize("inhalt", ["[]", "null", '"text"', "42"])
+def test_marker_der_kein_objekt_ist_gilt_als_leer(monkeypatch, tmp_path, inhalt):
+    # Gueltiges JSON, aber kein Objekt: `.get` darauf warf und riss den Serverstart
+    # (Lifespan -> starten -> _faellig) und jeden Settings-GET mit.
+    marker = tmp_path / "marker.json"
+    marker.write_text(inhalt, encoding="utf-8")
+    monkeypatch.setattr(nemotron_setup, "_marker_path", lambda: marker)
+    monkeypatch.setattr(nemotron_setup, "_version", lambda name: _BEREIT.get(name))
+    assert nemotron_setup._marker() == {}
+    assert nemotron_setup.zustand()["bereit"] is False
+    assert nemotron_setup._faellig() is True
+
+
+def test_github_antwort_ohne_zeichenkette_meldet_ungueltige_revision(monkeypatch):
+    class Antwort:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            return b'{"sha": 12345}'
+
+    monkeypatch.setattr(nemotron_setup.urllib.request, "urlopen", lambda *a, **k: Antwort())
+    with pytest.raises(ValueError, match="ungueltige NVIDIA-Revision"):
+        nemotron_setup._latest_revision()
+
+
 def test_automatik_installiert_den_pin_ohne_github(monkeypatch, tmp_path):
     marker = _marker_setzen(monkeypatch, tmp_path, None,
                             {"nemo-toolkit": "3.0.0", "lhotse": "1.33.0", "torch": "2.11.0+cu128"})

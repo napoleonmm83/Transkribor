@@ -49,9 +49,11 @@ def _version(name: str) -> str | None:
 
 def _marker() -> dict:
     try:
-        return json.loads(_marker_path().read_text(encoding="utf-8"))
+        daten = json.loads(_marker_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
+    # Gueltiges JSON, aber kein Objekt (`[]`, `null`): `.get` darauf warf im Serverstart.
+    return daten if isinstance(daten, dict) else {}
 
 
 def _triton_pin() -> str | None:
@@ -117,7 +119,7 @@ def _latest_revision() -> str:
     request = urllib.request.Request(_GITHUB_API, headers={"User-Agent": "Transkribor"})
     with urllib.request.urlopen(request, timeout=10) as response:  # noqa: S310 -- feste HTTPS-API
         revision = json.load(response)["sha"]
-    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+    if not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("ungueltige NVIDIA-Revision")
     return revision
 
