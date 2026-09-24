@@ -284,12 +284,13 @@ export function SettingsPage() {
     if (!s?.nemotron.laeuft) return
     let aktiv = true
     // 3 s wie der yt-dlp-Fremdlauf-Poll (jede Runde kostet den Server einen
-    // `llm.available()`-Subprozess, #250), und eine Obergrenze: der längste NeMo-Weg sind
-    // 1750 s, 700 x 3 s = 35 min deckt ihn mit Reserve. `ytdlp` fährt mit, weil dessen Zeile
-    // an `nemo_haelt` hängt und sonst bis zum Neuladen „NeMo benutzt die Paketverwaltung" sagte.
+    // `llm.available()`-Subprozess, #250), und eine Obergrenze. Sie deckt WARTEN plus Weg:
+    // an der geteilten pip-Sperre bis frist(1900) = 1905 s, danach der längste NeMo-Weg von
+    // 1750 s — 1300 x 3 s = 65 min (Kalt-Leser; 700 Runden deckten nur den Weg). `ytdlp` fährt
+    // mit, weil dessen Zeile an `nemo_haelt` hängt und sonst bis zum Neuladen falsch stünde.
     let runden = 0
     const timer = setInterval(() => {
-      if (++runden > 700) { clearInterval(timer); return }
+      if (++runden > 1300) { clearInterval(timer); return }
       getSettings().then(neu => {
         if (aktiv) setS(alt => alt && {
           ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da, ytdlp: neu.ytdlp,
