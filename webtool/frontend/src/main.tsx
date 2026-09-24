@@ -36,8 +36,9 @@ if ('__SENTRY_IPC__' in window) {
         Sentry.browserApiErrorsIntegration(),
         Sentry.linkedErrorsIntegration(),
       ],
+      // Keine Sitzungen: die Liste oben enthaelt keine browserSessionIntegration. Ein
+      // `autoSessionTracking: false` stand hier und kennt das installierte SDK gar nicht.
       sendDefaultPii: false,
-      autoSessionTracking: false,
       beforeBreadcrumb: () => null,
     })
   }).catch(e => console.error('Renderer-Fehlerberichte konnten nicht gestartet werden', e))
