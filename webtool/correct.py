@@ -370,9 +370,11 @@ def _sidecar_sprecher(dpath: str):
 
 def _sidecar_diarization_model(dpath: str) -> str:
     try:
-        return _load(dpath).get("diarization_model", "pyannote")
+        wert = _load(dpath).get("diarization_model", "pyannote")
     except Exception:
         return ""
+    # Kein String -> unbekannt -> das Sidecar passt zu keinem Modell und wird neu gerechnet.
+    return wert if isinstance(wert, str) else ""
 
 
 def diarize_enabled() -> bool:

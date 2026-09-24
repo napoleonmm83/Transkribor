@@ -1896,6 +1896,19 @@ def test_cmd_diarize_writes_sidecar(project, monkeypatch):
     assert side["turns"] and side["audio"] == "S1.mp3"
 
 
+@pytest.mark.parametrize("wert, erwartet", [
+    (None, ""), (5, ""), (["nemotron3"], ""), ("nemotron3", "nemotron3")])
+def test_sidecar_modell_ohne_zeichenkette_passt_zu_keinem_modell(tmp_path, wert, erwartet):
+    # Ein Nicht-String im Feld ist "unbekannt": das Sidecar darf dann zu KEINEM Modell
+    # passen, sonst ueberspraenge der Skip eine Neu-Diarisierung.
+    pfad = tmp_path / "x.diar.json"
+    pfad.write_text(json.dumps({"diarization_model": wert}), encoding="utf-8")
+    assert correct._sidecar_diarization_model(str(pfad)) == erwartet
+    # Fehlt das Feld ganz, ist es ein Sidecar von vor Nemotron -> pyannote.
+    pfad.write_text("{}", encoding="utf-8")
+    assert correct._sidecar_diarization_model(str(pfad)) == "pyannote"
+
+
 def test_diarization_model_switch_rebuilds_sidecar(project, monkeypatch):
     _root, t = project
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
