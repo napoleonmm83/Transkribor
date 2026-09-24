@@ -29,6 +29,9 @@ if ('__SENTRY_IPC__' in window) {
   import('@sentry/electron/renderer').then(Sentry => {
     Sentry.init({
       defaultIntegrations: [
+        // Dedupe gehoert zur SDK-Vorgabe und fiel mit der expliziten Liste weg; ohne ihn geht
+        // eine Fehlerschleife als Serie gleicher Ereignisse an den Hauptprozess (Kalt-Review 24.09.).
+        Sentry.dedupeIntegration(),
         Sentry.globalHandlersIntegration(),
         Sentry.browserApiErrorsIntegration(),
         Sentry.linkedErrorsIntegration(),

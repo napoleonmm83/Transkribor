@@ -31,6 +31,21 @@ test('file:-Pfad wird aus einer Abweisung entfernt', () => {
   assert.ok(aus[0].includes('Pfad entfernt'))
 })
 
+// Die zwei Waechter aus #447/#457 gingen mit der Kuerzung dieser Datei (#530) verloren; ohne sie
+// blieb eine Mutation des `i`-Flags bzw. des Schema-Praefixriegels gruen (Kalt-Review 24.09.).
+test('file:-Kuerzung greift unabhaengig von der Schreibweise (FILE:///)', () => {
+  const aus = letzteZeilen('Navigation abgewiesen (x): FILE:///C:/x/Meier.mp3')
+  assert.ok(!aus[0].includes('Meier'))
+  assert.ok(aus[0].includes('Pfad entfernt'))
+})
+
+test('file: als Teil eines anderen Schemas bleibt stehen (https://file:///, profile-file:///)', () => {
+  for (const url of ['https://file:///C:/x/Meier.mp3', 'profile-file:///C:/x/Meier.mp3']) {
+    const aus = letzteZeilen(`Navigation abgewiesen (x): ${url}`)
+    assert.ok(aus[0].endsWith(url), url)
+  }
+})
+
 test('Kappung misst kodierte Zeichen, markiert sie und trennt keine Emojis', () => {
   const z = kappen('😀'.repeat(200))
   assert.ok(encodeURIComponent(z).length <= MAX_ZEILE)

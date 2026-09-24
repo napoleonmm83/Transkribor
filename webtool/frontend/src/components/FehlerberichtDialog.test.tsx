@@ -23,3 +23,32 @@ it('FehlerberichtDialog meldet ohne bestätigende Antwort keinen Erfolg', async 
   expect(await screen.findByRole('alert')).toHaveTextContent('nicht bestätigt')
   expect(screen.queryByRole('status')).toBeNull()
 })
+
+// Kalt-Review 24.09.: der Transport hat keine eigene Frist; ein haengender Versand sperrte
+// beide Knoepfe und Escape bis zum Neustart.
+it('FehlerberichtDialog laesst sich waehrend des Sendens schliessen', async () => {
+  const schliessen = vi.fn()
+  render(<FehlerberichtDialog offen schliessen={schliessen}
+    vorschau={() => Promise.resolve({ id: 'bericht-1', kopf: [], zeilen: ['Fehler'] })}
+    senden={() => new Promise(() => {})} />)
+  fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
+  const abbrechen = screen.getByRole('button', { name: 'Abbrechen' })
+  expect(abbrechen).toBeEnabled()
+  fireEvent.click(abbrechen)
+  expect(schliessen).toHaveBeenCalled()
+})
+
+it('FehlerberichtDialog: die spaete Antwort eines abgebrochenen Versands erreicht den neu geoeffneten Dialog nicht', async () => {
+  let spaet: (v: { id: string }) => void = () => {}
+  const senden = vi.fn().mockReturnValueOnce(new Promise(r => { spaet = r }))
+  const props = { schliessen: vi.fn(), senden,
+    vorschau: () => Promise.resolve({ id: 'bericht-1', kopf: [], zeilen: ['Fehler'] }) }
+  const { rerender } = render(<FehlerberichtDialog offen {...props} />)
+  fireEvent.click(await screen.findByRole('button', { name: /An Bugsink senden/ }))
+  rerender(<FehlerberichtDialog offen={false} {...props} />)
+  rerender(<FehlerberichtDialog offen {...props} />)
+  expect(await screen.findByRole('button', { name: /An Bugsink senden/ })).toBeEnabled()
+  spaet({ id: 'bericht-1' })
+  await new Promise(r => setTimeout(r, 0))
+  expect(screen.queryByRole('status')).toBeNull()
+})

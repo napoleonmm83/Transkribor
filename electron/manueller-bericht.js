@@ -45,13 +45,21 @@ function ereignis(snapshot, indices, kommentar, meta, ctx) {
   }
 }
 
-async function senden({ dsn, snapshot, indices, kommentar, meta, ctx, transport }) {
+// Weder `electron.net.request` im SDK-Transport noch `createTransport` setzen eine Frist: ein
+// Server, der annimmt und nie antwortet, liess den Dialog sonst bis zum Neustart haengen.
+const FRIST_MS = 30000
+
+async function senden({ dsn, snapshot, indices, kommentar, meta, ctx, transport, frist = FRIST_MS }) {
   const url = envelopeUrl(dsn)
   const event = ereignis(snapshot, indices, kommentar, meta, ctx)
-  const antwort = await transport({ url, recordDroppedEvent: () => {} }).send([
-    { event_id: event.event_id, sent_at: new Date().toISOString() },
-    [[{ type: 'event' }, event]],
-  ])
+  let uhr
+  const antwort = await Promise.race([
+    transport({ url, recordDroppedEvent: () => {} }).send([
+      { event_id: event.event_id, sent_at: new Date().toISOString() },
+      [[{ type: 'event' }, event]],
+    ]),
+    new Promise((_, nein) => { uhr = setTimeout(() => nein(new Error('Bugsink antwortet nicht. Bitte spaeter erneut versuchen.')), frist) }),
+  ]).finally(() => clearTimeout(uhr))
   if (!antwort || !Number.isInteger(antwort.statusCode)
     || antwort.statusCode < 200 || antwort.statusCode >= 300) {
     throw new Error('Bugsink hat den Bericht nicht bestaetigt. Bitte spaeter erneut versuchen.')

@@ -68,10 +68,22 @@ Sentry.init(fehlerberichte.optionen({
 
 // Nur ein einzelnes Fehlerereignis aus dem Renderer annehmen. Andere Envelope-Typen
 // (Sessions, Profile, Anhaenge) umgehen beforeSend im SDK und bleiben hier gesperrt.
+// Gedeckelt: eine Fehlerschleife im Renderer kostet sonst je Ereignis ~195 ms synchron im
+// Hauptprozess (beforeSend liest und maskiert das Protokoll) — gemessen im Kalt-Review 24.09.
+const RENDERER_JE_STUNDE = 20
+const rendererErlaubt = fehlerberichte.deckel(RENDERER_JE_STUNDE, 60 * 60 * 1000)
+let rendererGedeckelt = false
 ipcMain.on('fehlerberichte:renderer', (_event, roh) => {
   if (!fehlerberichte.lesen(schalterPfad()).automatisch || !paket.bugsinkDsn) return
   const event = fehlerberichte.rendererEreignis(roh)
-  if (event) Sentry.captureEvent(event)
+  if (!event) return
+  if (!rendererErlaubt(performance.now())) {
+    if (!rendererGedeckelt) protokoll.schreiben(`Renderer-Fehlerberichte gedeckelt: mehr als ${RENDERER_JE_STUNDE} je Stunde, weitere werden verworfen`)
+    rendererGedeckelt = true
+    return
+  }
+  rendererGedeckelt = false
+  Sentry.captureEvent(event)
 })
 
 // Vor app.whenReady: HTTP/2 abschalten. autoUpdater.checkForUpdates() nutzt Electrons
@@ -545,15 +557,23 @@ ipcMain.handle('fehlerbericht:vorschau', () => {
   berichtVorschau = manuellerBericht.vorschau(text, berichtKontext(), berichtMeta())
   return berichtVorschau
 })
+// Der manuelle Weg sendet auch bei ausgeschaltetem Automaten (bewusste Nutzeraktion) — darum ein
+// Deckel und je Versand eine Protokollzeile: ein Skript im Renderer koennte ihn sonst unbegrenzt
+// und unbemerkt ausloesen (Kalt-Review 24.09.). Ein Mensch schreibt keine sechs in einer Stunde.
+const MANUELL_JE_STUNDE = 5
+const manuellErlaubt = fehlerberichte.deckel(MANUELL_JE_STUNDE, 60 * 60 * 1000)
 ipcMain.handle('fehlerbericht:senden', async (_event, id, indices, kommentar) => {
   if (!berichtVorschau || id !== berichtVorschau.id) throw new Error('Vorschau ist nicht mehr gueltig. Bitte neu oeffnen.')
+  if (!manuellErlaubt(performance.now())) throw new Error(`Zu viele Berichte in kurzer Zeit (hoechstens ${MANUELL_JE_STUNDE} je Stunde). Bitte spaeter erneut versuchen.`)
   const snapshot = berichtVorschau
   berichtVorschau = null
   try {
-    return await manuellerBericht.senden({
+    const antwort = await manuellerBericht.senden({
       dsn: paket.bugsinkDsn, snapshot, indices, kommentar,
       meta: berichtMeta(), ctx: berichtKontext(), transport: Sentry.makeElectronTransport,
     })
+    protokoll.schreiben('Manueller Fehlerbericht gesendet')
+    return antwort
   } catch (e) {
     if (!berichtVorschau) berichtVorschau = snapshot
     throw e

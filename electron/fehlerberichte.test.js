@@ -60,6 +60,28 @@ test('Renderer-Bridge streift freie Zusatzdaten und Breadcrumbs ab', () => {
   assert.ok(!JSON.stringify(aus).includes('privat'))
 })
 
+// Kalt-Review 24.09.: der einzige Groessentest oben ('x'.repeat(65537)) ist auch FORMAL kaputt und
+// damit vacuous — diese Faelle sind wohlgeformt, nur zu gross.
+test('Renderer-Bridge: Groessendeckel greifen an wohlgeformten Envelopes', () => {
+  const env = event => '{}\n{"type":"event"}\n' + JSON.stringify(event)
+  const wert = (value, frames) => ({ exception: { values: [{ type: 'Error', value,
+    ...(frames ? { stacktrace: { frames } } : {}) }] } })
+  assert.strictEqual(fb.rendererEreignis(env(wert('x'.repeat(70000)))), null, 'Bytedeckel 64 KB')
+  assert.equal(fb.rendererEreignis(env(wert('x'.repeat(5000)))).exception.values[0].value.length, 4000)
+  const frames = Array.from({ length: 100 }, (_, i) => ({ filename: `f${i}.js`, lineno: i }))
+  const aus = fb.rendererEreignis(env(wert('kaputt', frames))).exception.values[0].stacktrace.frames
+  assert.equal(aus.length, 50)
+  assert.equal(aus.at(-1).filename, 'f99.js', 'die juengsten Frames bleiben')
+})
+
+test('deckel: n Ereignisse je Fenster, das n+1-te nicht, nach Fensterende wieder frei', () => {
+  const erlaubt = fb.deckel(3, 1000)
+  assert.deepStrictEqual([erlaubt(0), erlaubt(10), erlaubt(20), erlaubt(30)], [true, true, true, false])
+  assert.equal(erlaubt(999), false)
+  assert.equal(erlaubt(1000), true)
+  assert.equal(erlaubt(1001), true)
+})
+
 // ---------------------------------------------------------------- Schalter-Datei
 
 test('lesen: fehlende, kaputte und fremd geformte Datei heissen AUS und „nie gefragt"', () => {
