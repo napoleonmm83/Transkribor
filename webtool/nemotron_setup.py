@@ -240,6 +240,11 @@ def _install(force: bool = False, neuester: bool = True) -> str:
     global _haelt_pip_lock
     if not force and not _faellig():
         return "aktuell"
+    # Steht vorher fest, dass es nicht gelingen kann, nicht erst die Sperre erwerben (und
+    # yt-dlp bis zu 215 s warten lassen), um danach in `_install_gesperrt` zu scheitern.
+    grund = _pin_fehler()
+    if grund:
+        raise RuntimeError(grund)
     # yt-dlp und NeMo schreiben beide in dieselbe venv. Deren vorhandene, nach
     # venv getrennte pip-Sperre gilt deshalb auch fuer diesen gesamten Ablauf.
     from . import sperre, ytdlp_update

@@ -1971,6 +1971,34 @@ def test_scheiterndes_nemotron_faellt_auf_pyannote_zurueck(project, monkeypatch,
     assert side["diarization_model"] == "pyannote"   # was WIRKLICH gerechnet hat
     assert side["min_speakers"] == correct.DIARIZE_MIN_SPEAKERS
     assert "Nemotron 3 fehlgeschlagen (RuntimeError)" in capsys.readouterr().out
+    assert side["gewaehlt"] == "nemotron3" and side["rueckfall_am"]
+
+
+def test_laufzeit_rueckfall_gilt_den_tag_ueber_und_wird_danach_neu_versucht(project, monkeypatch):
+    # Kalt-Leser (belegt): ohne Bremse versuchte JEDER projektweite Lauf fuer jede Datei
+    # Nemotron erneut und rechnete danach pyannote neu. Ohne Wiederversuch (CodeRabbit-
+    # Vorschlag) heilte der Zustand nie. Beide Richtungen muessen halten.
+    _root, t = project
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "1")
+    from webtool import diarize, nemotron_diarize, nemotron_setup
+    monkeypatch.setattr(correct.settings, "load", lambda: {"diarization_model": "nemotron3"})
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: {"bereit": True})
+    pyannote_calls, nemo_calls = [], []
+    monkeypatch.setattr(diarize, "diarize_file",
+                        lambda *a, **kw: pyannote_calls.append(1) or _fake_turns())
+
+    def scheitert(_audio):
+        nemo_calls.append(1)
+        raise RuntimeError("Download scheitert")
+
+    monkeypatch.setattr(nemotron_diarize, "diarize_file", scheitert)
+    assert correct.cmd_diarize("Demo") == 1
+    assert correct.cmd_diarize("Demo") == 0          # derselbe Tag: Rueckfall gilt weiter
+    assert (len(nemo_calls), len(pyannote_calls)) == (1, 1)
+
+    monkeypatch.setattr(correct, "_heute", lambda: "2099-01-01")  # naechster Tag
+    assert correct.cmd_diarize("Demo") == 1
+    assert (len(nemo_calls), len(pyannote_calls)) == (2, 2)
 
 
 def test_diagnose_landet_im_sidecar(project, monkeypatch):

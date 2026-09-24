@@ -377,6 +377,27 @@ def _sidecar_diarization_model(dpath: str) -> str:
     return wert if isinstance(wert, str) else ""
 
 
+def _heute() -> str:
+    return time.strftime("%Y-%m-%d")
+
+
+def _rueckfall_von_heute(dpath: str, gewaehlt: str, sprecher) -> bool:
+    """Ist das Sidecar ein pyannote-RUECKFALL fuer genau dieses gewaehlte Modell, von heute?
+
+    Tagesbremse fuer den Laufzeit-Rueckfall: ohne sie versuchte JEDER projektweite
+    `correct run` fuer JEDE Datei Nemotron erneut und rechnete danach pyannote neu — bei
+    einem dauerhaften Fehler (HTTPS-pruefender Scanner #644, GPU-Speicher) GPU-Minuten je
+    Datei je Lauf (Kalt-Leser, belegt). Ab dem naechsten Tag wird Nemotron wieder versucht:
+    der Zustand heilt sich selbst, statt fuer immer bei pyannote zu bleiben.
+    """
+    try:
+        d = _load(dpath)
+    except Exception:
+        return False
+    return (d.get("diarization_model") == "pyannote" and d.get("gewaehlt") == gewaehlt
+            and d.get("rueckfall_am") == _heute() and d.get("sprecher") == sprecher)
+
+
 def diarize_enabled() -> bool:
     """Ist die akustische Sprechertrennung eingeschaltet? (`TRANSKRIBOR_DIARIZE`)
 
@@ -439,8 +460,10 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
             # diesem Feld hat keinen und gilt als „automatisch" (= None) — hat der Nutzer nichts
             # eingestellt, aendert sich damit nichts, und genau das ist gewollt.
             if (os.path.exists(dpath) and os.path.getmtime(dpath) >= os.path.getmtime(raw_json)
-                    and _sidecar_sprecher(dpath) == wirksame_sprecher
-                    and _sidecar_diarization_model(dpath) == diarization_model):
+                    and ((_sidecar_sprecher(dpath) == wirksame_sprecher
+                          and _sidecar_diarization_model(dpath) == diarization_model)
+                         or (diarization_model == "nemotron3"
+                             and _rueckfall_von_heute(dpath, diarization_model, sprecher)))):
                 print(f"↷ nutze vorhandene {base}.diar.json", flush=True)
                 continue
             audio = _audio_path(project, base)
@@ -505,11 +528,11 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                     grund = type(e).__name__
                     print(f"↷ Nemotron 3 fehlgeschlagen ({grund}) — Sprechertrennung mit pyannote",
                           flush=True)
-                    # Das Sidecar traegt danach "pyannote"; der naechste Lauf dieser Datei
-                    # versucht Nemotron also ERNEUT. Bewusst so (CodeRabbit schlug vor, den
-                    # Rueckfall wiederzuverwenden): sonst heilte sich der Zustand nie — ist der
-                    # Scanner weg, bliebe die Datei bei pyannote, bis sich die Roh-JSON aendert.
-                    # Kosten nur bei einem AUSDRUECKLICHEN Neu-Korrigieren, keine Schleife.
+                    # Das Sidecar traegt danach "pyannote" plus `gewaehlt`/`rueckfall_am`: am
+                    # selben Tag gilt es weiter (`_rueckfall_von_heute`), ab dem naechsten wird
+                    # Nemotron erneut versucht. Weder "fuer immer pyannote" (CodeRabbit-Vorschlag,
+                    # heilte nie) noch "jeder Lauf erneut" — ein projektweiter `correct run`
+                    # diarisiert ALLE Dateien, das waeren GPU-Minuten je Datei je Lauf.
                     modell, wirksame_sprecher = "pyannote", sprecher
             if modell == "pyannote":
                 turns = diarize.diarize_file(audio, min_speakers=DIARIZE_MIN_SPEAKERS,
@@ -530,6 +553,9 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                    "diarization_model": modell,           # was WIRKLICH gerechnet hat
                    "turns": turns,
                    "segments": [{"id": sid, "speaker": spk} for sid, spk in seg_speakers.items()]}
+            if modell != diarization_model:              # Laufzeit-Rueckfall, s. oben
+                doc["gewaehlt"] = diarization_model
+                doc["rueckfall_am"] = _heute()
             # Diagnose nur, WENN sie zustande kam (#275). Ein leerer Schluessel waere schlimmer
             # als keiner: er behauptete "gemessen, nichts gefunden", wo in Wahrheit der
             # Monkeypatch nicht griff. Bestehende Sidecars ohne den Schluessel bleiben gueltig —
