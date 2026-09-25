@@ -35,7 +35,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Sind automatische Fehlerberichte eingeschaltet, werden jetzt auch Fehler in der Oberfläche gemeldet; Benutzerpfade sowie die Namen vorhandener Projekte und Aufnahmen werden dabei unkenntlich gemacht.
 
 **Sicherheit**
-- Bei langen Windows-Benutzernamen wird der Name in Fehlerberichten jetzt auch in seiner abgekürzten Form (etwa `MARCUS~1`) unkenntlich gemacht.
+- Bei langen Windows-Benutzernamen wird der Benutzerordner in Fehlerberichten jetzt auch in seiner abgekürzten Schreibweise (etwa `C:\Users\MARCUS~1`) unkenntlich gemacht.
 
 ## v0.57.0 — 2026-09-23
 
