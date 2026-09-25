@@ -149,9 +149,21 @@ def test_maskiere_kurzform_unter_langem_elternordner():
     (r"C:\Users\Müller", r"C:\Users\MLLER~1\x.wav"),
     (r"C:\Users\Jürgen", r"C:\Users\JRGEN~1\x.wav"),
     (r"D:\Te+am\anna", r"D:\TE_AM~1\anna\x.wav"),
+    # Langer Name OHNE Leerzeichen/Punkt: nur die 8-Zeichen-Grenze erzwingt die Kurzform
+    # (gemessen: MarcusMus -> MARCUS~1). Ohne diesen Vektor fing das nur der Windows-Test.
+    (r"C:\Users\MarcusMustermann", r"C:\Users\MARCUS~1\x.wav"),
 ])
 def test_maskiere_kurzform_auch_bei_kurzem_namen_mit_sonderzeichen(home, zeile):
     assert fb.maskiere(zeile, {"home": home}) == r"<home>\x.wav"
+
+
+def test_kurzform_gross_klein_nur_auf_windows():
+    # Zwilling zur Langform-Regel: Windows-Pfade unterscheiden keine Schreibung, andere schon.
+    t = fb.maskiere(r"c:\users\marcus~1\x.wav", {"home": LANG_HOME})
+    if sys.platform == "win32":
+        assert t == r"<home>\x.wav"
+    else:
+        assert t == r"c:\users\marcus~1\x.wav"
 
 
 def test_kurzform_nur_wenn_es_eine_gibt():

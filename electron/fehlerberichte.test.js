@@ -222,9 +222,16 @@ test('maskiere: Kurzform mit Punkt-Namen und unter langem Elternordner', () => {
 
 test('maskiere: Umlaute und + , ; = [ ] erzwingen eine Kurzform auch bei kurzem Namen (gemessen)', () => {
   for (const [home, zeile] of [['C:\\Users\\Müller', 'C:\\Users\\MLLER~1\\x.wav'],
-    ['C:\\Users\\Jürgen', 'C:\\Users\\JRGEN~1\\x.wav'], ['D:\\Te+am\\anna', 'D:\\TE_AM~1\\anna\\x.wav']]) {
+    ['C:\\Users\\Jürgen', 'C:\\Users\\JRGEN~1\\x.wav'], ['D:\\Te+am\\anna', 'D:\\TE_AM~1\\anna\\x.wav'],
+    // Langer Name OHNE Leerzeichen/Punkt: nur die 8-Zeichen-Grenze erzwingt die Kurzform.
+    ['C:\\Users\\MarcusMustermann', 'C:\\Users\\MARCUS~1\\x.wav']]) {
     assert.strictEqual(fb.maskiere(zeile, { home }), '<home>\\x.wav', home)
   }
+})
+
+test('maskiere: Gross-/Kleinschreibung der Kurzform zaehlt nur auf Windows', () => {
+  const t = fb.maskiere('c:\\users\\marcus~1\\x.wav', { home: LANG_HOME })
+  assert.strictEqual(t, process.platform === 'win32' ? '<home>\\x.wav' : 'c:\\users\\marcus~1\\x.wav')
 })
 
 test('kurzformMuster: nur wenn es eine abweichende Kurzform gibt; fremde Kurzpfade bleiben', () => {

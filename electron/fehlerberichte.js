@@ -149,7 +149,7 @@ const ACHT_PUNKT_DREI = /^[A-Za-z0-9!#$%&'()\-@^_`{}~]{1,8}(\.[A-Za-z0-9!#$%&'()
 // Wie Windows einen langen Namen abkuerzt: bis 6 Zeichen + ~N, auch die Hash-Form (MA3F2B~1 —
 // gemessen FEB5B3~1 am Test-Temp-Ordner; WANN sie kommt, ist hergeleitet, nicht gemessen),
 // optional eine Endung (marcus.martini -> MARCUS~1.MAR).
-const KURZ_ALIAS = '[^\\\\/\\s~]{1,6}~\\d{1,6}(?:\\.[^\\\\/\\s.]{1,3})?'
+const KURZ_ALIAS = '[^\\\\/\\s~]{1,6}~[0-9]{1,6}(?:\\.[^\\\\/\\s.]{1,3})?'
 const TRENNER = '(?:\\\\\\\\|[\\\\/])'
 
 /**
