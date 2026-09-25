@@ -236,9 +236,10 @@
       "von": "    flags = re.IGNORECASE if sys.platform == \"win32\" else 0\n    # Grenze",
       "nach": "    flags = 0\n    # Grenze",
       "rot": [
-        "test_kurzform_gross_klein_nur_auf_windows"
+        "test_kurzform_gross_klein_nur_auf_windows[win32]"
       ],
       "gruen": [
+        "test_kurzform_gross_klein_nur_auf_windows[linux]",
         "test_maskiere_kurzform_mit_punkt_namen"
       ]
     },
