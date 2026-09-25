@@ -306,6 +306,32 @@ def _ist_mutationsplan(statuszeile: str) -> bool:
     return any(t.startswith("scripts/mutationen/") and t.endswith(".json") for t in teile)
 
 
+def _fuer_cmd(kommando: str, os_name: str = os.name) -> str:
+    """Den PROGRAMMPFAD fuer cmd.exe richten: kein fuehrendes ./, Rueckstriche statt /.
+
+    Gemessen am 2026-09-25 (#642) als viertes Vorkommen, obwohl die Regel dazu in CLAUDE.md
+    stand: `./.venv/Scripts/python.exe …` endete unter cmd.exe mit „Der Befehl "." ist
+    entweder falsch geschrieben" — eine Mahnung hat nicht getragen, also richtet der Treiber
+    das Kommando selbst (Entscheidung Marcus). Nur das erste Wort wird angefasst: Argumente
+    wie Testpfade oder Regex bleiben, wie sie getippt wurden. Ausserhalb von Windows nichts.
+    """
+    if os_name != "nt":
+        return kommando
+    if kommando.startswith('"'):
+        ende = kommando.find('"', 1)
+        if ende < 0:
+            return kommando
+        prog, rest = kommando[1:ende], kommando[ende + 1:]
+        klammer = '"'
+    else:
+        prog, _, rest = kommando.partition(" ")
+        rest = " " + rest if rest else ""
+        klammer = ""
+    if prog.startswith("./"):
+        prog = prog[2:]
+    return klammer + prog.replace("/", "\\") + klammer + rest
+
+
 def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tuple[str, int]:
     """Gibt (Ausgabe, Rueckgabecode) zurueck — den Code NICHT wegwerfen.
 
@@ -369,7 +395,7 @@ def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tup
     # mehr zu: der Unterschied wird jetzt GEBRAUCHT, und er steht hier.
     umgebung = {**os.environ, **(zusatz or {})}
     umgebung["PATH"] = os.path.dirname(sys.executable) + os.pathsep + umgebung.get("PATH", "")
-    p = subprocess.run(kommando, cwd=repo, shell=True, capture_output=True,  # noqa: S602
+    p = subprocess.run(_fuer_cmd(kommando), cwd=repo, shell=True, capture_output=True,  # noqa: S602
                        encoding="utf-8", errors="replace", env=umgebung)
     # EINE Stelle fuer die Entfaerbung, nicht drei: alle drei Proben und der Abgleich der
     # Testnamen lesen dieselbe Zeichenkette. Waere sie je Probe entfaerbt, koennte die

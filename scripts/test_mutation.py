@@ -15,6 +15,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 # Der Pfad muss VOR dem Import stehen — E402/I001 sind hier die Folge der Reihenfolge,
 # nicht der Unordnung. Dieselbe Form wie in test_mypy_riegel.py.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -665,6 +667,32 @@ def test_der_interpreter_des_treibers_steht_vorn_im_PATH_des_kindes(tmp_path):
     assert rc == 0, f"das Kind ist nicht gestartet: {aus!r}"
     assert Path(aus.strip()).resolve() == Path(sys.executable).resolve(), (
         f"das Kind fand ein anderes python: {aus.strip()!r} statt {sys.executable!r}")
+
+
+def test_fuer_cmd_macht_den_programmpfad_windowsfest():
+    """cmd.exe kennt kein fuehrendes ./ und liest / im Programmpfad als Schalter.
+
+    Gemessen am 2026-09-25 (#642): `--test "./.venv/Scripts/python.exe -m pytest …"` brach mit
+    ABBRUCH ab, „Der Befehl "." ist entweder falsch geschrieben". Viertes Vorkommen der Klasse
+    trotz Regel in CLAUDE.md — deshalb richtet der Treiber das Kommando jetzt selbst.
+    Nur der PROGRAMMPFAD wird umgeschrieben; Argumente (Testpfade, Regex) bleiben unberuehrt.
+    """
+    f = mutation._fuer_cmd
+    assert f("./.venv/Scripts/python.exe -m pytest a/b.py", "nt") == r".venv\Scripts\python.exe -m pytest a/b.py"
+    assert f('"./x y/p.exe" -q a/b', "nt") == r'"x y\p.exe" -q a/b'
+    assert f("npm run test:electron", "nt") == "npm run test:electron"
+    assert f(r".venv\Scripts\python.exe -m pytest", "nt") == r".venv\Scripts\python.exe -m pytest"
+    # Ausserhalb von Windows bleibt alles, wie es getippt wurde.
+    assert f("./.venv/bin/python -m pytest", "posix") == "./.venv/bin/python -m pytest"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="die Falle ist cmd.exe")
+def test_lauf_startet_ein_programm_mit_fuehrendem_punkt_schraegstrich(tmp_path):
+    """Der echte Weg: ohne die Normalisierung antwortet cmd.exe mit rc 1 und einer Fehlerzeile."""
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "hallo.bat").write_text("@echo hallo-aus-bat\r\n", encoding="ascii")
+    aus, rc = mutation._lauf(str(tmp_path), "./bin/hallo.bat")
+    assert rc == 0 and "hallo-aus-bat" in aus, (rc, aus)
 
 
 def test_ein_geaenderter_MUTATIONSPLAN_gilt_nicht_als_schmutziger_baum():
