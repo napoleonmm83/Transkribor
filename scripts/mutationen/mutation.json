@@ -313,6 +313,66 @@
       "gruen": [
         "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
       ]
+    },
+    {
+      "id": "MB26 der Programmpfad wird fuer cmd.exe nicht mehr gerichtet — ./.venv/Scripts/python.exe bricht ab",
+      "datei": "scripts/mutation.py",
+      "von": "teile[0] = teile[0].replace(\"/\", \"\\\\\")",
+      "nach": "teile[0] = teile[0]",
+      "rot": [
+        "test_fuer_cmd_macht_den_programmpfad_windowsfest"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
+    },
+    {
+      "id": "MB27 fuehrende Leerzeichen schalten die Umschreibung ab",
+      "datei": "scripts/mutation.py",
+      "von": "    k = kommando.lstrip()",
+      "nach": "    k = kommando",
+      "rot": [
+        "test_fuer_cmd_macht_den_programmpfad_windowsfest"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
+    },
+    {
+      "id": "MB28 ein Kommando in Anfuehrungszeichen wird doch umgeschrieben",
+      "datei": "scripts/mutation.py",
+      "von": "    if k.startswith('\"'):\n        return k\n    teile",
+      "nach": "    teile",
+      "rot": [
+        "test_fuer_cmd_macht_den_programmpfad_windowsfest"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
+    },
+    {
+      "id": "MB29 nur das Leerzeichen trennt — ein Argument hinter einem Tabulator wird umgeschrieben",
+      "datei": "scripts/mutation.py",
+      "von": "teile = re.split(r\"(\\s)\", k, maxsplit=1)",
+      "nach": "teile = re.split(r\"( )\", k, maxsplit=1)",
+      "rot": [
+        "test_fuer_cmd_macht_den_programmpfad_windowsfest"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
+    },
+    {
+      "id": "MB30 ./ wird wieder abgeschnitten — cmd sucht ./hallo.bat im PATH",
+      "datei": "scripts/mutation.py",
+      "von": "    teile[0] = teile[0].replace(",
+      "nach": "    teile[0] = teile[0].removeprefix(\"./\")\n    teile[0] = teile[0].replace(",
+      "rot": [
+        "test_fuer_cmd_macht_den_programmpfad_windowsfest"
+      ],
+      "gruen": [
+        "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
+      ]
     }
   ]
 }
