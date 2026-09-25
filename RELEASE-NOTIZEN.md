@@ -34,6 +34,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Fehlerberichte lassen sich jetzt mit einer Vorschau direkt an uns senden; ein Mailprogramm ist dafür nicht mehr nötig.
 - Sind automatische Fehlerberichte eingeschaltet, werden jetzt auch Fehler in der Oberfläche gemeldet; Benutzerpfade sowie die Namen vorhandener Projekte und Aufnahmen werden dabei unkenntlich gemacht.
 
+**Sicherheit**
+- Bei langen Windows-Benutzernamen wird der Name in Fehlerberichten jetzt auch in seiner abgekürzten Form (etwa `MARCUS~1`) unkenntlich gemacht.
+
 ## v0.57.0 — 2026-09-23
 
 **Neu**

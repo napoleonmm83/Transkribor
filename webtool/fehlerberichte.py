@@ -183,6 +183,37 @@ def pfad_muster(p: str) -> re.Pattern[str]:
     return re.compile("|".join(re.escape(f) for f in formen), flags)
 
 
+_WIN_PFAD = re.compile(r"^[A-Za-z]:[\\/]")
+_ACHT_PUNKT_DREI = re.compile(r"^[^.\s]{1,8}(\.[^.\s]{1,3})?$")
+# Wie Windows einen langen Namen abkuerzt: bis 6 Zeichen + ~N, auch die Hash-Form (MA3F2B~1 —
+# gemessen TECB0F~1 am pytest-Temp-Ordner; WANN sie kommt, ist hergeleitet, nicht gemessen),
+# optional eine Endung (marcus.martini -> MARCUS~1.MAR).
+_KURZ_ALIAS = r"[^\\/\s~]{1,6}~\d{1,6}(?:\.[^\\/\s.]{1,3})?"
+_TRENNER = r"(?:\\\\|[\\/])"
+
+
+def kurzform_muster(home: str) -> re.Pattern[str] | None:
+    """Der Profilpfad in seiner 8.3-Kurzform (#642). Windows kürzt JEDES Segment, das kein
+    gültiger 8.3-Name ist (gemessen mit GetShortPathNameW), und %TEMP% steht bei langen
+    Kontonamen genau so da — ``C:\\Users\\MARCUS~1\\…``. Nachgebaut als Muster statt beim
+    Betriebssystem erfragt: Node hat dafür keine API, und so ist die Regel auf beiden Seiten
+    gleich und auf jedem Läufer prüfbar. Gibt es keine abweichende Kurzform (alle Segmente
+    schon 8.3-gültig) oder ist es kein Windows-Pfad: ``None``. Die URL-Schreibweise fehlt
+    bewusst — ein Temp-Kurzpfad in einer Zugriffszeile ist nicht erreichbar."""
+    if not _WIN_PFAD.match(home):
+        return None
+    teile = [s for s in re.split(r"[\\/]", home) if s]
+    if all(_ACHT_PUNKT_DREI.match(s) for s in teile[1:]):
+        return None
+    stuecke = [re.escape(teile[0])] + [
+        re.escape(s) if _ACHT_PUNKT_DREI.match(s) else f"(?:{re.escape(s)}|{_KURZ_ALIAS})"
+        for s in teile[1:]
+    ]
+    flags = re.IGNORECASE if sys.platform == "win32" else 0
+    # Grenze: kein weiteres Namenszeichen — ein ' oder " (repr, JSON) darf direkt folgen.
+    return re.compile(_TRENNER.join(stuecke) + r"(?![\w~])", flags)
+
+
 def namens_formen(name: str) -> set[str]:
     """Ein Name in allen Formen, in denen er in einer Meldung stehen kann: roh, NFC und NFD
     (macOS legt Dateinamen zerlegt ab, eine Meldung aus dem Server trägt sie zusammengesetzt)
@@ -209,6 +240,9 @@ def maskiere(text, ctx: dict | None = None):
     )
     for k, ersatz in pfade:
         t = pfad_muster(ctx[k]).sub(ersatz, t)
+    kurz = kurzform_muster(ctx["home"]) if isinstance(ctx.get("home"), str) else None
+    if kurz:
+        t = kurz.sub("<home>", t)
     n = ctx.get("namen") or {}
     # Die Längengrenze gilt HIER, nicht nur beim Sammeln: die Liste kann von anderswo kommen.
     for name in sorted((x for x in (n.get("dateien") or []) if isinstance(x, str) and len(x) >= MIN_NAME),

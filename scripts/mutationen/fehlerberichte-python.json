@@ -178,6 +178,57 @@
         "test_einstiegspunkte_initialisieren_die_fehlerberichte[webtool/app.py]",
         "test_before_send_streicht_request_ganz"
       ]
+    },
+    {
+      "id": "642-A maskiere wendet das Kurzform-Muster nicht an — MARCUS~1 reist im Bericht",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    if kurz:\n        t = kurz.sub(\"<home>\", t)",
+      "nach": "    if False:\n        t = kurz.sub(\"<home>\", t)",
+      "rot": [
+        "test_maskiere_kurzform_unter_langem_elternordner",
+        "test_maskiere_kurzform_mit_punkt_namen"
+      ],
+      "gruen": [
+        "test_maskiere_pfade_in_vier_schreibweisen",
+        "test_kurzform_nur_wenn_es_eine_gibt"
+      ]
+    },
+    {
+      "id": "642-B nur die Langform je Segment — der Alias-Zweig fehlt",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "else f\"(?:{re.escape(s)}|{_KURZ_ALIAS})\"",
+      "nach": "else re.escape(s)",
+      "rot": [
+        "test_maskiere_kurzform_unter_langem_elternordner",
+        "test_maskiere_kurzform_am_ende_mit_satzzeichen"
+      ],
+      "gruen": [
+        "test_maskiere_pfade_in_vier_schreibweisen"
+      ]
+    },
+    {
+      "id": "642-C kurze Kontonamen bekommen trotzdem ein Muster",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    if all(_ACHT_PUNKT_DREI.match(s) for s in teile[1:]):\n        return None",
+      "nach": "    if False:\n        return None",
+      "rot": [
+        "test_kurzform_nur_wenn_es_eine_gibt"
+      ],
+      "gruen": [
+        "test_maskiere_kurzform_mit_punkt_namen"
+      ]
+    },
+    {
+      "id": "642-D ohne Grenze greift der Alias mitten in einem laengeren Namen",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "_TRENNER.join(stuecke) + r\"(?![\\w~])\"",
+      "nach": "_TRENNER.join(stuecke)",
+      "rot": [
+        "test_maskiere_kurzform_am_ende_mit_satzzeichen"
+      ],
+      "gruen": [
+        "test_maskiere_kurzform_mit_punkt_namen"
+      ]
     }
   ]
 }

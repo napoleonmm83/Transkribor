@@ -186,6 +186,57 @@ test('maskiere: Gross-/Kleinschreibung von Pfaden zaehlt nur auf Windows', () =>
   else assert.strictEqual(m, 'C:\\users\\MARCUS\\z')
 })
 
+// ---- 8.3-Kurzform des Profils (#642) — dieselben Vektoren wie webtool/test_fehlerberichte.py
+const LANG_HOME = 'C:\\Users\\Marcus Mustermann'
+
+test('maskiere: die 8.3-Kurzform des Profils (wie %TEMP% bei langem Namen) faellt mit', () => {
+  const zeilen = [
+    'C:\\Users\\MARCUS~1\\AppData\\Local\\Temp\\tmpab.wav',
+    'C:\\Users\\MA3F2B~1\\AppData\\Local\\Temp\\tmpab.wav', // Hash-Form
+    'C:\\Users\\MARCU~10\\AppData\\Local\\Temp\\tmpab.wav',
+    'C:/Users/MARCUS~1/AppData/Local/Temp/tmpab.wav',
+    'C:\\\\Users\\\\MARCUS~1\\\\AppData\\\\Local\\\\Temp\\\\tmpab.wav', // JSON-kodiert
+  ]
+  for (const z of zeilen) {
+    const t = fb.maskiere('Fehler bei ' + z, { home: LANG_HOME })
+    assert.ok(t.startsWith('Fehler bei <home>'), t)
+    assert.ok(!t.includes('MARCU') && !t.includes('MA3F2B'), t)
+  }
+})
+
+test('maskiere: Kurzform am Ende mit Satzzeichen — und ein laengerer Name ist kein Alias', () => {
+  for (const [zeile, erwartet] of [["'C:\\Users\\MARCUS~1'", "'<home>'"],
+    ['"C:\\\\Users\\\\MARCUS~1": x', '"<home>": x'], ['C:\\Users\\MARCUS~1', '<home>']]) {
+    assert.strictEqual(fb.maskiere(zeile, { home: LANG_HOME }), erwartet, zeile)
+  }
+  assert.strictEqual(fb.maskiere('C:\\Users\\MARCUS~1X\\y', { home: LANG_HOME }), 'C:\\Users\\MARCUS~1X\\y')
+})
+
+test('maskiere: Kurzform mit Punkt-Namen und unter langem Elternordner', () => {
+  assert.strictEqual(fb.maskiere('in C:\\Users\\MARCUS~1.MAR\\x.wav', { home: 'C:\\Users\\marcus.martini' }),
+    'in <home>\\x.wav')
+  // Windows kuerzt JEDES Segment, nicht nur den Namen (gemessen 2026-09-25).
+  assert.strictEqual(fb.maskiere('D:\\BENUTZ~1\\MARCUS~1\\x.wav', { home: 'D:\\Benutzerprofile Firma\\Marcus Mustermann' }),
+    '<home>\\x.wav')
+})
+
+test('kurzformMuster: nur wenn es eine abweichende Kurzform gibt; fremde Kurzpfade bleiben', () => {
+  assert.strictEqual(fb.kurzformMuster('C:\\Users\\marcu'), null)
+  assert.strictEqual(fb.kurzformMuster('/home/marcus mustermann'), null)
+  assert.strictEqual(fb.maskiere('C:\\PROGRA~1\\x.exe', { home: LANG_HOME }), 'C:\\PROGRA~1\\x.exe')
+})
+
+test('maskiere: echte Kurzform vom Betriebssystem (nur Windows)', { skip: process.platform !== 'win32' }, t => {
+  const lang = path.join(tmp(), 'Marcus Mustermann Langname')
+  fs.mkdirSync(lang)
+  const r = require('child_process').spawnSync(process.env.ComSpec || 'cmd.exe',
+    ['/d /s /c "for %I in ("' + lang + '") do @echo %~sI"'], { windowsVerbatimArguments: true, encoding: 'utf8' })
+  const kurz = (r.stdout || '').trim()
+  assert.ok(kurz, 'cmd lieferte keine Kurzform: ' + r.stderr)
+  if (kurz.toLowerCase() === lang.toLowerCase()) return t.skip('8.3-Namen sind auf diesem Laufwerk abgeschaltet')
+  assert.strictEqual(fb.maskiere('Datei ' + kurz + '\\x.wav fehlt', { home: lang }), 'Datei <home>\\x.wav fehlt', kurz)
+})
+
 test('maskiereTief: jeder String im Ereignis, Zahlen und Struktur bleiben', () => {
   const ereignis = {
     message: `Absturz in ${HOME}\\x`,
