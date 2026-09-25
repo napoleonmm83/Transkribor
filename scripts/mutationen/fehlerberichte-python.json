@@ -231,6 +231,30 @@
       ]
     },
     {
+      "id": "642-F die Kurzform unterscheidet auf Windows Gross/Klein — c:\\users\\marcus~1 reist",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "    flags = re.IGNORECASE if sys.platform == \"win32\" else 0\n    # Grenze",
+      "nach": "    flags = 0\n    # Grenze",
+      "rot": [
+        "test_kurzform_gross_klein_nur_auf_windows"
+      ],
+      "gruen": [
+        "test_maskiere_kurzform_mit_punkt_namen"
+      ]
+    },
+    {
+      "id": "642-G ohne 8-Zeichen-Grenze gilt MarcusMustermann als schon kurz",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "rf\"^{_ACHT_ZEICHEN}{{1,8}}",
+      "nach": "rf\"^{_ACHT_ZEICHEN}{{1,64}}",
+      "rot": [
+        "test_maskiere_kurzform_auch_bei_kurzem_namen_mit_sonderzeichen"
+      ],
+      "gruen": [
+        "test_kurzform_nur_wenn_es_eine_gibt"
+      ]
+    },
+    {
       "id": "642-D ohne Grenze greift der Alias mitten in einem laengeren Namen",
       "datei": "webtool/fehlerberichte.py",
       "von": "_TRENNER.join(stuecke) + r\"(?![\\w~])\"",
