@@ -184,7 +184,10 @@ def pfad_muster(p: str) -> re.Pattern[str]:
 
 
 _WIN_PFAD = re.compile(r"^[A-Za-z]:[\\/]")
-_ACHT_PUNKT_DREI = re.compile(r"^[^.\s]{1,8}(\.[^.\s]{1,3})?$")
+# Nur diese Zeichen lassen einen kurzen Namen OHNE Alias — gemessen mit GetShortPathNameW:
+# Umlaute (Müller -> MLLER~1) und + , ; = [ ] erzwingen einen, auch bei kurzen Namen.
+_ACHT_ZEICHEN = r"[A-Za-z0-9!#$%&'()\-@^_`{}~]"
+_ACHT_PUNKT_DREI = re.compile(rf"^{_ACHT_ZEICHEN}{{1,8}}(\.{_ACHT_ZEICHEN}{{1,3}})?$")
 # Wie Windows einen langen Namen abkuerzt: bis 6 Zeichen + ~N, auch die Hash-Form (MA3F2B~1 —
 # gemessen TECB0F~1 am pytest-Temp-Ordner; WANN sie kommt, ist hergeleitet, nicht gemessen),
 # optional eine Endung (marcus.martini -> MARCUS~1.MAR).

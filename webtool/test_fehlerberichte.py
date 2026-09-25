@@ -143,6 +143,17 @@ def test_maskiere_kurzform_unter_langem_elternordner():
     assert fb.maskiere(r"D:\BENUTZ~1\MARCUS~1\x.wav", ctx) == r"<home>\x.wav"
 
 
+@pytest.mark.parametrize("home, zeile", [
+    # Gemessen mit GetShortPathNameW (2026-09-25): Umlaute und + , ; = [ ] erzwingen eine
+    # Kurzform, auch wenn der Name kurz ist — Müller -> MLLER~1, Te+am -> TE_AM~1.
+    (r"C:\Users\Müller", r"C:\Users\MLLER~1\x.wav"),
+    (r"C:\Users\Jürgen", r"C:\Users\JRGEN~1\x.wav"),
+    (r"D:\Te+am\anna", r"D:\TE_AM~1\anna\x.wav"),
+])
+def test_maskiere_kurzform_auch_bei_kurzem_namen_mit_sonderzeichen(home, zeile):
+    assert fb.maskiere(zeile, {"home": home}) == r"<home>\x.wav"
+
+
 def test_kurzform_nur_wenn_es_eine_gibt():
     # Kurzer Kontoname: keine abweichende Kurzform, also kein Muster und keine Mehrkosten.
     assert fb.kurzform_muster(r"C:\Users\marcu") is None
