@@ -190,7 +190,7 @@ def test_maskiere_echte_kurzform_vom_betriebssystem(tmp_path):
     puffer = ctypes.create_unicode_buffer(1024)
     assert f(str(lang), puffer, 1024), "GetShortPathNameW scheiterte"
     kurz = puffer.value
-    if kurz.lower() == str(lang).lower():
+    if pathlib.PureWindowsPath(kurz).name.lower() == lang.name.lower():  # nur der neue Ordner zaehlt
         pytest.skip("8.3-Namen sind auf diesem Laufwerk abgeschaltet")
     t = fb.maskiere(f"Datei {kurz}\\x.wav fehlt", {"home": str(lang)})
     assert t == "Datei <home>\\x.wav fehlt", (kurz, t)

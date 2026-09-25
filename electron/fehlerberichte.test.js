@@ -247,7 +247,8 @@ test('maskiere: echte Kurzform vom Betriebssystem (nur Windows)', { skip: proces
     ['/d /s /c "for %I in ("' + lang + '") do @echo %~sI"'], { windowsVerbatimArguments: true, encoding: 'utf8' })
   const kurz = (r.stdout || '').trim()
   assert.ok(kurz, 'cmd lieferte keine Kurzform: ' + r.stderr)
-  if (kurz.toLowerCase() === lang.toLowerCase()) return t.skip('8.3-Namen sind auf diesem Laufwerk abgeschaltet')
+  // Nur der neue Ordner zaehlt — Elternordner koennen einen Alias haben, der neue trotzdem nicht.
+  if (path.win32.basename(kurz).toLowerCase() === path.win32.basename(lang).toLowerCase()) return t.skip('8.3-Namen sind auf diesem Laufwerk abgeschaltet')
   assert.strictEqual(fb.maskiere('Datei ' + kurz + '\\x.wav fehlt', { home: lang }), 'Datei <home>\\x.wav fehlt', kurz)
 })
 
