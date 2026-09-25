@@ -142,6 +142,32 @@ function pfadMuster(p) {
   return new RegExp([...formen].map(regexFrei).join('|'), flags)
 }
 
+const WIN_PFAD = /^[A-Za-z]:[\\/]/
+const ACHT_PUNKT_DREI = /^[^.\s]{1,8}(\.[^.\s]{1,3})?$/
+// Wie Windows einen langen Namen abkuerzt: bis 6 Zeichen + ~N, auch die Hash-Form (MA3F2B~1 —
+// gemessen FEB5B3~1 am Test-Temp-Ordner; WANN sie kommt, ist hergeleitet, nicht gemessen),
+// optional eine Endung (marcus.martini -> MARCUS~1.MAR).
+const KURZ_ALIAS = '[^\\\\/\\s~]{1,6}~\\d{1,6}(?:\\.[^\\\\/\\s.]{1,3})?'
+const TRENNER = '(?:\\\\\\\\|[\\\\/])'
+
+/**
+ * Der Profilpfad in seiner 8.3-Kurzform (#642) — Zwilling von `kurzform_muster` in
+ * webtool/fehlerberichte.py, dort steht die Begruendung. Kurz: Windows kuerzt JEDES Segment,
+ * das kein gueltiger 8.3-Name ist, und %TEMP% steht bei langen Kontonamen so da. Nachgebaut
+ * statt erfragt, weil Node keine API dafuer hat. `null`, wenn es keine abweichende Kurzform gibt.
+ * `u` fuer die Grenze: `\p{L}` statt `\w`, damit sie wie Pythons Unicode-`\w` greift.
+ */
+function kurzformMuster(home) {
+  if (!WIN_PFAD.test(home)) return null
+  const teile = home.split(/[\\/]/).filter(Boolean)
+  if (teile.slice(1).every(s => ACHT_PUNKT_DREI.test(s))) return null
+  const stuecke = [regexFrei(teile[0]), ...teile.slice(1).map(s =>
+    ACHT_PUNKT_DREI.test(s) ? regexFrei(s) : `(?:${regexFrei(s)}|${KURZ_ALIAS})`)]
+  const flags = process.platform === 'win32' ? 'giu' : 'gu'
+  // Grenze: kein weiteres Namenszeichen — ein ' oder " (repr, JSON) darf direkt folgen.
+  return new RegExp(stuecke.join(TRENNER) + '(?![\\p{L}\\p{N}_~])', flags)
+}
+
 /**
  * Ein Name in allen Formen, in denen er in einer Meldung stehen kann: roh, NFC und NFD (macOS
  * legt Dateinamen zerlegt ab, eine Meldung aus dem Server kann sie zusammengesetzt tragen)
@@ -164,6 +190,8 @@ function maskiere(text, ctx = {}) {
     .filter(([k]) => typeof ctx[k] === 'string' && ctx[k].length >= MIN_NAME)
     .sort((a, b) => ctx[b[0]].length - ctx[a[0]].length)
   for (const [k, ersatz] of pfade) t = t.replace(pfadMuster(ctx[k]), ersatz)
+  const kurz = typeof ctx.home === 'string' ? kurzformMuster(ctx.home) : null
+  if (kurz) t = t.replace(kurz, '<home>')
   // Die Laengengrenze gilt HIER, nicht nur beim Sammeln: die Liste kann von anderswo kommen.
   // Und jeder Name in BEIDEN Formen: in den uvicorn-Zeilen (4xx/5xx bleiben im Bericht) steht
   // er URL-kodiert — `Interview%20Mueller` traf die Rohform nicht (Kalt-Review).
@@ -322,7 +350,7 @@ function deckel(max, fensterMs) {
 
 module.exports = {
   DATEI, ERLAUBT, MIN_NAME, FEHLERPROBE, INHALTSFELDER, pfad, lesen, schreiben, namen,
-  namensFormen, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, rendererEreignis, beforeSend, optionen,
+  namensFormen, kurzformMuster, maskiere, maskiereTief, ereignisMaskieren, protokollZeilen, rendererEreignis, beforeSend, optionen,
   fehlerprobeGewuenscht, deckel,
   _home: () => os.homedir(),
 }

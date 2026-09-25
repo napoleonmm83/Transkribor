@@ -103,6 +103,73 @@ def test_maskiere_laesst_fremdes_und_leeres_unberuehrt():
     assert fb.maskiere(42, ctx) == 42
 
 
+# ---------------------------------------------------------------- 8.3-Kurzform des Profils (#642)
+# Dieselben Vektoren stehen in electron/fehlerberichte.test.js.
+
+LANG_HOME = r"C:\Users\Marcus Mustermann"
+
+
+@pytest.mark.parametrize("zeile", [
+    r"C:\Users\MARCUS~1\AppData\Local\Temp\tmpab.wav",   # wie %TEMP% bei langem Namen
+    r"C:\Users\MA3F2B~1\AppData\Local\Temp\tmpab.wav",   # Hash-Form
+    r"C:\Users\MARCU~10\AppData\Local\Temp\tmpab.wav",   # zweistellige Nummer
+    "C:/Users/MARCUS~1/AppData/Local/Temp/tmpab.wav",    # mit Schraegstrichen
+    r"C:\\Users\\MARCUS~1\\AppData\\Local\\Temp\\tmpab.wav",  # JSON-kodiert
+])
+def test_maskiere_kurzform_des_profils(zeile):
+    t = fb.maskiere("Fehler bei " + zeile, {"home": LANG_HOME})
+    assert t.startswith("Fehler bei <home>"), t
+    assert "MARCU" not in t and "MA3F2B" not in t
+
+
+def test_maskiere_kurzform_am_ende_mit_satzzeichen():
+    # Gegenbeispiele zur Grenze: ein repr oder JSON schliesst direkt mit ' oder " an.
+    for zeile, erwartet in [(r"'C:\Users\MARCUS~1'", "'<home>'"),
+                            (r'"C:\\Users\\MARCUS~1": x', '"<home>": x'),
+                            (r"C:\Users\MARCUS~1", "<home>")]:
+        assert fb.maskiere(zeile, {"home": LANG_HOME}) == erwartet, zeile
+    # Und die Gegenrichtung: ein laengerer Name, der nur so ANFAENGT, ist kein Alias.
+    assert fb.maskiere(r"C:\Users\MARCUS~1X\y", {"home": LANG_HOME}) == r"C:\Users\MARCUS~1X\y"
+
+
+def test_maskiere_kurzform_mit_punkt_namen():
+    t = fb.maskiere(r"in C:\Users\MARCUS~1.MAR\x.wav", {"home": r"C:\Users\marcus.martini"})
+    assert t == r"in <home>\x.wav"
+
+
+def test_maskiere_kurzform_unter_langem_elternordner():
+    # GetShortPathNameW kuerzt JEDES Segment, nicht nur den Namen (gemessen 2026-09-25).
+    ctx = {"home": r"D:\Benutzerprofile Firma\Marcus Mustermann"}
+    assert fb.maskiere(r"D:\BENUTZ~1\MARCUS~1\x.wav", ctx) == r"<home>\x.wav"
+
+
+def test_kurzform_nur_wenn_es_eine_gibt():
+    # Kurzer Kontoname: keine abweichende Kurzform, also kein Muster und keine Mehrkosten.
+    assert fb.kurzform_muster(r"C:\Users\marcu") is None
+    assert fb.kurzform_muster("/home/marcus mustermann") is None
+    # Fremde Kurzpfade bleiben stehen — nur das Profil wird maskiert.
+    assert fb.maskiere(r"C:\PROGRA~1\x.exe", {"home": LANG_HOME}) == r"C:\PROGRA~1\x.exe"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="GetShortPathNameW gibt es nur auf Windows")
+def test_maskiere_echte_kurzform_vom_betriebssystem(tmp_path):
+    """Positivkontrolle gegen die Wirklichkeit: die Kurzform liefert Windows selbst, nicht der Test."""
+    import ctypes
+    from ctypes import wintypes
+    f = ctypes.windll.kernel32.GetShortPathNameW
+    f.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+    f.restype = wintypes.DWORD
+    lang = tmp_path / "Marcus Mustermann Langname"
+    lang.mkdir()
+    puffer = ctypes.create_unicode_buffer(1024)
+    assert f(str(lang), puffer, 1024), "GetShortPathNameW scheiterte"
+    kurz = puffer.value
+    if kurz.lower() == str(lang).lower():
+        pytest.skip("8.3-Namen sind auf diesem Laufwerk abgeschaltet")
+    t = fb.maskiere(f"Datei {kurz}\\x.wav fehlt", {"home": str(lang)})
+    assert t == "Datei <home>\\x.wav fehlt", (kurz, t)
+
+
 # ---------------------------------------------------------------- maskiere_tief / ereignis
 
 def test_maskiere_tief_zyklus_und_nur_inhaltsfelder():
