@@ -219,6 +219,18 @@
       ]
     },
     {
+      "id": "642-E die alte, zu weite 8.3-Pruefung — Mueller gilt als kurz, MLLER~1 reist",
+      "datei": "webtool/fehlerberichte.py",
+      "von": "_ACHT_ZEICHEN = r\"[A-Za-z0-9!#$%&'()\\-@^_`{}~]\"",
+      "nach": "_ACHT_ZEICHEN = r\"[^.\\s]\"",
+      "rot": [
+        "test_maskiere_kurzform_auch_bei_kurzem_namen_mit_sonderzeichen"
+      ],
+      "gruen": [
+        "test_kurzform_nur_wenn_es_eine_gibt"
+      ]
+    },
+    {
       "id": "642-D ohne Grenze greift der Alias mitten in einem laengeren Namen",
       "datei": "webtool/fehlerberichte.py",
       "von": "_TRENNER.join(stuecke) + r\"(?![\\w~])\"",

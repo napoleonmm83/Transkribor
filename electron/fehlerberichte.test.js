@@ -220,6 +220,13 @@ test('maskiere: Kurzform mit Punkt-Namen und unter langem Elternordner', () => {
     '<home>\\x.wav')
 })
 
+test('maskiere: Umlaute und + , ; = [ ] erzwingen eine Kurzform auch bei kurzem Namen (gemessen)', () => {
+  for (const [home, zeile] of [['C:\\Users\\Müller', 'C:\\Users\\MLLER~1\\x.wav'],
+    ['C:\\Users\\Jürgen', 'C:\\Users\\JRGEN~1\\x.wav'], ['D:\\Te+am\\anna', 'D:\\TE_AM~1\\anna\\x.wav']]) {
+    assert.strictEqual(fb.maskiere(zeile, { home }), '<home>\\x.wav', home)
+  }
+})
+
 test('kurzformMuster: nur wenn es eine abweichende Kurzform gibt; fremde Kurzpfade bleiben', () => {
   assert.strictEqual(fb.kurzformMuster('C:\\Users\\marcu'), null)
   assert.strictEqual(fb.kurzformMuster('/home/marcus mustermann'), null)
