@@ -157,13 +157,16 @@ def test_maskiere_kurzform_auch_bei_kurzem_namen_mit_sonderzeichen(home, zeile):
     assert fb.maskiere(zeile, {"home": home}) == r"<home>\x.wav"
 
 
-def test_kurzform_gross_klein_nur_auf_windows():
+@pytest.mark.parametrize("plattform, erwartet", [
+    ("win32", r"<home>\x.wav"),
+    ("linux", r"c:\users\marcus~1\x.wav"),
+], ids=["win32", "linux"])
+def test_kurzform_gross_klein_nur_auf_windows(monkeypatch, plattform, erwartet):
     # Zwilling zur Langform-Regel: Windows-Pfade unterscheiden keine Schreibung, andere schon.
-    t = fb.maskiere(r"c:\users\marcus~1\x.wav", {"home": LANG_HOME})
-    if sys.platform == "win32":
-        assert t == r"<home>\x.wav"
-    else:
-        assert t == r"c:\users\marcus~1\x.wav"
+    # Die Plattform wird gesetzt statt abgefragt — sonst prueft die ubuntu-CI (wo die
+    # Mutationsproben laufen) nur die eine Haelfte, und 642-F bliebe dort gruen (Lauf 36155023964).
+    monkeypatch.setattr(fb.sys, "platform", plattform)
+    assert fb.maskiere(r"c:\users\marcus~1\x.wav", {"home": LANG_HOME}) == erwartet
 
 
 def test_kurzform_nur_wenn_es_eine_gibt():
