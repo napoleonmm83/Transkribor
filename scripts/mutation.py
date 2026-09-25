@@ -318,8 +318,11 @@ def _fuer_cmd(kommando: str, os_name: str = os.name) -> str:
     Fassung startete so ein gleichnamiges FREMDES Programm (gegnerischer Review, gemessen).
     Getrennt wird an jedem Leerraum (cmd trennt auch am Tabulator); Argumente — Testpfade,
     Regex — bleiben, wie sie getippt wurden. Ein Kommando in Anfuehrungszeichen bleibt ganz
-    stehen: darin nimmt cmd ./ und / an (gemessen). Nur das ERSTE Programm einer Kette wird
-    gerichtet; `cd x && ./y` braucht weiterhin Rueckstriche. Ausserhalb von Windows nichts.
+    stehen: darin nimmt cmd ./ und / an (gemessen). Gerichtet wird alles bis zum ERSTEN
+    Leerraum — klebt ein zweites Programm ohne Leerraum am Operator (`./a.bat&&./b.bat`), wird
+    es mitgerichtet und laeuft (gemessen, Bot-Befund PR #648: ein Schnitt am Operator liesse es
+    wieder scheitern). Steht Leerraum davor (`cd x && ./y`), braucht es Rueckstriche.
+    Ausserhalb von Windows nichts.
     """
     if os_name != "nt":
         return kommando
