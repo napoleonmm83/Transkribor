@@ -686,6 +686,10 @@ def test_fuer_cmd_macht_den_programmpfad_windowsfest():
     assert f("./bin/x.bat\ta/b", "nt") == ".\\bin\\x.bat\ta/b"
     # Fuehrende Leerzeichen schalten die Umschreibung nicht ab (Review F3).
     assert f("  ./bin/x.bat a/b", "nt") == r".\bin\x.bat a/b"
+    # Am Operator ohne Leerraum: ein klebendes ZWEITES Programm wird mitgerichtet (so laeuft es,
+    # gemessen), Argumente dahinter stehen nach Leerraum und bleiben (Bot-Befund PR #648).
+    assert f("./bin/x.bat&&echo a/b", "nt") == r".\bin\x.bat&&echo a/b"
+    assert f("./bin/x.bat&&./bin/y.bat a/b", "nt") == r".\bin\x.bat&&.\bin\y.bat a/b"
     # In Anfuehrungszeichen nimmt cmd ./ und / an (gemessen, Review F4) — unangetastet.
     assert f('"./x y/p.exe" -q a/b', "nt") == '"./x y/p.exe" -q a/b'
     assert f("npm run test:electron", "nt") == "npm run test:electron"
