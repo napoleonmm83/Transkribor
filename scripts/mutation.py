@@ -307,29 +307,28 @@ def _ist_mutationsplan(statuszeile: str) -> bool:
 
 
 def _fuer_cmd(kommando: str, os_name: str = os.name) -> str:
-    """Den PROGRAMMPFAD fuer cmd.exe richten: kein fuehrendes ./, Rueckstriche statt /.
+    """Den PROGRAMMPFAD fuer cmd.exe richten: / wird \\ — im ersten Wort, sonst nirgends.
 
     Gemessen am 2026-09-25 (#642) als viertes Vorkommen, obwohl die Regel dazu in CLAUDE.md
     stand: `./.venv/Scripts/python.exe …` endete unter cmd.exe mit „Der Befehl "." ist
-    entweder falsch geschrieben" — eine Mahnung hat nicht getragen, also richtet der Treiber
-    das Kommando selbst (Entscheidung Marcus). Nur das erste Wort wird angefasst: Argumente
-    wie Testpfade oder Regex bleiben, wie sie getippt wurden. Ausserhalb von Windows nichts.
+    entweder falsch geschrieben" — cmd liest das / als Schalter. Eine Mahnung hat nicht
+    getragen, also richtet der Treiber das Kommando selbst (Entscheidung Marcus).
+
+    `./x` wird `.\\x`, NICHT `x`: ohne Verzeichnisteil sucht cmd auch im PATH, und die erste
+    Fassung startete so ein gleichnamiges FREMDES Programm (gegnerischer Review, gemessen).
+    Getrennt wird an jedem Leerraum (cmd trennt auch am Tabulator); Argumente — Testpfade,
+    Regex — bleiben, wie sie getippt wurden. Ein Kommando in Anfuehrungszeichen bleibt ganz
+    stehen: darin nimmt cmd ./ und / an (gemessen). Nur das ERSTE Programm einer Kette wird
+    gerichtet; `cd x && ./y` braucht weiterhin Rueckstriche. Ausserhalb von Windows nichts.
     """
     if os_name != "nt":
         return kommando
-    if kommando.startswith('"'):
-        ende = kommando.find('"', 1)
-        if ende < 0:
-            return kommando
-        prog, rest = kommando[1:ende], kommando[ende + 1:]
-        klammer = '"'
-    else:
-        prog, _, rest = kommando.partition(" ")
-        rest = " " + rest if rest else ""
-        klammer = ""
-    if prog.startswith("./"):
-        prog = prog[2:]
-    return klammer + prog.replace("/", "\\") + klammer + rest
+    k = kommando.lstrip()
+    if k.startswith('"'):
+        return k
+    teile = re.split(r"(\s)", k, maxsplit=1)
+    teile[0] = teile[0].replace("/", "\\")
+    return "".join(teile)
 
 
 def _lauf(repo: str, kommando: str, zusatz: dict[str, str] | None = None) -> tuple[str, int]:
@@ -651,8 +650,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"           {z}")
         if not aus0.strip():
             print("           (leer)")
-        print("         Hinweis: `shell=True` startet auf Windows cmd.exe. Dort gibt es kein"
-              " `./`, und ein Pfad mit fuehrendem `./` scheitert stumm mit rc 1.")
+        print("         Hinweis: `shell=True` startet auf Windows cmd.exe, gefahren wurde"
+              f" `{_fuer_cmd(test)}`. Das erste Programm richtet der Treiber selbst;"
+              " ein weiteres in einer Kette (`cd x && ./y`) braucht Rueckstriche.")
         return 2
     if not _lief_mindestens_ein_test(aus0):
         print("ABBRUCH: das Testkommando ist gelaufen, hat aber NULL Tests ausgefuehrt —")

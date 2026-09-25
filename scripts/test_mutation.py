@@ -12,6 +12,7 @@ der cmd.exe-Text ist woertlich das, was `shell=True` auf Windows zurueckgab.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -678,10 +679,16 @@ def test_fuer_cmd_macht_den_programmpfad_windowsfest():
     Nur der PROGRAMMPFAD wird umgeschrieben; Argumente (Testpfade, Regex) bleiben unberuehrt.
     """
     f = mutation._fuer_cmd
-    assert f("./.venv/Scripts/python.exe -m pytest a/b.py", "nt") == r".venv\Scripts\python.exe -m pytest a/b.py"
-    assert f('"./x y/p.exe" -q a/b', "nt") == r'"x y\p.exe" -q a/b'
+    # ./ wird .\ — NICHT abgeschnitten: ohne Verzeichnisteil sucht cmd sonst im PATH (Review F1).
+    assert f("./.venv/Scripts/python.exe -m pytest a/b.py", "nt") == r".\.venv\Scripts\python.exe -m pytest a/b.py"
+    assert f("node_modules/.bin/vitest run a/b", "nt") == r"node_modules\.bin\vitest run a/b"
+    # Ein Tabulator trennt fuer cmd ebenso; das Argument dahinter bleibt (Review F2).
+    assert f("./bin/x.bat\ta/b", "nt") == ".\\bin\\x.bat\ta/b"
+    # Fuehrende Leerzeichen schalten die Umschreibung nicht ab (Review F3).
+    assert f("  ./bin/x.bat a/b", "nt") == r".\bin\x.bat a/b"
+    # In Anfuehrungszeichen nimmt cmd ./ und / an (gemessen, Review F4) — unangetastet.
+    assert f('"./x y/p.exe" -q a/b', "nt") == '"./x y/p.exe" -q a/b'
     assert f("npm run test:electron", "nt") == "npm run test:electron"
-    assert f(r".venv\Scripts\python.exe -m pytest", "nt") == r".venv\Scripts\python.exe -m pytest"
     # Ausserhalb von Windows bleibt alles, wie es getippt wurde.
     assert f("./.venv/bin/python -m pytest", "posix") == "./.venv/bin/python -m pytest"
 
@@ -693,6 +700,20 @@ def test_lauf_startet_ein_programm_mit_fuehrendem_punkt_schraegstrich(tmp_path):
     (tmp_path / "bin" / "hallo.bat").write_text("@echo hallo-aus-bat\r\n", encoding="ascii")
     aus, rc = mutation._lauf(str(tmp_path), "./bin/hallo.bat")
     assert rc == 0 and "hallo-aus-bat" in aus, (rc, aus)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="die Falle ist cmd.exe")
+def test_punkt_schraegstrich_sucht_NICHT_im_PATH(tmp_path, monkeypatch):
+    """./x heisst "nur hier". Die erste Fassung schnitt ./ ab, und cmd startete dann ein
+    GLEICHNAMIGES Programm aus dem PATH — gemessen vom gegnerischen Pruefer (F1)."""
+    fremd = tmp_path / "fremd"
+    fremd.mkdir()
+    (fremd / "hallo.bat").write_text("@echo hallo-aus-FREMDEM-ORDNER\r\n", encoding="ascii")
+    leer = tmp_path / "leer"
+    leer.mkdir()
+    monkeypatch.setenv("PATH", str(fremd) + os.pathsep + os.environ.get("PATH", ""))
+    aus, rc = mutation._lauf(str(leer), "./hallo.bat")
+    assert "FREMDEM" not in aus and rc != 0, (rc, aus)
 
 
 def test_ein_geaenderter_MUTATIONSPLAN_gilt_nicht_als_schmutziger_baum():
