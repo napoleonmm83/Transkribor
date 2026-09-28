@@ -5766,7 +5766,7 @@ def test_blockiertes_loeschen_behaelt_eindeutige_altsicherung(client, monkeypatc
 
 def test_aufnahme_loeschen_404_behaelt_einzige_alte_sicherung(client, tmp_path):
     tdir = tmp_path / "Demo" / "transkripte"
-    alt = tdir / "S1.edit.json.cafe1234.weg"
+    alt = tdir / "S1.json.cafe1234.weg"
     alt.write_text("einziger Nutzertext", encoding="utf-8")
     (tdir / "S1.json").unlink()
     (tmp_path / "Demo" / "audio" / "S1.mp3").unlink()

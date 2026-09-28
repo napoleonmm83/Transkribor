@@ -598,6 +598,12 @@ Start liegen.
 Das ist Absicht: ein Rest, der gerade erst entstanden ist, könnte zu einem Löschvorgang
 gehören, der noch läuft. Nichts, was in deiner Dateiliste steht, ist davon betroffen.
 
+Sicherungen aus älteren Fassungen ohne lesbaren Zeitstempel bleiben beim Start erhalten.
+Beim Neu-Transkribieren bleiben sie ebenfalls liegen. Löschst du eine Aufnahme ausdrücklich,
+entfernt Transkribor eindeutig zuordenbare Sicherungen mit; beim Umbenennen nimmt es diese mit.
+Bei mehrdeutigen Dateinamen bleiben die Sicherungen vorsichtshalber liegen und brauchen eine
+spätere bewusste Bereinigung.
+
 Transkript und Korrekturen bleiben erhalten, bis du eine
 Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio
