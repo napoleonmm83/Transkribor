@@ -42,6 +42,7 @@ def test_availability_does_not_break_settings_when_nemo_import_is_broken(monkeyp
 
 def test_model_loads_offline_configuration_lazily(monkeypatch):
     called = []
+    monkeypatch.setattr("webtool.hf_tls.configure", lambda: called.append("tls"))
 
     class Model:
         def __init__(self):
@@ -70,4 +71,4 @@ def test_model_loads_offline_configuration_lazily(monkeypatch):
     model = nemotron_diarize._model()
     assert model.sortformer_modules.chunk_len == 340
     assert model.sortformer_modules.spkcache_len == 264
-    assert called == [nemotron_diarize.MODEL_ID, "eval", ("device", "cuda"), "checked"]
+    assert called == ["tls", nemotron_diarize.MODEL_ID, "eval", ("device", "cuda"), "checked"]

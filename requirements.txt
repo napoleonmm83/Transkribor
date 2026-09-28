@@ -4,6 +4,12 @@
 # Beides in eine Datei zu packen ginge nur mit --extra-index-url, und dann zieht pip je nach
 # Aufloesung das CPU-Rad von PyPI — die GPU waere still weg.
 faster-whisper
+# NeMo und faster-whisper laden Modelle über den Hub. Windows-TLS konfiguriert dessen
+# öffentliche set_client_factory-API; sie ist ab 1.x vorhanden, 2.x nutzt einen anderen
+# HTTP-Client. Die Grenze hält die gezielte Zertifikatsprüfung ausführbar.
+huggingface-hub>=1.0,<2.0
+# webtool/hf_tls.py baut den Hub-Client selbst; daher direkt statt nur transitiv.
+httpx
 # Nur fuer den GGML-Modell-Download in webtool/whispercpp.py: python.org-Python nutzt
 # auf macOS nicht die System-Keychain, urllib scheitert dort sonst mit
 # CERTIFICATE_VERIFY_FAILED. Kaeme transitiv ohnehin herein — worauf man sich

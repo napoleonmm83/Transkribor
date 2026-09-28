@@ -286,6 +286,9 @@ def _cuda_dlls_auf_pfad():
 
 def _modell(model, device):
     _cuda_dlls_auf_pfad()                       # VOR dem Import: so lief der gepruefte Fall
+    from webtool.hf_tls import configure
+
+    configure()
     from faster_whisper import WhisperModel
     # int8 auf der CPU: float16 ist dort teils gar nicht implementiert und sonst langsam.
     #
