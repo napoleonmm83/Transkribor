@@ -604,6 +604,12 @@ entfernt Transkribor eindeutig zuordenbare Sicherungen mit; beim Umbenennen nimm
 Bei mehrdeutigen Dateinamen bleiben die Sicherungen vorsichtshalber liegen und brauchen eine
 spätere bewusste Bereinigung.
 
+Auch wenn Aufnahmen einen Punkt im Namen haben, bleiben ihre Transkripte beim Löschen,
+Neu-Transkribieren oder Umbenennen einer anderen Aufnahme erhalten. Dateien, die keiner
+bekannten Transkriptart zugeordnet werden können, bleiben vorsichtshalber liegen.
+Ist die Zuordnung einer Transkriptdatei mehrdeutig oder ihr Inhalt nicht lesbar,
+bricht die Aktion mit einer Meldung ab, bevor Dateien verändert werden.
+
 Transkript und Korrekturen bleiben erhalten, bis du eine
 Aufnahme **neu transkribierst** oder ihre **Sprache änderst**: dann wird das Transkript aus
 dem Audio neu erstellt, das bisherige Transkript samt Korrekturen fällt dabei weg (das Audio

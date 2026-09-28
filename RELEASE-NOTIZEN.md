@@ -38,6 +38,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Bei langen Windows-Benutzernamen oder solchen mit Umlauten wird der Benutzerordner in Fehlerberichten jetzt auch in seiner abgekürzten Schreibweise (etwa `C:\Users\MARCUS~1`) unkenntlich gemacht.
 
 **Behoben**
+- Beim Löschen, Neu-Transkribieren und Umbenennen einer Aufnahme bleiben Transkripte anderer Aufnahmen mit Punkten im Namen erhalten.
+- Ist eine Transkriptdatei nicht sicher zuordenbar, bricht die Aktion ab, bevor Ton oder Text verändert werden.
 - Alte Transkript-Sicherungen ohne lesbaren Zeitstempel werden beim Start nicht mehr automatisch gelöscht.
 - Beim bewussten Löschen einer Aufnahme werden ihre eindeutig zuordenbaren alten Sicherungen mit entfernt.
 - Beim Umbenennen einer Aufnahme ziehen ihre eindeutig zuordenbaren Sicherungen ohne lesbaren Zeitstempel mit um.
