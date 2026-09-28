@@ -254,6 +254,9 @@ def _lauf_projekt(tmp_path, monkeypatch, **wie):
     # diesen Testlauf. Dieselbe Falle wie TRANSKRIBOR_SETTINGS, nur eine Ebene tiefer.
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    # Diese Projektproben ersetzen faster_whisper; der schlanke CI-Job installiert
+    # deshalb auch dessen Hugging-Face-Abhaengigkeit nicht.
+    monkeypatch.setattr("webtool.hf_tls.configure", lambda: None)
     return proj, _faster_attrappe(monkeypatch, **wie)
 
 
