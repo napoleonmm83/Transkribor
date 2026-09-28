@@ -321,7 +321,7 @@ def test_put_saves_non_destructive(client, tmp_path):
     assert "Interviewer" in saved
     assert "projektinstanz" not in saved
     md = (tdir / "S1.md").read_text(encoding="utf-8")
-    assert "**Interviewer:** Hallo, Welt!" in md
+    assert "**Interviewer:** [00:00:00.000–00:00:01.000] Hallo, Welt!" in md
     # Roh-JSON unangetastet
     raw = (tdir / "S1.json").read_text(encoding="utf-8")
     assert "Hallo Welt." in raw and "Hallo, Welt!" not in raw
@@ -4605,6 +4605,90 @@ def test_export_file_md_download(client):
     assert "text/markdown" in r.headers["content-type"]
     assert 'attachment; filename="S1.md"' in r.headers["content-disposition"]
     assert len(r.text) > 0
+
+
+def test_markdown_downloadwege_erneuern_alten_export_aus_edit_json(client, tmp_path, monkeypatch):
+    import io
+    import zipfile
+
+    tdir = tmp_path / "Demo" / "transkripte"
+    doc = {"base": "S1", "segments": [
+        {"id": 0, "speaker": "A", "text": "Schnittstelle.", "start": 12.25, "end": 13.5}
+    ]}
+    (tdir / "S1.edit.json").write_text(json.dumps(doc), encoding="utf-8")
+    (tdir / "S1.md").write_text("Alter Export ohne Zeit\n", encoding="utf-8")
+    monkeypatch.setenv("TRANSKRIBOR_DOWNLOADS", str(tmp_path / "Downloads"))
+
+    einzel = client.get("/api/projects/Demo/files/S1/export/md")
+    downloads = client.post("/api/projects/Demo/export/downloads")
+    archiv = client.get("/api/projects/Demo/export/zip")
+    assert einzel.status_code == downloads.status_code == archiv.status_code == 200
+    erwartung = "[00:00:12.250–00:00:13.500] Schnittstelle."
+    assert erwartung in einzel.text
+    assert (tdir / "S1.md").read_text(encoding="utf-8") == "Alter Export ohne Zeit\n"
+    assert erwartung in (tmp_path / "Downloads" / "Demo" / "S1.md").read_text(encoding="utf-8")
+    with zipfile.ZipFile(io.BytesIO(archiv.content)) as zf:
+        assert erwartung in zf.read("S1.md").decode("utf-8")
+
+
+def test_markdown_download_bewahrt_altdatei_bei_unlesbarer_edit_json(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_bytes(b"\xff")
+    (tdir / "S1.md").write_text("Korrigierter Alttext\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Korrigierter Alttext\n"
+    assert (tdir / "S1.md").read_text(encoding="utf-8") == r.text
+
+
+def test_markdown_download_bewahrt_datei_ohne_transkript(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.json").unlink()
+    (tdir / "S1.md").write_text("Nur Markdown\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Nur Markdown\n"
+
+
+def test_markdown_download_erneuert_rohtranskript_ohne_edit_json(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.md").write_text("Alter Export ohne Zeit\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert "[00:00:00.000–00:00:01.000] Hallo Welt." in r.text
+
+
+def test_markdown_download_bewahrt_altdatei_bei_unlesbarer_roh_json(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.json").write_bytes(b"\xff")
+    (tdir / "S1.md").write_text("Korrigierter Alttext\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Korrigierter Alttext\n"
+
+
+def test_markdown_download_bewahrt_altdatei_bei_unvollstaendiger_edit_json(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_text("{}", encoding="utf-8")
+    (tdir / "S1.md").write_text("Korrigierter Alttext\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Korrigierter Alttext\n"
+
+
+def test_markdown_download_bewahrt_altdatei_bei_kaputtem_segment(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_text(json.dumps({"base": "S1", "segments": [None]}), encoding="utf-8")
+    (tdir / "S1.md").write_text("Korrigierter Alttext\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Korrigierter Alttext\n"
 
 
 def test_export_file_md_unknown_404(client):
