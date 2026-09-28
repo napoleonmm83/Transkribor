@@ -37,6 +37,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Sicherheit**
 - Bei langen Windows-Benutzernamen oder solchen mit Umlauten wird der Benutzerordner in Fehlerberichten jetzt auch in seiner abgekürzten Schreibweise (etwa `C:\Users\MARCUS~1`) unkenntlich gemacht.
 
+**Behoben**
+- Alte Transkript-Sicherungen ohne lesbaren Zeitstempel werden beim Start nicht mehr automatisch gelöscht.
+
 ## v0.57.0 — 2026-09-23
 
 **Neu**
