@@ -40,7 +40,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Behoben**
 - Alte Transkript-Sicherungen ohne lesbaren Zeitstempel werden beim Start nicht mehr automatisch gelöscht.
 - Beim bewussten Löschen einer Aufnahme werden ihre eindeutig zuordenbaren alten Sicherungen mit entfernt.
-- Beim Umbenennen einer Aufnahme ziehen ihre eindeutig zuordenbaren alten Sicherungen mit um.
+- Beim Umbenennen einer Aufnahme ziehen ihre eindeutig zuordenbaren Sicherungen ohne lesbaren Zeitstempel mit um.
 
 ## v0.57.0 — 2026-09-23
 
