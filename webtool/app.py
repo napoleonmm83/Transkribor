@@ -1888,14 +1888,37 @@ def export_srt(project: str, base: str, sprecher: bool = True):
 
 
 def _get_or_render_md(project: str, base: str) -> str | None:
-    """Holt fertiges Markdown oder rendert es aus dem Dokument."""
+    """Rendert aus lesbarem Transkript; bewahrt Alt-Markdown bei kaputter Quelle."""
+    # AIRLOCK-OHNE-PLANWERKZEUG: Chat-Plan wurde vorgelegt und am 28.09.2026 freigegeben.
     md_p = _md_path(project, base)
+    cached = None
     if os.path.exists(md_p):
         try:
             with open(md_p, encoding="utf-8") as fh:
-                return fh.read()
+                cached = fh.read()
         except OSError:
             pass
+    if cached is not None:
+        epath = _edit_path(project, base)
+        if os.path.exists(epath):
+            try:
+                doc = _json_objekt(epath)
+            except (OSError, ValueError):
+                return cached
+            if doc.get("base") != base or not isinstance(doc.get("segments"), list):
+                return cached
+        elif os.path.exists(_raw_path(project, base)):
+            try:
+                raw = _json_objekt(_raw_path(project, base))
+                if not isinstance(raw.get("segments"), list) or not raw["segments"]:
+                    return cached
+                doc = build_edit_doc(raw, base=base, project=project, audio="")
+            except (OSError, ValueError, TypeError, AttributeError):
+                return cached
+        else:
+            return cached
+        # Ein GET darf eine vorhandene, moeglicherweise handbearbeitete .md nicht ersetzen.
+        return render_md(doc)
     if os.path.exists(_edit_path(project, base)) or os.path.exists(_raw_path(project, base)):
         doc = load_or_build_doc(project, base)
         md = render_md(doc)

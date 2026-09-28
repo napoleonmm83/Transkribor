@@ -1,5 +1,7 @@
 from webtool.render_md import render_md
 
+# AIRLOCK-OHNE-PLANWERKZEUG: Chat-Plan wurde vorgelegt und am 28.09.2026 freigegeben.
+
 
 def _seg(id, spk, text, note=""):
     return {"id": id, "speaker": spk, "text": text, "note": note}
@@ -91,3 +93,42 @@ def test_aufeinanderfolgende_musik_steht_nur_einmal():
     md = render_md(doc)
     assert md.count("[Musik]") == 1
     assert "**Bühnenstimme:** [Musik]" in md
+
+
+def test_zeitspannen_je_segment_bleiben_beim_zusammenfassen_erhalten():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "Erster Teil."), "start": 1.25, "end": 2.5},
+        {**_seg(1, "Hans", "Zweiter Teil."), "start": 2.5, "end": 4.125},
+    ]}
+    md = render_md(doc)
+    assert "[00:00:01.250–00:00:02.500] Erster Teil." in md
+    assert "[00:00:02.500–00:00:04.125] Zweiter Teil." in md
+
+
+def test_musik_traegt_die_gesamte_zeitspanne():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "[Musik]"), "start": 1.0, "end": 2.0},
+        {**_seg(1, "Hans", "[Musik]"), "start": 2.0, "end": 3.5},
+    ]}
+    md = render_md(doc)
+    assert md.count("[Musik]") == 1
+    assert "[00:00:01.000–00:00:03.500] [Musik]" in md
+
+
+def test_getrennte_musik_und_fehlendes_ende_erzeugen_keine_falsche_spanne():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "[Musik]"), "start": 1.0, "end": 2.0},
+        {**_seg(1, "Hans", "[Musik]"), "start": 50.0, "end": 51.0},
+        {**_seg(2, "Hans", "[Musik]"), "start": 51.0, "end": None},
+    ]}
+    md = render_md(doc)
+    assert "[00:00:01.000–00:00:02.000] [Musik]" in md
+    assert "[00:00:50.000–00:00:51.000] [Musik]" in md
+    assert "[00:00:01.000–00:00:51.000]" not in md
+
+
+def test_ungueltige_zeitwerte_lassen_den_text_im_export():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "Hallo."), "start": "1.0", "end": 2.0},
+    ]}
+    assert "**Hans:** Hallo." in render_md(doc)

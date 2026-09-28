@@ -478,7 +478,7 @@ def test_apply_builds_edit_and_md(project):
     assert doc["segments"][0]["speaker"] == "Matthias"
     assert doc["human_edited"] is False
     md = (t / "S1.md").read_text(encoding="utf-8")
-    assert "**Matthias:** Ich bin Matthias." in md
+    assert "**Matthias:** [00:00:00.000–00:00:01.000] Ich bin Matthias." in md
     # Roh unangetastet
     assert "Mathias" in (t / "S1.json").read_text(encoding="utf-8")
 
@@ -828,7 +828,7 @@ def test_run_full_flow(project, monkeypatch):
     assert doc["segments"][0]["text"] == "Ich bin Matthias."
     assert doc["segments"][0]["speaker"] == "Interviewer"
     assert doc["human_edited"] is False
-    assert "**Interviewer:** Ich bin Matthias." in (t / "S1.md").read_text(encoding="utf-8")
+    assert "**Interviewer:** [00:00:00.000–00:00:01.000] Ich bin Matthias." in (t / "S1.md").read_text(encoding="utf-8")
     # drei claude-Aufrufe: Glossar + Korrektur + Verifikation
     assert len(calls) == 3
     assert any("TREUE-CHECK" in c for c in calls)                    # Verifikations-Pass lief
