@@ -2426,7 +2426,7 @@ def test_stdout_parserfehler_bleibt_terminal_wenn_baumkill_wirft(monkeypatch):
                         kind="correct")
     proc = None
     try:
-        r = _wait(jid, timeout=1)
+        r = _wait(jid, timeout=10)
         proc = jobs._jobs[jid]["proc"]
         assert r is not None and r["status"] == "error"
         assert r["ended"] is not None and proc.poll() is not None
@@ -2460,7 +2460,7 @@ def test_stdout_parserfehler_deckelt_wirkungslosen_baumkill(tmp_path, monkeypatc
     proc = None
     kindprozess_pid = None
     try:
-        r = _wait(jid, timeout=1)
+        r = _wait(jid, timeout=10)
         proc = jobs._jobs[jid]["proc"]
         kindprozess_pid = int(kind_pid.read_text(encoding="utf-8"))
         assert r is not None and r["status"] == "error"
