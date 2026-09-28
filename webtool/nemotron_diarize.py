@@ -23,6 +23,9 @@ def verfuegbar() -> bool:
 def _model():
     global _MODEL
     if _MODEL is None:
+        from .hf_tls import configure
+
+        configure()
         try:
             from nemo.collections.asr.models import SortformerEncLabelModel
         except ImportError as exc:

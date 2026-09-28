@@ -314,9 +314,19 @@ def test_lauf_meldet_seine_gesamtdauer_und_zaehlt_nur_geglueckte(tmp_path, monke
 
 def test_compute_type_haengt_am_geraet(monkeypatch):
     """float16 ist auf der CPU teils nicht implementiert und sonst langsam."""
+    called = []
+    monkeypatch.setattr("webtool.hf_tls.configure", lambda: called.append("tls"))
     _faster_attrappe(monkeypatch)
+    whisper_model = sys.modules["faster_whisper"].WhisperModel
+
+    def traced_model(*args, **kwargs):
+        called.append("model")
+        return whisper_model(*args, **kwargs)
+
+    monkeypatch.setattr(sys.modules["faster_whisper"], "WhisperModel", traced_model)
     assert transcribe._modell("tiny", "cuda").compute_type == "float16"
     assert transcribe._modell("tiny", "cpu").compute_type == "int8"
+    assert called == ["tls", "model", "tls", "model"]
 
 
 def test_cuda_dlls_nur_auf_windows(monkeypatch, tmp_path):
