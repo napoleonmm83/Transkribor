@@ -6,6 +6,7 @@ Datei oeffnet, fragt zuerst "worum geht es hier" — nicht nach 400 Segmenten.
 
 
 import math
+from typing import TypeGuard
 
 from .edit_model import MUSIK
 
@@ -20,7 +21,7 @@ def _zeit(sekunden: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
-def _ist_zeit(wert) -> bool:
+def _ist_zeit(wert: object) -> TypeGuard[float]:
     return isinstance(wert, (int, float)) and not isinstance(wert, bool) and math.isfinite(wert)
 
 
