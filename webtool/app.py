@@ -1305,6 +1305,97 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
     return entfernt
 
 
+_SICHTBARE_ENDUNGEN = tuple(e for e in paths._TRANSKRIPT_ENDUNGEN
+                           if e != ".segments.json") + (".raw.txt", ".segments.txt", ".tagged.txt")
+
+
+def _transkript_basen(name: str) -> set[str]:
+    """Moegliche Aufnahmebasen aus bekannten, sichtbaren Artefakt-Endungen."""
+    basen = {name[:-len(endung)] for endung in _SICHTBARE_ENDUNGEN
+             if name.endswith(endung) and len(name) > len(endung)}
+    if name.endswith(".correction.json"):
+        davor = name[:-len(".correction.json")]
+        stamm, punkt, nummer = davor.rpartition(".part")
+        if punkt and stamm and nummer.isdecimal():
+            basen.add(stamm)
+    return basen
+
+
+def _bekannte_aufnahmebasen(project: str) -> set[str]:
+    """Auch Transkripte und Sidecars ohne Audio koennen eigene Aufnahmen belegen."""
+    basen = _audio_bases(project) | set(paths.transcript_bases(project))
+    tdir = paths.transkripte_dir(project)
+    if not os.path.isdir(tdir):
+        return {paths.namensform(base) for base in basen}
+    for name in os.listdir(tdir):
+        for endung in (".raw.txt", ".segments.txt", ".tagged.txt", ".md", ".srt", ".vtt"):
+            if name.endswith(endung) and len(name) > len(endung):
+                basen.add(name[:-len(endung)])
+                break
+    return {paths.namensform(base) for base in basen}
+
+
+def _transkript_gehoert_zu(pfad: str, base: str, bekannte_basen: set[str]) -> bool:
+    """Bekanntes Artefakt zuordnen; bei belegter Mehrdeutigkeit vor Mutation 409."""
+    name = os.path.basename(pfad)
+    moeglich = _transkript_basen(name)
+    if not moeglich and any(name.casefold().endswith(e.casefold())
+                            for e in _SICHTBARE_ENDUNGEN):
+        raise HTTPException(status_code=409,
+                            detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+    if os.path.normcase(base) not in {os.path.normcase(b) for b in moeglich}:
+        # Auf macOS kann das Volume Gross-/Kleinschreibung ignorieren, obwohl
+        # os.path.normcase sie unveraendert laesst. Uneinheitliche Schreibweisen
+        # lassen dann keine sichere Zuordnung von Ton und Text zu.
+        if paths.namensform(base) in {paths.namensform(b) for b in moeglich}:
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+        return False
+    andere = {paths.namensform(b) for b in moeglich} & bekannte_basen
+    andere.discard(paths.namensform(base))
+    if andere:
+        raise HTTPException(status_code=409,
+                            detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+    if len(moeglich) > 1 and name.endswith(".json"):
+        try:
+            with open(pfad, encoding="utf-8") as datei:
+                doc = json.load(datei)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}") from exc
+        if not isinstance(doc, dict):
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+        dokument_base = doc.get("base")
+        ist_roh = all(k in doc for k in ("language", "text", "segments"))
+        if dokument_base is not None and not isinstance(dokument_base, str):
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+        if isinstance(dokument_base, str) and paths.namensform(dokument_base) != paths.namensform(base):
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+        if name.endswith(".edit.json") and not isinstance(dokument_base, str) and not ist_roh:
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+        if dokument_base is None and ist_roh and paths.namensform(base) != paths.namensform(name[:-5]):
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+    return True
+
+
+def _abweichende_schreibweise_pruefen(tdir: str, base: str) -> None:
+    """Case-insensitive Volumes duerfen keine zum Glob unsichtbaren Dateien verlieren."""
+    if not os.path.isdir(tdir):
+        return
+    praefix = base + "."
+    for name in os.listdir(tdir):
+        if (paths.namensform(name).startswith(paths.namensform(praefix))
+                and not name.startswith(praefix)
+                and not name.endswith((".lock", ".weg"))):
+            raise HTTPException(status_code=409,
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+
+
 def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     """Alle Dateien EINER Aufnahme entfernen; gibt zurueck, wie viele es waren.
 
@@ -1315,14 +1406,14 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     ausser der Antwort auch die 404-Entscheidung in `delete_file`, und eine Aufnahme, von der
     nur noch Reste dalagen, ist keine Aufnahme mehr.
 
-    `transkripte/<base>.*` deckt raw/edit/md/srt/correction/tagged/diar/segments und die
-    `.partN.correction.json`-Zwischenstaende in einem Rutsch ab — eine Aufzaehlung waere
-    beim naechsten neuen Artefakt still unvollstaendig.
+    Das Glob findet Kandidaten; nur bekannte Artefakt-Endungen gehoeren wirklich zur
+    Aufnahme. Sonst wuerde `S1.*` auch das Rohtranskript `S1.2026.json` loeschen.
 
     glob.escape() ist Pflicht, nicht Vorsicht: paths.safe_name laesst `[` und `*` durch, und
     der URL-Import legt Dateien wie `Video [dQw4w9].m4a` an — ohne Escape liest glob das `[`
     als Zeichenklasse und findet die Datei nicht. Der literale Punkt im Muster trennt
     sauber: "Timeline 1.*" trifft `Timeline 1.json`, aber nicht `Timeline 10.json`."""
+    _abweichende_schreibweise_pruefen(paths.transkripte_dir(project), base)
     muster = os.path.join(paths.transkripte_dir(project), glob.escape(base) + ".*")
     # `sorted`, weil `glob.glob` laut Doku eine BELIEBIGE Reihenfolge liefert — sie haengt am
     # Dateisystem. GEMESSEN (WSL/ext4, 5 frische Verzeichnisse, Dateien in der Reihenfolge
@@ -1339,7 +1430,8 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     # Antwort („geloescht: N") und als 404-Entscheidung. In `treffer` gezaehlt meldete eine
     # Aufnahme, von der nur noch Reste da sind, ein munteres „1 geloescht" statt des richtigen
     # 404, und die Zahl behauptete Dateien, die es als Aufnahme nicht mehr gab.
-    treffer = sorted(p for p in gefunden if not p.endswith(".weg"))
+    bekannte_basen = _bekannte_aufnahmebasen(project)
+    treffer = sorted(p for p in gefunden if _transkript_gehoert_zu(p, base, bekannte_basen))
     reste = sorted(p for p in gefunden if p.endswith(".weg") and _weg_aufnahme(p) == base)
     if mit_audio:
         adir = paths.audio_dir(project)
@@ -1726,8 +1818,10 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # Gestempelte Reste mitwandern zu lassen waere schaedlich: der Startlauf darf sie ohne
         # diese `sperre.datei` loeschen, auch zwischen Glob und `os.rename`. Bei unbekanntem
         # Alter tut er das nicht; nur fuer diese Reste ist das Mitwandern sicher.
+        _abweichende_schreibweise_pruefen(tdir, base)
+        bekannte_basen = _bekannte_aufnahmebasen(project)
         treffer = sorted(p for p in glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
-                         if os.path.isfile(p) and not p.endswith((".lock", ".weg")))
+                         if os.path.isfile(p) and _transkript_gehoert_zu(p, base, bekannte_basen))
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
                     if os.path.exists(os.path.join(adir, base + ext))]

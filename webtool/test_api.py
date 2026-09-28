@@ -2777,7 +2777,8 @@ def _artefakte(tmp_path, base="S1"):
     for name in (f"{base}.edit.json", f"{base}.md", f"{base}.srt", f"{base}.correction.json",
                  f"{base}.part1.correction.json", f"{base}.tagged.txt", f"{base}.diar.json",
                  f"{base}.segments.txt"):
-        (t / name).write_text("x", encoding="utf-8")
+        (t / name).write_text(json.dumps({"base": base}) if name.endswith(".json") else "x",
+                              encoding="utf-8")
     return t
 
 
@@ -2798,6 +2799,172 @@ def test_datei_loeschen_laesst_nachbarn_mit_gemeinsamem_praefix_stehen(client, t
     (tmp_path / "Demo" / "audio" / "S10.mp3").write_bytes(b"fake")
     assert client.delete("/api/projects/Demo/files/S1").status_code == 200
     assert (t / "S10.json").exists() and (tmp_path / "Demo" / "audio" / "S10.mp3").exists()
+
+
+def test_datei_loeschen_laesst_gepunktete_nachbaraufnahme_stehen(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.2026.json").write_text('{"text":"fremder Nutzertext"}', encoding="utf-8")
+    (audio / "S1.2026.mp3").write_bytes(b"fremder Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert (t / "S1.2026.json").read_text(encoding="utf-8") == '{"text":"fremder Nutzertext"}'
+    assert (audio / "S1.2026.mp3").read_bytes() == b"fremder Ton"
+
+
+@pytest.mark.parametrize("audio_name", ["S1.edit.mp3", "S1.EDIT.MP3"])
+def test_datei_loeschen_behaelt_artefakt_der_gepunkteten_nachbaraufnahme(
+        client, tmp_path, audio_name):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.edit.json").write_text("fremdes Rohtranskript", encoding="utf-8")
+    (audio / audio_name).write_bytes(b"fremder Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 409, antwort.text
+    assert (t / "S1.edit.json").read_text(encoding="utf-8") == "fremdes Rohtranskript"
+    assert (audio / audio_name).read_bytes() == b"fremder Ton"
+    assert (t / "S1.json").exists() and (audio / "S1.mp3").exists()
+
+
+def test_datei_loeschen_entfernt_gepunktete_aufnahme_gezielt(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.2026.json").write_text("eigenes Transkript", encoding="utf-8")
+    (t / "S1.2026.part2.correction.json").write_text('{"base":"S1.2026"}', encoding="utf-8")
+    (audio / "S1.2026.mp3").write_bytes(b"eigener Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1.2026")
+
+    assert antwort.status_code == 200, antwort.text
+    assert not (t / "S1.2026.json").exists()
+    assert not (t / "S1.2026.part2.correction.json").exists()
+    assert not (audio / "S1.2026.mp3").exists()
+    assert (t / "S1.json").exists() and (audio / "S1.mp3").exists()
+
+
+def test_datei_loeschen_entfernt_edit_aufnahme_ohne_mehrdeutigen_nachbarn(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.json").unlink()
+    (audio / "S1.mp3").unlink()
+    (t / "S1.edit.json").write_text(
+        '{"language":"de","text":"eigener Nutzertext","segments":[]}', encoding="utf-8")
+    (audio / "S1.edit.mp3").write_bytes(b"eigener Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1.edit")
+
+    assert antwort.status_code == 200, antwort.text
+    assert not (t / "S1.edit.json").exists()
+    assert not (audio / "S1.edit.mp3").exists()
+
+
+def test_datei_loeschen_behaelt_unbekannte_endung(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    fremd = t / "S1.private.json"
+    fremd.write_text("fremder Nutzertext", encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "fremder Nutzertext"
+
+
+def test_datei_loeschen_behaelt_transkript_nachbarn_ohne_audio(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    fremd = t / "S1.segments.json"
+    fremd.write_text("fremder Nutzertext", encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "fremder Nutzertext"
+
+
+def test_abweichende_schreibweise_wird_ohne_plattform_normierung_nicht_geloescht(monkeypatch):
+    import webtool.app as appmod
+    monkeypatch.setattr(appmod.os.path, "normcase", lambda name: name)
+
+    with pytest.raises(appmod.HTTPException) as fehler:
+        appmod._transkript_gehoert_zu("S1.edit.json", "S1.EDIT", {"s1.edit"})
+
+    assert fehler.value.status_code == 409
+
+
+def test_unicode_alias_wird_vor_der_dateisuche_erkannt(tmp_path):
+    import webtool.app as appmod
+    (tmp_path / "S1.Cafe\u0301.json").write_text("Nutzertext", encoding="utf-8")
+
+    with pytest.raises(appmod.HTTPException) as fehler:
+        appmod._abweichende_schreibweise_pruefen(str(tmp_path), "S1.Caf\u00e9")
+
+    assert fehler.value.status_code == 409
+
+
+def test_grossgeschriebene_json_endung_bricht_vor_audio_loeschen_ab(tmp_path):
+    import webtool.app as appmod
+    roh = tmp_path / "S1.JSON"
+    roh.write_text("Nutzertext", encoding="utf-8")
+
+    with pytest.raises(appmod.HTTPException) as fehler:
+        appmod._transkript_gehoert_zu(str(roh), "S1", {"s1"})
+
+    assert fehler.value.status_code == 409
+    assert roh.read_text(encoding="utf-8") == "Nutzertext"
+
+
+def test_datei_loeschen_entfernt_eigenes_valide_edit_dokument(client, tmp_path):
+    from webtool.edit_model import build_edit_doc
+    t = tmp_path / "Demo" / "transkripte"
+    doc = build_edit_doc({"language": "de", "segments": []},
+                         base="S1", project="Demo", audio="S1.mp3")
+    (t / "S1.edit.json").write_text(json.dumps(doc), encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert not (t / "S1.edit.json").exists()
+
+
+def test_datei_loeschen_bricht_bei_gross_klein_alias_vor_audio_ab(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.edit.json").write_text("Nutzertext", encoding="utf-8")
+    (audio / "S1.EDIT.mp3").write_bytes(b"Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1.EDIT")
+
+    assert antwort.status_code == 409, antwort.text
+    assert (t / "S1.edit.json").read_text(encoding="utf-8") == "Nutzertext"
+    assert (audio / "S1.EDIT.mp3").read_bytes() == b"Ton"
+
+
+def test_datei_loeschen_behaelt_audiofreies_rohtranskript_mit_edit_namen(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    fremd = t / "S1.edit.json"
+    fremd.write_text('{"language":"de","text":"fremd","segments":[]}', encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 409, antwort.text
+    assert fremd.read_text(encoding="utf-8") == '{"language":"de","text":"fremd","segments":[]}'
+    assert (t / "S1.json").exists()
+
+
+def test_datei_loeschen_bricht_bei_transkript_nachbarn_ohne_audio_ab(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    fremd = t / "S1.edit.json"
+    fremd.write_text("fremder Nutzertext", encoding="utf-8")
+    (t / "S1.edit.raw.txt").write_text("fremder Rohtext", encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 409, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "fremder Nutzertext"
+    assert (t / "S1.json").exists()
 
 
 def test_datei_loeschen_vertraegt_glob_sonderzeichen_im_namen(client, tmp_path):
@@ -2954,6 +3121,36 @@ def test_neu_transkribieren_raeumt_transkripte_weg_und_startet_den_lauf(client, 
     assert aufrufe[0][3] == "S1"
 
 
+def test_neu_transkribieren_behaelt_gepunktete_nachbaraufnahme(client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+    t = tmp_path / "Demo" / "transkripte"
+    (t / "S1.2026.json").write_text("fremder Nutzertext", encoding="utf-8")
+    monkeypatch.setattr(appmod, "_start_transcribe", lambda *a, **kw: ("j1", True, "test"))
+
+    antwort = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert antwort.status_code == 200, antwort.text
+    assert (t / "S1.2026.json").read_text(encoding="utf-8") == "fremder Nutzertext"
+
+
+def test_neu_transkribieren_bricht_bei_mehrdeutigem_transkript_ab(
+        client, tmp_path, monkeypatch):
+    import webtool.app as appmod
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.edit.json").write_text("fremder Nutzertext", encoding="utf-8")
+    (audio / "S1.edit.mp3").write_bytes(b"fremder Ton")
+    gestartet = []
+    monkeypatch.setattr(appmod, "_start_transcribe", lambda *a, **kw: gestartet.append(a))
+
+    antwort = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert antwort.status_code == 409, antwort.text
+    assert (t / "S1.json").exists() and (t / "S1.edit.json").exists()
+    assert (audio / "S1.mp3").exists() and (audio / "S1.edit.mp3").exists()
+    assert gestartet == []
+
+
 def test_neu_transkribieren_ohne_audio_gibt_404_und_laesst_das_transkript_stehen(client, tmp_path):
     """Ohne Quelle waere das Wegraeumen ein reiner Datenverlust — der Lauf koennte
     nichts wiederherstellen."""
@@ -3090,6 +3287,49 @@ def test_datei_umbenennen_laesst_nachbarn_mit_gemeinsamem_praefix_stehen(client,
     (t / "S10.json").write_text("{}", encoding="utf-8")
     assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"}).status_code == 200
     assert (t / "S10.json").exists()
+
+
+def test_datei_umbenennen_laesst_gepunktete_nachbaraufnahme_stehen(client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.2026.json").write_text("fremder Nutzertext", encoding="utf-8")
+    (audio / "S1.2026.mp3").write_bytes(b"fremder Ton")
+
+    antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+
+    assert antwort.status_code == 200, antwort.text
+    assert (t / "S1.2026.json").read_text(encoding="utf-8") == "fremder Nutzertext"
+    assert not (t / "Neu.2026.json").exists()
+    assert (audio / "S1.2026.mp3").read_bytes() == b"fremder Ton"
+
+
+@pytest.mark.parametrize("ziel", ["S1", "S1.edit"])
+def test_datei_umbenennen_bricht_bei_mehrdeutigem_transkript_ab(client, tmp_path, ziel):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.edit.json").write_text("Nutzertext", encoding="utf-8")
+    (audio / "S1.edit.mp3").write_bytes(b"Ton")
+
+    antwort = client.post(f"/api/projects/Demo/files/{ziel}/rename", json={"name": "Neu"})
+
+    assert antwort.status_code == 409, antwort.text
+    assert (t / "S1.edit.json").read_text(encoding="utf-8") == "Nutzertext"
+    assert (audio / "S1.edit.mp3").read_bytes() == b"Ton"
+    assert (t / "S1.json").exists() and (audio / "S1.mp3").exists()
+
+
+def test_datei_loeschen_bricht_bei_mehrdeutigem_transkript_der_zielaufnahme_ab(
+        client, tmp_path):
+    t = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    (t / "S1.edit.json").write_text("Nutzertext", encoding="utf-8")
+    (audio / "S1.edit.mp3").write_bytes(b"Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1.edit")
+
+    assert antwort.status_code == 409, antwort.text
+    assert (t / "S1.edit.json").read_text(encoding="utf-8") == "Nutzertext"
+    assert (audio / "S1.edit.mp3").read_bytes() == b"Ton"
 
 
 def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path):
@@ -4767,7 +5007,8 @@ def test_neu_transkribieren_bei_belegter_datei_gibt_409_und_dreht_zurueck(client
     wird ja gleich wieder transkribiert. Der Test legt deshalb ein ZWEITES Transkript-Artefakt
     an: sonst gaebe es nur eine Datei, der Ruecklauf haette nichts zu tun und die Zusicherung
     unten waere die halbe."""
-    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text(
+        '{"base":"S1"}', encoding="utf-8")
     vorher = _bestand(tmp_path)
     # `_datei_weg` sortiert seine Trefferliste, `S1.edit.json` kommt also vor `S1.json` —
     # verlassen darf man sich darauf erst, seit dort `sorted()` steht: `glob.glob` liefert
