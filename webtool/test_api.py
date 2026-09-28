@@ -4426,23 +4426,17 @@ def test_speichern_lehnt_ein_nicht_objekt_ab(client):
     assert "JSON-Objekt" in r.json()["detail"]
 
 
-def test_umbenennen_ueberlebt_eine_nicht_dekodierbare_edit_json(client, tmp_path):
-    """`_doc_felder` zieht `base`/`audio` im Dokument nach. Ist die Datei kaputt,
-    bleibt sie unangetastet — das Umbenennen der Dateien auf der Platte ist der wichtigere
-    Teil und darf daran nicht scheitern. Auch das galt nur fuers Parsen (#190): ein
-    `UnicodeDecodeError` machte aus dem Umbenennen einen 500 — und zwar NACH dem
-    `os.rename`, die Dateien waeren also schon umbenannt und der Aufrufer saehe einen Fehler.
-    """
+def test_umbenennen_bricht_bei_nicht_dekodierbarer_edit_json_vor_mutation_ab(client, tmp_path):
+    """Ohne lesbare Dokumentidentitaet darf ein mehrdeutiger Name nicht wandern."""
     t = tmp_path / "Demo" / "transkripte"
     roh = b'{"base": "S1", "summary": "\xe9"}'
     (t / "S1.edit.json").write_bytes(roh)
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
-    assert r.status_code == 200, r.text
-    assert (t / "Neu.edit.json").exists() and not (t / "S1.edit.json").exists()
-    assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
-    # "unangetastet" muss auch geprueft werden: mit einer falschen Richtung (Datei mit
-    # Defaults ueberbuegeln) blieben die drei Zeilen darueber gruen.
-    assert (t / "Neu.edit.json").read_bytes() == roh
+    assert r.status_code == 409, r.text
+    assert (t / "S1.edit.json").read_bytes() == roh
+    assert not (t / "Neu.edit.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    assert not (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
 
 
 def test_umbenennen_ueberlebt_ein_nicht_schreibbares_dokument(client, tmp_path, capsys):
@@ -4463,23 +4457,18 @@ def test_umbenennen_ueberlebt_ein_nicht_schreibbares_dokument(client, tmp_path, 
     assert "nicht nachgezogen" in capsys.readouterr().out
 
 
-def test_edit_json_ohne_objekt_heilt_sich_ebenfalls(client, tmp_path, capsys):
-    """Gueltiges JSON ist noch lange kein Dokument. Eine Liste kam durch `json.load` und
-    starb erst am `.get`/`.update` des Aufrufers — mit AttributeError, also an den
-    #190-Rueckfaellen VORBEI. Gemessen: `GET …/files/S1` lieferte 200 mit `["kein Objekt"]`
-    (der Editor bekam eine Liste statt eines Dokuments), und das Umbenennen endete mit 500
-    NACH dem `os.rename` — die Dateien waren also schon umbenannt.
-
-    Gefunden vom CodeRabbit-Bot an PR #195 (Merge Risk), am laufenden Code nachgemessen."""
+def test_edit_json_ohne_objekt_heilt_lesen_aber_blockiert_umbenennen(client, tmp_path):
+    """Lesen heilt die Ansicht; Umbenennen braucht eine sichere Dateizuordnung."""
     t = tmp_path / "Demo" / "transkripte"
     (t / "S1.edit.json").write_text('["kein Objekt"]', encoding="utf-8")
     doc = client.get("/api/projects/Demo/files/S1").json()
     assert isinstance(doc, dict)                              # aus der Roh-JSON geheilt
     assert doc["segments"][0]["text"].strip() == "Hallo Welt."
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
-    assert r.status_code == 200, r.text                       # kein 500 nach dem Umbenennen
-    assert (t / "Neu.edit.json").exists()
-    assert "nicht nachgezogen" in capsys.readouterr().out
+    assert r.status_code == 409, r.text
+    assert (t / "S1.edit.json").read_text(encoding="utf-8") == '["kein Objekt"]'
+    assert not (t / "Neu.edit.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
 
 
 def test_verschwundene_edit_json_faellt_auf_die_roh_json(client, tmp_path, monkeypatch):
@@ -5113,7 +5102,7 @@ def test_ruecklauf_ueberschreibt_eine_neu_entstandene_datei_nicht(client, monkey
     von sich aus scheitern) — sonst waere er auf der einen Plattform gruen und auf der anderen
     blind fuer genau den Fall, um den es geht."""
     tdir = tmp_path / "Demo" / "transkripte"
-    (tdir / "S1.edit.json").write_text('{"alt": true}', encoding="utf-8")
+    (tdir / "S1.edit.json").write_text('{"base": "S1", "alt": true}', encoding="utf-8")
     echt_rename, echt_replace = os.rename, os.replace
 
     def fake(src, dst):
@@ -5179,7 +5168,7 @@ def test_ruecklauf_legt_beim_umbenennen_unsichtbar_beiseite(client, monkeypatch,
     unsichtbaren Namensraum, und der Fall gehört ins Protokoll (Bot-Befund an #460).
     """
     tdir = tmp_path / "Demo" / "transkripte"
-    (tdir / "S1.edit.json").write_text('{"alt": true}', encoding="utf-8")
+    (tdir / "S1.edit.json").write_text('{"base": "S1", "alt": true}', encoding="utf-8")
     echt_rename = os.rename
 
     def fake(src, dst):
@@ -5246,7 +5235,8 @@ def _rename_reihenfolge(monkeypatch):
 
 def test_umbenennen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeypatch, tmp_path):
     """`rename_file` muss die Reihenfolge selbst festlegen, nicht das Dateisystem."""
-    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text(
+        '{"base": "S1"}', encoding="utf-8")
     _glob_verdreht(monkeypatch)
     reihenfolge = _rename_reihenfolge(monkeypatch)
 
@@ -5259,7 +5249,8 @@ def test_umbenennen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monke
 
 def test_loeschen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeypatch, tmp_path):
     """Dasselbe fuer `_datei_weg` — zwei getrennte Globs, zwei getrennte Sensoren."""
-    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "Demo" / "transkripte" / "S1.edit.json").write_text(
+        '{"base": "S1"}', encoding="utf-8")
     _glob_verdreht(monkeypatch)
     reihenfolge = _rename_reihenfolge(monkeypatch)
 
