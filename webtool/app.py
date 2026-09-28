@@ -1355,15 +1355,15 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
         # gibt es nichts gezielt zu loeschen, selbst wenn alte Sicherungen uebrig sind.
         if not treffer:
             return 0
-    # Reste brauchen keine Reservierung: sie tragen bereits einen Namen, den keine Auflistung
-    # kennt. Neu-Transkribieren schuetzt solche mit unbekanntem Alter; nur ausdrueckliches
-    # Loeschen der Aufnahme nimmt sie trotzdem mit. Scheitert das Entfernen, bleibt der
-    # Zustand bestehen, der ohnehin schon bestand.
-    for p in reste:
-        if not mit_audio and _weg_alter(p) is None:
-            continue
-        with suppress(OSError):
-            os.remove(p)
+    # Reste erst NACH erfolgreichem Entfernen der sichtbaren Aufnahme loeschen. Sonst kann
+    # schon eine blockierte Reservierung mit 409 enden, waehrend die alte Sicherung verloren
+    # ist. Beim Neu-Transkribieren bleiben Reste mit unbekanntem Alter weiter erhalten.
+    def reste_entfernen():
+        for p in reste:
+            if not mit_audio and _weg_alter(p) is None:
+                continue
+            with suppress(OSError):
+                os.remove(p)
     # Zweistufig: erst ALLE beiseitebenennen (das ist die Reservierung und die Probe in einem),
     # dann loeschen. Der Suffix ist je Aufruf eindeutig, damit ein liegengebliebener Rest aus
     # einem frueheren Lauf das `os.rename` nicht mit FileExistsError kippt — der waere hier als
@@ -1395,6 +1395,8 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
             with suppress(OSError):
                 os.remove(p)
                 entfernt += 1
+        if entfernt == len(treffer):
+            reste_entfernen()
         return entfernt
     # Die Wiederholungen unten laufen UNTER der Sperre von `delete_file`, und `stale` ist eine
     # Zusage ueber die HALTEDAUER (#207): wer sie ueberzieht, dem nimmt ein Warter das Lock
@@ -1404,6 +1406,7 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     # und 0,2 s mal genug Dateien sprengen die 60 s aus `sperre.STALTES_ALTER`. Deshalb ein
     # GESAMTbudget ueber alle Dateien, geprueft vor jedem Schlafen.
     schluss = time.monotonic() + _WEG_GESAMT_S
+    alle_geloescht = True
     for p in treffer:
         # Ab hier ist die Aufnahme aus Sicht des Nutzers weg: die Dateien liegen unter einem
         # Namen, den keine Auflistung kennt (`transcript_bases`, `_audio_bases`, `find_audio`
@@ -1421,14 +1424,20 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
         # SEIT #459 laeuft `_weg_reste_aufraeumen` beim Serverstart ueber ALLE Projekte.
         # Lesbar gestempelte Reste fallen nach `_WEG_REST_ALTER` beim naechsten Start weg;
         # Reste ohne lesbaren Stempel bleiben seit #509 bis zur bewussten Bereinigung erhalten.
+        geloescht = False
         for versuch in range(_WEG_VERSUCHE):
             try:
                 os.remove(p + weg)
+                geloescht = True
                 break
             except OSError:
                 if versuch + 1 == _WEG_VERSUCHE or time.monotonic() >= schluss:
                     break                     # aufgeben — die Aufnahme ist trotzdem weg
                 time.sleep(_WEG_PAUSE_S)
+        if not geloescht:
+            alle_geloescht = False
+    if alle_geloescht:
+        reste_entfernen()
     return len(treffer)
 
 

@@ -5223,6 +5223,35 @@ def test_loeschen_bei_zu_langem_pfad_loescht_direkt_statt_500(client, monkeypatc
     assert _bestand(tmp_path) == [], f"nicht geloescht: {_bestand(tmp_path)}"
 
 
+def test_teilweiser_direktloeschpfad_behaelt_alte_sicherung(client, monkeypatch, tmp_path):
+    import errno as _errno
+
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    alt.write_text("alter Nutzertext", encoding="utf-8")
+    echt_rename = os.rename
+    echt_remove = os.remove
+
+    def zu_lang(src, dst):
+        if dst.endswith(".weg"):
+            raise OSError(_errno.ENAMETOOLONG, "Dateiname zu lang")
+        return echt_rename(src, dst)
+
+    def teilweise(pfad, *a, **kw):
+        if os.fspath(pfad).endswith("S1.mp3"):
+            raise PermissionError(32, "belegt")
+        return echt_remove(pfad, *a, **kw)
+
+    monkeypatch.setattr(os, "rename", zu_lang)
+    monkeypatch.setattr(os, "remove", teilweise)
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    assert alt.read_text(encoding="utf-8") == "alter Nutzertext"
+
+
 def test_neu_transkribieren_ohne_sperre_gibt_503(client, monkeypatch, tmp_path):
     """`retranscribe_file` haelt seit dem `.weg`-Namensraum dieselbe Sperre wie `delete_file`:
     `_keine_jobs` schuetzt gegen JOBS, nicht gegen den anderen ENDPUNKT — ein gleichzeitiges
@@ -5720,6 +5749,19 @@ def test_aufnahme_loeschen_entfernt_alte_sicherung(client, tmp_path):
     assert not unlesbar.exists()
     assert not (tdir / "S1.json").exists()
     assert not (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+
+
+def test_blockiertes_loeschen_behaelt_eindeutige_altsicherung(client, monkeypatch, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    alt.write_text("alter Nutzertext", encoding="utf-8")
+    _rename_faellt_aus_bei(monkeypatch, "S1.json")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 409, antwort.text
+    assert alt.read_text(encoding="utf-8") == "alter Nutzertext"
+    assert (tdir / "S1.json").exists()
 
 
 def test_aufnahme_loeschen_404_behaelt_einzige_alte_sicherung(client, tmp_path):
