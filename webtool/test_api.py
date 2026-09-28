@@ -4966,9 +4966,8 @@ def test_ruecklauf_legt_beim_umbenennen_unsichtbar_beiseite(client, monkeypatch,
     # einzigen Aufrufer. Der gegnerische Pruefer hat die Mutation gefahren (Ruecklauf mit
     # eigenem Literal) und den Test gruen gesehen.
     #
-    # Ohne den Stempel faende der Aufraeumlauf diese Datei zwar auch (kein Stempel = alt),
-    # aber sofort statt nach der Frist — die Sicherungskopie waere beim naechsten Start weg,
-    # egal wie frisch sie ist.
+    # Der Stempel erlaubt die begrenzte Aufbewahrung. Ohne lesbaren Stempel bleibt die
+    # Sicherung bis zu einer bewussten Bereinigung erhalten (#509).
     import webtool.app as _appmod
     alter = _appmod._weg_alter(beiseite[0])
     assert alter is not None, f"der Ruecklauf baut den Namen selbst: {beiseite[0]}"
@@ -5030,13 +5029,13 @@ def test_loeschen_sortiert_die_trefferliste_unabhaengig_vom_wirt(client, monkeyp
         f"nicht sortiert — die Reihenfolge kam vom Wirt: {reihenfolge}")
 
 
-def test_umbenennen_laesst_liegengebliebene_reste_liegen(client, tmp_path):
+def test_umbenennen_laesst_gestempelte_reste_liegen(client, tmp_path):
     """Ein `.weg`-Rest wandert seit #459 NICHT mehr mit — und das ist die Ruecknahme einer
     frueheren Entscheidung mit ihrer eigenen Begruendung.
 
     Er wanderte mit, WEIL er sonst unter dem alten Basisnamen dauerhaft verwaist waere
-    („niemand loescht den alten Namen je wieder"). Diese Praemisse hat der Aufraeumlauf
-    aufgehoben: er faengt Reste unabhaengig vom Basisnamen.
+    („niemand loescht den alten Namen je wieder"). Fuer gestempelte Reste hat der Aufraeumlauf
+    diese Praemisse aufgehoben; stempellose Altreste bleiben seit #509 erhalten.
 
     Und das Mitwandern war seitdem nicht nur ueberfluessig, sondern SCHAEDLICH: der Startlauf
     loescht ohne die `sperre.datei` dieses Endpunkts. Raeumt er einen Rest zwischen Glob und
@@ -5045,14 +5044,139 @@ def test_umbenennen_laesst_liegengebliebene_reste_liegen(client, tmp_path):
     kalte Diff-Leser hat dieses Interleaving deterministisch erzwungen und den 500er gemessen.
     """
     tdir = tmp_path / "Demo" / "transkripte"
-    (tdir / "S1.json.cafe1234.weg").write_text("{}", encoding="utf-8")
+    rest = _weg_datei(tdir, "S1.json", 3600)
 
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
 
     assert r.status_code == 200, r.text
     assert r.json()["umbenannt"] == 2, r.json()          # S1.json + S1.mp3
     namen = sorted(p.name for p in tdir.iterdir())
-    assert namen == ["S1.json.cafe1234.weg", "S1_neu.json"], namen
+    assert namen == [rest.name, "S1_neu.json"], namen
+
+
+def test_umbenennen_nimmt_alte_sicherungen_zum_spaeteren_loeschen_mit(client, tmp_path):
+    projekt = tmp_path / "Demo"
+    tdir = projekt / "transkripte"
+    audio = projekt / "audio"
+    textrest = tdir / "S1.json.cafe1234.weg"
+    tonrest = audio / "S1.mp3.deadbeef.weg"
+    textrest.write_text("alter Nutzertext", encoding="utf-8")
+    tonrest.write_bytes(b"alter Ton")
+
+    umbenannt = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert umbenannt.status_code == 200, umbenannt.text
+    assert umbenannt.json()["umbenannt"] == 2
+    assert not textrest.exists() and not tonrest.exists()
+    neuer_textrest = tdir / "S1_neu.json.cafe1234.weg"
+    neuer_tonrest = audio / "S1_neu.mp3.deadbeef.weg"
+    assert neuer_textrest.read_text(encoding="utf-8") == "alter Nutzertext"
+    assert neuer_tonrest.read_bytes() == b"alter Ton"
+
+    geloescht = client.delete("/api/projects/Demo/files/S1_neu")
+
+    assert geloescht.status_code == 200, geloescht.text
+    assert not neuer_textrest.exists() and not neuer_tonrest.exists()
+
+
+def test_umbenennen_nimmt_keine_sicherung_einer_gepunkteten_nachbaraufnahme_mit(
+        client, tmp_path):
+    projekt = tmp_path / "Demo"
+    fremd = projekt / "transkripte" / "S1.2026.edit.json.cafe1234.weg"
+    fremd.write_text("fremder Nutzertext", encoding="utf-8")
+    (projekt / "audio" / "S1.2026.mp3").write_bytes(b"fremder Ton")
+
+    antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "fremder Nutzertext"
+    assert not (projekt / "transkripte" / "Neu.2026.edit.json.cafe1234.weg").exists()
+
+
+def test_aufnahme_loeschen_nimmt_keine_sicherung_einer_gepunkteten_nachbaraufnahme(
+        client, tmp_path):
+    projekt = tmp_path / "Demo"
+    fremd = projekt / "transkripte" / "S1.2026.edit.json.cafe1234.weg"
+    fremd.write_text("fremder Nutzertext", encoding="utf-8")
+    (projekt / "audio" / "S1.2026.mp3").write_bytes(b"fremder Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "fremder Nutzertext"
+
+
+def test_umbenennen_behaelt_mehrdeutige_altsicherung(client, tmp_path):
+    projekt = tmp_path / "Demo"
+    fremd = projekt / "transkripte" / "S1.edit.json.cafe1234.weg"
+    fremd.write_text("Herkunft unbekannt", encoding="utf-8")
+    (projekt / "audio" / "S1.edit.mp3").write_bytes(b"anderer Ton")
+
+    antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "Herkunft unbekannt"
+    assert not (projekt / "transkripte" / "Neu.edit.json.cafe1234.weg").exists()
+
+
+def test_aufnahme_loeschen_behaelt_mehrdeutige_altsicherung(client, tmp_path):
+    projekt = tmp_path / "Demo"
+    fremd = projekt / "transkripte" / "S1.edit.json.cafe1234.weg"
+    fremd.write_text("Herkunft unbekannt", encoding="utf-8")
+    (projekt / "audio" / "S1.edit.mp3").write_bytes(b"anderer Ton")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert fremd.read_text(encoding="utf-8") == "Herkunft unbekannt"
+
+
+def test_aufnahme_loeschen_behaelt_mehrdeutigen_unlesbaren_stempel(client, tmp_path):
+    projekt = tmp_path / "Demo"
+    rest = projekt / "transkripte" / "S1.mp3.json.abc12345.weg"
+    rest.write_text("Herkunft unbekannt", encoding="utf-8")
+    (projekt / "audio" / "S1.mp3.mp3").write_bytes(b"Ton der gepunkteten Aufnahme")
+
+    antwort = client.delete("/api/projects/Demo/files/S1.mp3")
+
+    assert antwort.status_code == 200, antwort.text
+    assert rest.read_text(encoding="utf-8") == "Herkunft unbekannt"
+
+
+def test_umbenennen_rollt_bei_blockierter_alter_sicherung_zurueck(client, monkeypatch,
+                                                                 tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    alt.write_text("bewahrter Nutzertext", encoding="utf-8")
+    _rename_faellt_aus_bei(monkeypatch, alt.name)
+
+    antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert antwort.status_code == 409, antwort.text
+    assert alt.read_text(encoding="utf-8") == "bewahrter Nutzertext"
+    assert (tdir / "S1.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    assert not any(p.name.startswith("S1_neu") for p in tdir.iterdir())
+
+
+def test_umbenennen_ueberlebt_verschwundene_alte_sicherung(client, monkeypatch, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    alt.write_text("alter Nutzertext", encoding="utf-8")
+    echt_rename = os.rename
+
+    def verschwindet(src, dst):
+        if os.fspath(src) == str(alt):
+            alt.unlink()
+        return echt_rename(src, dst)
+
+    monkeypatch.setattr(os, "rename", verschwindet)
+
+    antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "S1_neu"})
+
+    assert antwort.status_code == 200, antwort.text
+    assert (tdir / "S1_neu.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1_neu.mp3").exists()
 
 
 def test_ein_verschwindender_rest_kippt_das_umbenennen_nicht(client, tmp_path, monkeypatch):
@@ -5063,8 +5187,7 @@ def test_ein_verschwindender_rest_kippt_das_umbenennen_nicht(client, tmp_path, m
     Interleaving, das der kalte Diff-Leser erzwungen hat. Steht der Rest nicht mehr in
     `paare`, ist es folgenlos; stuende er drin, gaebe es hier einen 500er."""
     tdir = tmp_path / "Demo" / "transkripte"
-    rest = tdir / "S1.json.cafe1234.weg"
-    rest.write_text("{}", encoding="utf-8")
+    rest = _weg_datei(tdir, "S1.json", 3600)
     echt_rename = os.rename
 
     def raeumt_dazwischen(src, dst):
@@ -5515,13 +5638,12 @@ def test_weg_alter_liest_rechtsverankert_und_ueberlebt_das_umbenennen():
                              jetzt=jetzt) == 42
 
 
-def test_ein_name_ohne_stempel_gilt_als_alt():
-    """Das ALTE Format (`<name>.<uuid>.weg`) hat an der Stempelstelle eine Dateiendung. Solche
-    Namen stammen zwangslaeufig aus der Zeit vor dieser Aenderung, koennen also keine laufende
-    Reservierung sein — `None` heisst fuer den Aufrufer ALT. Das ist die ganze Migration."""
+def test_ein_name_ohne_lesbaren_stempel_hat_unbekanntes_alter():
+    """Alte Namen und unlesbare Stempel haben kein verlaesslich bestimmbares Alter."""
     import webtool.app as appmod
     assert appmod._weg_alter("S1.mp3.deadbeef.weg") is None
     assert appmod._weg_alter("S1.json.cafe1234.weg") is None
+    assert appmod._weg_alter("S1.json.notatime.abc12345.weg") is None
 
 
 def _weg_datei(ordner, name, alter_s):
@@ -5550,17 +5672,67 @@ def test_aufraeumlauf_entfernt_alte_reste_und_laesst_frische_stehen(tmp_path):
     assert frisch.exists(), "eine frische Reservierung wurde weggeraeumt"
 
 
-def test_aufraeumlauf_nimmt_reste_ohne_stempel_mit(tmp_path):
-    """Das ALTE Namensformat hat keinen Stempel — solche Reste stammen zwangslaeufig aus der
-    Zeit vor dieser Aenderung und koennen keine laufende Reservierung sein. `None` heisst ALT;
-    das ist die ganze Migration."""
+def test_aufraeumlauf_schuetzt_reste_ohne_lesbaren_stempel(tmp_path):
+    """Alte App-Versionen koennen noch heute Sicherungen ohne Stempel erzeugen (#509)."""
     import webtool.app as appmod
     p = tmp_path / "Demo" / "transkripte"
     p.mkdir(parents=True)
-    (p / "S1.json.cafe1234.weg").write_bytes(b"x")
+    audio = tmp_path / "Demo" / "audio"
+    audio.mkdir()
+    reste = [p / "S1.json.cafe1234.weg",
+             p / "S1.json.notatime.abc12345.weg",
+             audio / "S1.mp3.deadbeef.weg",
+             tmp_path / "Demo" / "S2.mp3.deadbeef.weg"]
+    for rest in reste:
+        rest.write_bytes(b"alter Nutzertext")
 
-    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 1
-    assert not (p / "S1.json.cafe1234.weg").exists()
+    assert appmod._weg_reste_aufraeumen(str(tmp_path)) == 0
+    assert all(rest.read_bytes() == b"alter Nutzertext" for rest in reste)
+
+
+def test_neu_transkribieren_behaelt_alte_sicherung(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    unlesbar = tdir / "S1.json.notatime.abc12345.weg"
+    alt.write_text("bewahrter Nutzertext", encoding="utf-8")
+    unlesbar.write_text("zweite Sicherung", encoding="utf-8")
+
+    antwort = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert antwort.status_code == 200, antwort.text
+    assert alt.read_text(encoding="utf-8") == "bewahrter Nutzertext"
+    assert unlesbar.read_text(encoding="utf-8") == "zweite Sicherung"
+    assert not (tdir / "S1.json").exists()
+    assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+
+
+def test_aufnahme_loeschen_entfernt_alte_sicherung(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.json.cafe1234.weg"
+    unlesbar = tdir / "S1.json.notatime.abc12345.weg"
+    alt.write_text("alter Nutzertext", encoding="utf-8")
+    unlesbar.write_text("zweite Sicherung", encoding="utf-8")
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 200, antwort.text
+    assert not alt.exists()
+    assert not unlesbar.exists()
+    assert not (tdir / "S1.json").exists()
+    assert not (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+
+
+def test_aufnahme_loeschen_404_behaelt_einzige_alte_sicherung(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    alt = tdir / "S1.edit.json.cafe1234.weg"
+    alt.write_text("einziger Nutzertext", encoding="utf-8")
+    (tdir / "S1.json").unlink()
+    (tmp_path / "Demo" / "audio" / "S1.mp3").unlink()
+
+    antwort = client.delete("/api/projects/Demo/files/S1")
+
+    assert antwort.status_code == 404, antwort.text
+    assert alt.read_text(encoding="utf-8") == "einziger Nutzertext"
 
 
 def test_aufraeumlauf_fasst_nur_weg_dateien_an(tmp_path):

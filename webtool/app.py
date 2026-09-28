@@ -1008,6 +1008,14 @@ def _umbenennen_oder_keines(paare: list, base: str) -> None:
         try:
             os.rename(p, ziel)
         except OSError as e:
+            # Eine noch laufende alte App kann ihre stempellose Reservierung nach dem Glob
+            # selbst entfernen. Der Startlauf tut das seit #509 nicht mehr, aber dieser
+            # fremde Abschluss ist erlaubt: ein bereits verschwundener Rest darf das
+            # Umbenennen der sichtbaren Aufnahme nicht mit 500 abbrechen.
+            if (isinstance(e, FileNotFoundError) and p.endswith(".weg")
+                    and _weg_alter(p) is None and not os.path.exists(p)
+                    and os.path.isdir(os.path.dirname(ziel))):
+                continue
             for q, qziel in reversed(gemacht):
                 # NUR zurueckbenennen, wenn der alte Platz noch frei ist. Auf POSIX ersetzt
                 # `os.rename` ein vorhandenes Ziel STILL — GEMESSEN in WSL: Ziel trug
@@ -1133,15 +1141,55 @@ def _weg_alter(pfad: str, jetzt: float | None = None) -> float | None:
     Umbenennen der Aufnahme MIT und heisst danach `Neu.json.<epoch>.<uuid>.weg` — der Stempel
     bleibt am Ende, der Basisname davor darf beliebig viele Punkte tragen.
 
-    None bei einem Namen im ALTEN Format (`<name>.<uuid>.weg`): dort steht an `[-3]` eine
-    Dateiendung. Solche Namen stammen zwangslaeufig aus der Zeit vor dieser Aenderung, koennen
-    also keine laufende Reservierung sein — der Aufrufer behandelt None deshalb als ALT. Das
-    ist zugleich die ganze Migration.
+    None bedeutet unbekanntes Alter: bei alten Namen (`<name>.<uuid>.weg`) fehlt der Stempel,
+    bei beschaedigten Namen kann er unlesbar sein. Beide bleiben bei automatischen Laeufen
+    erhalten, weil auch alte App-Versionen noch Sicherungen erzeugen koennen (#509).
     """
     teile = os.path.basename(pfad).split(".")
     if len(teile) < 3 or not teile[-3].isdecimal():
         return None
     return (time.time() if jetzt is None else jetzt) - int(teile[-3])
+
+
+def _weg_aufnahme(pfad: str) -> str | None:
+    """Ordne einen `.weg`-Rest nur bei erkennbarem Artefaktnamen einer Aufnahme zu.
+
+    Ein blosses `<base>.*.weg` ist mehrdeutig: `S1.2026.edit.json.cafe1234.weg`
+    kann nicht allein wegen des Praefix `S1.` zu `S1` gehoeren. Auch
+    `S1.edit.json.cafe1234.weg` passt als Edit-Artefakt zu `S1` und als
+    Rohtranskript zu `S1.edit`. Bei mehr als einer moeglichen Basis bleibt der
+    Rest erhalten, selbst bei gezieltem Loeschen (#509).
+    """
+    name = os.path.basename(pfad)
+    if not name.endswith(".weg"):
+        return None
+    vor_uuid, punkt, uuid8 = name[:-4].rpartition(".")
+    if not punkt or len(uuid8) != 8 or any(z not in "0123456789abcdef" for z in uuid8.lower()):
+        return None
+
+    def basen(artefakt: str) -> set[str]:
+        moeglich = set()
+        if artefakt.endswith(".correction.json"):
+            davor = artefakt[:-len(".correction.json")]
+            stamm, part, nummer = davor.rpartition(".part")
+            if part and nummer.isdecimal() and stamm:
+                moeglich.add(stamm)
+        endungen = (".raw.txt", ".segments.txt", ".tagged.json",
+                    *paths._TRANSKRIPT_ENDUNGEN, *AUDIO_EXT)
+        for endung in endungen:
+            if artefakt.endswith(endung) and len(artefakt) > len(endung):
+                moeglich.add(artefakt[:-len(endung)])
+        return moeglich
+
+    # Namen neuer Bauform haben vor der UUID noch einen Zeitstempel. Auch ein
+    # unlesbarer Stempel darf als solcher erkannt werden, sofern davor ein bekanntes
+    # Artefakt steht. Beide Lesarten pruefen: ein altes Artefakt kann zufaellig
+    # genauso heissen wie ein neuer Name mit unlesbarem Stempel.
+    moeglich = basen(vor_uuid)
+    davor, punkt, _stempel = vor_uuid.rpartition(".")
+    if punkt:
+        moeglich.update(basen(davor))
+    return next(iter(moeglich)) if len(moeglich) == 1 else None
 
 
 def _unbrauchbarer_zielname(e: OSError, name: str) -> str | None:
@@ -1188,9 +1236,9 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
     naechste Lifespan-Test von sich aus sicher ist statt sich erinnern zu muessen.
 
     WAS ER ANFASST: ausschliesslich Namen auf `.weg` in `transkripte/`, `audio/` und im
-    Projektstamm. Was aelter ist als `max_alter`, faellt weg; ein Name ohne lesbaren Stempel
-    (`_weg_alter` liefert None) gilt als ALT — er stammt aus der Zeit vor dem Stempel und kann
-    keine laufende Reservierung sein.
+    Projektstamm. Lesbar gestempelte Namen, die aelter als `max_alter` sind, fallen weg.
+    Namen ohne lesbaren Stempel bleiben erhalten: alte App-Versionen koennen sie noch heute
+    als Sicherung von Nutzertext erzeugen (#509).
 
     GETRAGENE GRENZE, hergeleitet und benannt: der Stempel vergleicht die Uhr des SCHREIBERS
     mit der des LESERS. Liegt die Projektwurzel auf einer Netzfreigabe und laufen zwei Rechner
@@ -1244,12 +1292,13 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
                 # ausgesetzter Laptop oder eine VM tut dasselbe. Gemessen vom
                 # Was-erlaubt-Reviewer: zwei Laeufe hintereinander, beide Male blieb sie liegen.
                 #
-                # Ein unglaubwuerdiger Stempel schuetzt also NICHT — dieselbe Richtung wie
-                # `None` (kein Stempel) eine Zeile weiter oben. Der Preis steht im Docstring:
+                # Ein Stempel in der Zukunft schuetzt also NICHT. Ein unlesbarer oder fehlender
+                # Stempel hat dagegen unbekanntes Alter und bleibt erhalten (#509).
+                # Der Preis der Zukunftsregel steht im Docstring:
                 # schreibt ein zweiter Rechner mit vorlaufender Uhr auf dieselbe Freigabe, kann
                 # das eine laufende Reservierung treffen. Das ist die seltenere Lage.
-                if alter is not None and 0 <= alter < max_alter:
-                    continue                  # koennte eine laufende Reservierung sein
+                if alter is None or 0 <= alter < max_alter:
+                    continue                  # Alter unbekannt oder noch innerhalb der Frist
                 with suppress(OSError):
                     os.remove(p)
                     entfernt += 1
@@ -1259,8 +1308,10 @@ def _weg_reste_aufraeumen(root: str, max_alter: float = _WEG_REST_ALTER) -> int:
 def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     """Alle Dateien EINER Aufnahme entfernen; gibt zurueck, wie viele es waren.
 
-    Die Zahl meint die Dateien der AUFNAHME. Nebenher raeumt die Funktion auch `.weg`-Reste
-    eines frueher abgebrochenen Laufs weg — die zaehlen NICHT mit, denn an der Zahl haengt
+    Die Zahl meint die Dateien der AUFNAHME. Beim ausdruecklichen Loeschen raeumt die Funktion
+    eindeutig zugeordnete `.weg`-Reste weg; mehrdeutige bleiben erhalten. Beim
+    Neu-Transkribieren bleiben Reste ohne lesbaren Stempel erhalten.
+    Die entfernten Reste zaehlen NICHT mit, denn an der Zahl haengt
     ausser der Antwort auch die 404-Entscheidung in `delete_file`, und eine Aufnahme, von der
     nur noch Reste dalagen, ist keine Aufnahme mehr.
 
@@ -1289,7 +1340,7 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
     # Aufnahme, von der nur noch Reste da sind, ein munteres „1 geloescht" statt des richtigen
     # 404, und die Zahl behauptete Dateien, die es als Aufnahme nicht mehr gab.
     treffer = sorted(p for p in gefunden if not p.endswith(".weg"))
-    reste = sorted(p for p in gefunden if p.endswith(".weg"))
+    reste = sorted(p for p in gefunden if p.endswith(".weg") and _weg_aufnahme(p) == base)
     if mit_audio:
         adir = paths.audio_dir(project)
         treffer += [os.path.join(adir, base + ext) for ext in AUDIO_EXT
@@ -1299,10 +1350,18 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
         # exakte `base + ext`-Namen. Ohne diese Zeile bliebe eine grosse Tonspur unsichtbar und
         # dauerhaft liegen — der teuerste Rest von allen.
         reste += sorted(p for p in glob.glob(os.path.join(adir, glob.escape(base) + ".*.weg"))
-                        if os.path.isfile(p))
+                        if os.path.isfile(p) and _weg_aufnahme(p) == base)
+        # Ein 404 darf keinen versteckten Nutzertext zerstoeren: ohne sichtbare Aufnahme
+        # gibt es nichts gezielt zu loeschen, selbst wenn alte Sicherungen uebrig sind.
+        if not treffer:
+            return 0
     # Reste brauchen keine Reservierung: sie tragen bereits einen Namen, den keine Auflistung
-    # kennt. Scheitert das Entfernen, bleibt genau der Zustand, der ohnehin schon bestand.
+    # kennt. Neu-Transkribieren schuetzt solche mit unbekanntem Alter; nur ausdrueckliches
+    # Loeschen der Aufnahme nimmt sie trotzdem mit. Scheitert das Entfernen, bleibt der
+    # Zustand bestehen, der ohnehin schon bestand.
     for p in reste:
+        if not mit_audio and _weg_alter(p) is None:
+            continue
         with suppress(OSError):
             os.remove(p)
     # Zweistufig: erst ALLE beiseitebenennen (das ist die Reservierung und die Probe in einem),
@@ -1359,10 +1418,9 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
         # `.weg`-Muster im audio-Ordner) — nach einem vollstaendigen `delete_file` gibt es
         # diesen Basisnamen aber nicht mehr, also nie.
         #
-        # SEIT #459 ist das nicht mehr das Ende: `_weg_reste_aufraeumen` laeuft beim
-        # Serverstart ueber ALLE Projekte und nimmt mit, was aelter als `_WEG_REST_ALTER` ist.
-        # Der Rest ueberlebt also hoechstens bis zum naechsten Start, statt fuer immer als
-        # unsichtbar belegter Plattenplatz liegenzubleiben.
+        # SEIT #459 laeuft `_weg_reste_aufraeumen` beim Serverstart ueber ALLE Projekte.
+        # Lesbar gestempelte Reste fallen nach `_WEG_REST_ALTER` beim naechsten Start weg;
+        # Reste ohne lesbaren Stempel bleiben seit #509 bis zur bewussten Bereinigung erhalten.
         for versuch in range(_WEG_VERSUCHE):
             try:
                 os.remove(p + weg)
@@ -1651,19 +1709,14 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # Derselbe Filter wie in `_datei_weg`: `.lock` gehoert der Sperre und keiner Aufnahme, und
         # ein VERZEICHNIS mit passendem Namen wuerde hier mitumbenannt.
         #
-        # `.weg`-RESTE BLEIBEN SEIT #459 DRAUSSEN, und das ist die Ruecknahme einer frueheren
-        # Entscheidung mit ihrer eigenen Begruendung: sie wanderten mit, WEIL sie sonst unter
-        # dem alten Basisnamen dauerhaft verwaist waeren („niemand loescht den alten Namen je
-        # wieder"). Diese Praemisse hat der Aufraeumlauf aufgehoben — er faengt Reste
-        # unabhaengig vom Basisnamen.
+        # Gestempelte `.weg`-Reste bleiben seit #459 draussen: der Startlauf raeumt sie nach
+        # der Frist auf. Eindeutig zuordenbare Reste ohne lesbaren Stempel wandern seit #509
+        # mit, damit ein spaeteres gezieltes Loeschen sie noch findet. Mehrdeutige bleiben
+        # an ihrem Platz, statt moeglicherweise den Text einer Nachbaraufnahme mitzunehmen.
         #
-        # Und das Mitwandern ist seitdem nicht nur ueberfluessig, sondern SCHAEDLICH: der
-        # Startlauf loescht OHNE die `sperre.datei`, unter der dieser Endpunkt steht. Raeumt er
-        # einen Rest zwischen diesem Glob und dem `os.rename` weg, wirft `_umbenennen_oder_keines`
-        # einen `FileNotFoundError` — kein `PermissionError`, also 500 fuer ein Umbenennen, das
-        # ohne den Rest gelungen waere. Der kalte Diff-Leser hat das Interleaving deterministisch
-        # erzwungen und den 500er gemessen; der Ruecklauf blieb dabei sauber, es waere also ein
-        # Fehlschlag ohne Schaden — aber ein unerklaerlicher.
+        # Gestempelte Reste mitwandern zu lassen waere schaedlich: der Startlauf darf sie ohne
+        # diese `sperre.datei` loeschen, auch zwischen Glob und `os.rename`. Bei unbekanntem
+        # Alter tut er das nicht; nur fuer diese Reste ist das Mitwandern sicher.
         treffer = sorted(p for p in glob.glob(os.path.join(tdir, glob.escape(base) + ".*"))
                          if os.path.isfile(p) and not p.endswith((".lock", ".weg")))
         adir = paths.audio_dir(project)
@@ -1671,6 +1724,14 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                     if os.path.exists(os.path.join(adir, base + ext))]
         if not treffer:
             raise HTTPException(status_code=404, detail=f"keine Datei: {base}")
+        # Die Sicherung gehoert zur Aufnahme, auch wenn ihr Name aus einer alten Version
+        # stammt. Im selben Alles-oder-nichts-Rename mitnehmen, damit DELETE unter dem neuen
+        # Basisnamen sie spaeter erreicht; fuer `umbenannt` zaehlt sie weiterhin nicht.
+        for ordner in (tdir, adir):
+            treffer += sorted(p for p in glob.glob(os.path.join(
+                ordner, glob.escape(base) + ".*.weg"))
+                if os.path.isfile(p) and _weg_alter(p) is None
+                and _weg_aufnahme(p) == base)
         paare = []
         for p in treffer:
             rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
@@ -1701,12 +1762,8 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #
-        # SEIT #459 kommen `.weg`-Reste gar nicht mehr in `paare` (siehe den Glob oben), der
-        # Filter hier ist also redundant. Er bleibt trotzdem stehen: `umbenannt` beschreibt eine
-        # ZUSAGE an den Nutzer („die Dateien DEINER Aufnahme"), und die soll auch dann halten,
-        # wenn jemand den Glob spaeter wieder weitet. Dass er heute nichts filtert, steht hier,
-        # damit ihn niemand fuer einen scharfen Schutz haelt — die Mutationsprobe bekommt ihn
-        # nicht rot.
+        # Seit #509 stehen alte Sicherungen ebenfalls in `paare`, bleiben fuer die Anzahl aber
+        # unsichtbar: `umbenannt` beschreibt die sichtbaren Dateien der Aufnahme.
         return {"ok": True, "name": neu,
                 "umbenannt": sum(1 for p, _ in paare if not p.endswith(".weg"))}
 
