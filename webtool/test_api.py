@@ -4681,6 +4681,16 @@ def test_markdown_download_bewahrt_altdatei_bei_unvollstaendiger_edit_json(clien
     assert r.text == "Korrigierter Alttext\n"
 
 
+def test_markdown_download_bewahrt_altdatei_bei_kaputtem_segment(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "S1.edit.json").write_text(json.dumps({"base": "S1", "segments": [None]}), encoding="utf-8")
+    (tdir / "S1.md").write_text("Korrigierter Alttext\n", encoding="utf-8")
+
+    r = client.get("/api/projects/Demo/files/S1/export/md")
+    assert r.status_code == 200
+    assert r.text == "Korrigierter Alttext\n"
+
+
 def test_export_file_md_unknown_404(client):
     r = client.get("/api/projects/Demo/files/unbekannt_xyz/export/md")
     assert r.status_code == 404

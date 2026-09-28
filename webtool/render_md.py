@@ -22,7 +22,12 @@ def _zeit(sekunden: float) -> str:
 
 
 def _ist_zeit(wert: object) -> TypeGuard[float]:
-    return isinstance(wert, (int, float)) and not isinstance(wert, bool) and math.isfinite(wert)
+    if not isinstance(wert, (int, float)) or isinstance(wert, bool):
+        return False
+    try:
+        return math.isfinite(wert) and math.isfinite(wert * 1000)
+    except OverflowError:
+        return False
 
 
 def _mit_zeit(text: str, start: float | None, end: float | None) -> str:
@@ -56,8 +61,9 @@ def render_md(doc: dict) -> str:
                 naechster_anfang, naechstes_ende = seg.get("start"), seg.get("end")
                 if (_ist_zeit(anfang) and _ist_zeit(ende) and
                         _ist_zeit(naechster_anfang) and _ist_zeit(naechstes_ende) and
-                        anfang <= ende and naechster_anfang <= ende <= naechstes_ende):
-                    teile[-1] = (MUSIK, anfang, naechstes_ende)
+                        anfang <= ende and naechster_anfang <= naechstes_ende and
+                        naechster_anfang <= ende and anfang <= naechstes_ende):
+                    teile[-1] = (MUSIK, min(anfang, naechster_anfang), max(ende, naechstes_ende))
                 elif anfang is ende is naechster_anfang is naechstes_ende is None:
                     pass
                 else:

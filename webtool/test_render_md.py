@@ -125,6 +125,28 @@ def test_getrennte_musik_und_fehlendes_ende_erzeugen_keine_falsche_spanne():
     assert "[00:00:01.000–00:00:02.000] [Musik]" in md
     assert "[00:00:50.000–00:00:51.000] [Musik]" in md
     assert "[00:00:01.000–00:00:51.000]" not in md
+    assert md.count("[Musik]") == 3
+    assert "[00:00:50.000–00:00:51.000] [Musik] [Musik]" in md
+
+
+def test_ueberlappende_musik_behaelt_fruehesten_anfang_und_spaetestes_ende():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "[Musik]"), "start": 1.0, "end": 4.0},
+        {**_seg(1, "Hans", "[Musik]"), "start": 2.0, "end": 3.0},
+        {**_seg(2, "Hans", "[Musik]"), "start": 0.5, "end": 2.0},
+    ]}
+    md = render_md(doc)
+    assert md.count("[Musik]") == 1
+    assert "[00:00:00.500–00:00:04.000] [Musik]" in md
+
+
+def test_extreme_zeitwerte_lassen_text_ohne_zeitspanne_erhalten():
+    doc = {"base": "B", "segments": [
+        {**_seg(0, "Hans", "Sehr spaet."), "start": 1e308, "end": 1e308},
+        {**_seg(1, "Hans", "Noch spaeter."), "start": 10**400, "end": 10**400},
+    ]}
+    md = render_md(doc)
+    assert "**Hans:** Sehr spaet. Noch spaeter." in md
 
 
 def test_ungueltige_zeitwerte_lassen_den_text_im_export():

@@ -1918,7 +1918,10 @@ def _get_or_render_md(project: str, base: str) -> str | None:
         else:
             return cached
         # Ein GET darf eine vorhandene, moeglicherweise handbearbeitete .md nicht ersetzen.
-        return render_md(doc)
+        try:
+            return render_md(doc)
+        except (AttributeError, TypeError):
+            return cached
     if os.path.exists(_edit_path(project, base)) or os.path.exists(_raw_path(project, base)):
         doc = load_or_build_doc(project, base)
         md = render_md(doc)
