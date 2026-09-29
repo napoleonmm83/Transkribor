@@ -2808,7 +2808,7 @@ def test_alle_umbenennenden_prompts_erlauben_zwei_cluster_pro_person():
         assert correct.CLUSTER_REGEL in p, f"{name}-Prompt traegt die Cluster-Regel nicht"
 
 
-def test_alle_textschreibenden_prompts_markieren_musik_ohne_ansagen_zu_verlieren():
+def test_alle_textschreibenden_prompts_enthalten_musik_und_ansagen_regeln():
     prompts = {
         "correct": correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext"),
         "verify": correct._verify_prompt("b", "t.txt", "c.json", "kontext"),

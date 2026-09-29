@@ -918,7 +918,7 @@ mit Fallzahl und Dauer, aber ohne Halluzinationszähler. Fehlende Ergebnisse
 werden sichtbar. Das Werkzeug misst keine Sprecher- oder Zeitmarkengenauigkeit.
 Im Bewertungsbericht (Version 2) zählt `boundary_crossing_cases` Fälle mit
 Wort- oder Segmentzeiten über einer Zeitfenstergrenze. Das ist eine Diagnosezahl
-und keine Qualitätsunsicherheit. Fälle ohne brauchbare Wortzeiten stehen unter
+und keine Qualitätsunsicherheit. Geprüfte Fälle ohne brauchbare Wortzeiten stehen unter
 `untimed_fallback_cases`; fehlende Ergebnisse zählt `missing_hypothesis_cases`.
 Private Aufnahmen und Berichte gehören nach `eval/`, das von Git ausgeschlossen
 ist.

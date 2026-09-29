@@ -293,7 +293,34 @@ describe('SettingsPage', () => {
     fireEvent.click(auswahl)
     fireEvent.click(await screen.findByRole('option', { name: 'Andere Modell-ID' }))
     fireEvent.blur(await screen.findByRole('textbox', { name: 'Andere Modell-ID' }))
-    expect(api.saveSettings).not.toHaveBeenCalledWith({ model: '' })
+    expect(api.saveSettings).not.toHaveBeenCalled()
+  })
+
+  it('speichert Modellwechsel in Klickreihenfolge, auch wenn eine freie Eingabe noch laeuft', async () => {
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'gpt-6-sol', label: 'gpt-6-sol' }])
+    let erstesBeenden!: (v: Settings & { ungeschuetzt: boolean }) => void
+    let gespeichert = ''
+    vi.mocked(api.saveSettings).mockImplementation(async patch => {
+      if (patch.model === 'gpt-6-zukunft') {
+        await new Promise<Settings & { ungeschuetzt: boolean }>(resolve => { erstesBeenden = resolve })
+      }
+      gespeichert = patch.model ?? gespeichert
+      return { ...GESPEICHERT, provider: 'codex-cli', model: gespeichert }
+    })
+    zeige({ provider: 'codex-cli' })
+    const auswahl = await screen.findByRole('combobox', { name: 'Modell' })
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'Andere Modell-ID' }))
+    const feld = await screen.findByRole('textbox', { name: 'Andere Modell-ID' })
+    fireEvent.change(feld, { target: { value: 'gpt-6-zukunft' } })
+    fireEvent.blur(feld)
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ model: 'gpt-6-zukunft' }))
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'gpt-6-sol' }))
+    expect(api.saveSettings).toHaveBeenCalledTimes(1)
+    erstesBeenden({ ...GESPEICHERT, provider: 'codex-cli', model: 'gpt-6-zukunft' })
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ model: 'gpt-6-sol' }))
+    await waitFor(() => expect(gespeichert).toBe('gpt-6-sol'))
   })
 
   it('bleibt beim Textfeld, wenn das automatische Laden scheitert — ohne Fehlblase', async () => {
