@@ -252,6 +252,7 @@ function ytMelden(stand: YtdlpStand) {
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
   const [modelle, setModelle] = useState<ModelInfo[]>([])
+  const [anderesCodexModell, setAnderesCodexModell] = useState(false)
   // Nur das NEU Eingetippte; die gespeicherten Geheimnisse kommen nie zum Frontend zurueck.
   const [key, setKey] = useState('')
   const [laedt, setLaedt] = useState(false)
@@ -270,6 +271,9 @@ export function SettingsPage() {
   const settingsStand = useRef(0)
   // Laufende Nummer der Speichervorgaenge — ordnet sie untereinander (siehe `speichern`).
   const speicherLauf = useRef(0)
+  // Modellwechsel duerfen sich serverseitig nicht ueberholen: ein Blur der freien
+  // Modell-ID kann noch laufen, wenn im Dropdown schon das naechste Modell gewaehlt wird.
+  const modellSpeicherKette = useRef<Promise<void>>(Promise.resolve())
   // Drei Wege enden in einer Meldung über denselben Lauf: der Poll, der Direktstart in
   // `ytJetzt` und die Obergrenze. Seit #236 erzeugt jeder Durchlauf bis zu ZWEI Toasts
   // (Erfolg und die Warnung „ohne Sperre") — doppelt gemeldet wären das vier für einen
@@ -431,6 +435,12 @@ export function SettingsPage() {
     finally { setSpeichert(n => n - 1) }
   }
 
+  const modellSpeichern = (patch: Record<string, string>) => {
+    modellSpeicherKette.current = modellSpeicherKette.current
+      .catch(() => undefined)
+      .then(() => speichern(patch))
+  }
+
   // Der Hinweis auf die gerettete Datei haengt an ihrer EXISTENZ, nicht an einem Ereignis —
   // geschrieben hat sie oft ein Subprozess, den nie jemand gesehen hat. Ohne diesen Knopf
   // stuende er darum fuer immer da: der Pfad liegt im Benutzerprofil, und wer die App
@@ -457,8 +467,9 @@ export function SettingsPage() {
   const anbieterWechseln = (id: string) => {
     const p = s?.providers.find(x => x.id === id)
     setModelle([])
+    setAnderesCodexModell(false)
     // Modell mitzurücksetzen ist Absicht: ein Modellname des alten Anbieters ist beim neuen ungültig.
-    speichern({ provider: id, model: p?.default_model ?? '', base_url: '' })
+    modellSpeichern({ provider: id, model: p?.default_model ?? '', base_url: '' })
   }
 
   const testen = async () => {
@@ -983,10 +994,20 @@ export function SettingsPage() {
               <label id="lbl-modell" htmlFor="feld-modell" className="mb-1.5 block text-sm font-medium">Modell</label>
               <div className="flex gap-2">
                 {modelle.length > 0 ? (
-                  <Select value={s.model} onValueChange={m => speichern({ model: m })}>
+                  <Select value={prov.id === 'codex-cli'
+                    ? (anderesCodexModell || (s.model && !modelle.some(m => m.id === s.model))
+                      ? '__other__' : s.model || '__auto__')
+                    : s.model}
+                    onValueChange={m => {
+                      if (m === '__other__') { setAnderesCodexModell(true); return }
+                      setAnderesCodexModell(false)
+                      modellSpeichern({ model: m === '__auto__' ? '' : m })
+                    }}>
                     <SelectTrigger className="w-full" aria-labelledby="lbl-modell"><SelectValue placeholder="Modell wählen" /></SelectTrigger>
                     <SelectContent>
+                      {prov.id === 'codex-cli' && <SelectItem value="__auto__">Automatisch</SelectItem>}
                       {modelle.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
+                      {prov.id === 'codex-cli' && <SelectItem value="__other__">Andere Modell-ID</SelectItem>}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -999,7 +1020,7 @@ export function SettingsPage() {
                      onBlur), der Schlüssel ist also stabil, solange das Feld den Fokus hat. */
                   <Input id="feld-modell" key={`${s.provider}|${s.model}`}
                     defaultValue={s.model} placeholder="Modellname"
-                    onBlur={e => e.target.value !== s.model && speichern({ model: e.target.value })} />
+                    onBlur={e => e.target.value !== s.model && modellSpeichern({ model: e.target.value })} />
                 )}
                 {/* Pfeilfunktion, nicht `onClick={modelleLaden}`: sonst landet das
                     MouseEvent im `leise`-Parameter und ist wahr — der Knopf schwiege
@@ -1009,6 +1030,17 @@ export function SettingsPage() {
                   <span className="sr-only">Modelle neu vom Anbieter laden</span>
                 </Button>
               </div>
+              {prov.id === 'codex-cli' && modelle.length > 0
+                && (anderesCodexModell || (!!s.model && !modelle.some(m => m.id === s.model))) && (
+                  <Input aria-label="Andere Modell-ID" key={`${s.provider}|${s.model}|${anderesCodexModell}`}
+                    defaultValue={modelle.some(m => m.id === s.model) ? '' : s.model}
+                    placeholder="Modell-ID eingeben"
+                    onBlur={e => {
+                      const m = e.target.value.trim()
+                      if (!m) { setAnderesCodexModell(false); return }
+                      if (m !== s.model) modellSpeichern({ model: m })
+                    }} />
+                )}
             </div>
           </div>
         )}

@@ -202,6 +202,33 @@ def test_stille_ohne_wortzeiten_zaehlt_keine_halluzinationen():
     assert echt["quality_evidence_available"] is True
 
 
+def test_ungetimte_stille_ueberhang_hat_keine_halluzinationszahl():
+    still = case("", case_id="quiet", start=10, end=20, reference_kind="silence")
+    text = "eins zwei drei vier fuenf sechs sieben acht neun zehn"
+    ohne_zeiten = {"segments": [{"start": 0, "end": 10.2, "text": text}]}
+    bericht = se.score_cases([still], ohne_zeiten)
+
+    ungetimt = bericht["reviewed_silence_untimed"]
+    assert ungetimt == {
+        "case_count": 1, "annotated_case_seconds": 10,
+        "missing_hypothesis_cases": 0,
+    }
+    assert bericht["reviewed_silence"]["hallucinated_word_count"] == 0
+    assert bericht["quality_evidence_available"] is False
+
+    ausserhalb = {"segments": [{"start": 0, "end": 10.2, "text": text,
+                                 "words": _wortzeiten(text, 0, 10.2)}]}
+    echt_still = se.score_cases([still], ausserhalb)
+    assert echt_still["reviewed_silence"]["hallucinated_word_count"] == 0
+    assert echt_still["reviewed_silence_untimed"]["case_count"] == 0
+
+    im_fenster = {"segments": [{"start": 10, "end": 10.2, "text": "erfunden",
+                                 "words": [{"start": 10, "end": 10.2, "word": "erfunden"}]}]}
+    echt_erfunden = se.score_cases([still], im_fenster)
+    assert echt_erfunden["reviewed_silence"]["hallucinated_word_count"] == 1
+    assert echt_erfunden["reviewed_silence"]["hallucinated_cases"] == 1
+
+
 def test_wort_ueber_der_segmentgrenze_verwirft_nicht_das_ganze_segment():
     """Ein ueberhaengendes Wort wird GEKLEMMT, nicht zum Anlass genommen, alles zu verwerfen.
 
@@ -245,20 +272,44 @@ def test_wort_ueber_der_segmentgrenze_verwirft_nicht_das_ganze_segment():
     assert se.score_cases([case()], daneben)["cases"][0]["selection"]["method"] == "segment_overlap"
 
 
-def test_unaligned_segments_are_included_with_explicit_boundary_uncertainty():
+def test_unaligned_segments_keep_boundary_count_without_quality_label():
     """Ohne Wortzeiten bleibt nur die Segmentgrenze — der Fall ist hier ABSICHT."""
     bericht = se.score_cases([case("guter", start=1, end=2)], hypothesis_ohne_zeiten("ein guter tag"))
     row = bericht["cases"][0]
     assert row["hypothesis"] == "ein guter tag"
     assert row["selection"]["method"] == "segment_overlap"
     assert row["selection"]["boundary_crossings"] == 1
-    assert row["selection"]["approximate"] is True
+    assert "approximate" not in row["selection"]
+    assert bericht["coverage"]["boundary_crossing_cases"] == 1
+    assert "boundary_uncertain_cases" not in bericht["coverage"]
     # Und er zaehlt NICHT in die Kennzahl, sondern daneben: der ganze Segmenttext in
     # einem 1-s-Fenster erzeugt Einfuegungen, die nichts ueber die Qualitaet sagen.
     assert bericht["reviewed"]["case_count"] == 0
     assert bericht["reviewed_untimed"]["case_count"] == 1
     assert bericht["coverage"]["untimed_fallback_cases"] == 1
     assert bericht["coverage"]["reviewed_speech_cases"] == 1   # geprueft bleibt geprueft
+
+
+def test_timed_boundary_crossing_is_diagnostic_not_uncertainty():
+    word = {"segments": [{"start": 0, "end": 2, "text": "eins",
+                          "words": [{"start": 0, "end": 2, "word": "eins"}]}]}
+    report = se.score_cases([case("eins", start=1, end=3),
+                             case("eins", case_id="contained", start=0, end=3)], word)
+    assert report["version"] == 2
+    assert [row["selection"]["boundary_crossings"] for row in report["cases"]] == [1, 0]
+    assert all("approximate" not in row["selection"] for row in report["cases"])
+    assert report["coverage"]["boundary_crossing_cases"] == 1
+    assert "boundary_uncertain_cases" not in report["coverage"]
+    assert report["reviewed"]["wer"]["errors"] == 0
+    assert report["coverage"]["untimed_fallback_cases"] == 0
+
+
+def test_missing_hypothesis_coverage_counts_missing_and_present_audio():
+    cases = [case("eins"), case("zwei", case_id="other", audio_id="b")]
+    present = {"a": hypothesis("eins")}
+    assert se.score_cases(cases, present)["coverage"]["missing_hypothesis_cases"] == 1
+    present["b"] = hypothesis("zwei")
+    assert se.score_cases(cases, present)["coverage"]["missing_hypothesis_cases"] == 0
 
 
 def test_stale_or_incomplete_word_text_falls_back_to_segment_text():

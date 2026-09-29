@@ -64,6 +64,42 @@
       "gruen": [
         "test_einfuegungen_zaehlen_in_errors_und_rate"
       ]
+    },
+    {
+      "id": "SE-F Grenzfaelle verschwinden aus der Coverage",
+      "datei": "tools/speech_eval.py",
+      "von": "                     \"boundary_crossing_cases\": sum(row[\"selection\"][\"boundary_crossings\"] > 0 for row in rows)},",
+      "nach": "                     \"boundary_crossing_cases\": 0},",
+      "rot": [
+        "test_timed_boundary_crossing_is_diagnostic_not_uncertainty"
+      ],
+      "gruen": [
+        "test_missing_hypothesis_coverage_counts_missing_and_present_audio"
+      ]
+    },
+    {
+      "id": "SE-G fehlende Hypothesen verschwinden aus der Coverage",
+      "datei": "tools/speech_eval.py",
+      "von": "                     \"missing_hypothesis_cases\": sum(row[\"selection\"][\"method\"] == \"missing_hypothesis\" for row in rows),",
+      "nach": "                     \"missing_hypothesis_cases\": 0,",
+      "rot": [
+        "test_missing_hypothesis_coverage_counts_missing_and_present_audio"
+      ],
+      "gruen": [
+        "test_timed_boundary_crossing_is_diagnostic_not_uncertainty"
+      ]
+    },
+    {
+      "id": "SE-H ungetimte Stille bekommt wieder erfundene Halluzinationszahlen",
+      "datei": "tools/speech_eval.py",
+      "von": "_silence_summary(silence_untimed, include_hallucinations=False)",
+      "nach": "_silence_summary(silence_untimed, include_hallucinations=True)",
+      "rot": [
+        "test_ungetimte_stille_ueberhang_hat_keine_halluzinationszahl"
+      ],
+      "gruen": [
+        "test_explicit_reviewed_silence_exposes_hallucinations_outside_wer"
+      ]
     }
   ]
 }

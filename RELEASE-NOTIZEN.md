@@ -29,6 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Neu**
+- Beim ChatGPT-Abo kannst du für die Korrektur „Automatisch“, Astra, Sol oder Luna wählen und bei Bedarf eine weitere Modell-ID eingeben.
 - In den Einstellungen lässt sich für die Sprecher-Erkennung optional NVIDIA Nemotron 3 wählen; pyannote bleibt die Voreinstellung.
 - Bei Auswahl von Nemotron 3 richtet Transkribor die benötigten NeMo-Pakete in einer von uns geprüften Fassung selbst ein; den neuesten Stand von NVIDIA holt auf Wunsch ein Knopf in den Einstellungen.
 - Fehlerberichte lassen sich jetzt mit einer Vorschau direkt an uns senden; ein Mailprogramm ist dafür nicht mehr nötig.
@@ -38,6 +39,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 - Bei langen Windows-Benutzernamen oder solchen mit Umlauten wird der Benutzerordner in Fehlerberichten jetzt auch in seiner abgekürzten Schreibweise (etwa `C:\Users\MARCUS~1`) unkenntlich gemacht.
 
 **Behoben**
+- Auch bei leichter Korrektur werden klar erkennbare Musik- und Gesangspassagen als „[Musik]“ markiert, statt erfundenen Liedtext zu übernehmen.
+- Der Qualitätsvergleich kennzeichnet Zeitfenstergrenzen nicht mehr pauschal als unsicher; Fälle ohne brauchbare Wortzeiten und fehlende Ergebnisse bleiben im Bericht erkennbar.
 - Beim Löschen, Neu-Transkribieren und Umbenennen einer Aufnahme bleiben Transkripte anderer Aufnahmen mit Punkten im Namen erhalten.
 - Ist eine Transkriptdatei nicht sicher zuordenbar, bricht die Aktion ab, bevor Ton oder Text verändert werden.
 - Alte Transkript-Sicherungen ohne lesbaren Zeitstempel werden beim Start nicht mehr automatisch gelöscht.

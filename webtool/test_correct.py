@@ -2808,6 +2808,26 @@ def test_alle_umbenennenden_prompts_erlauben_zwei_cluster_pro_person():
         assert correct.CLUSTER_REGEL in p, f"{name}-Prompt traegt die Cluster-Regel nicht"
 
 
+def test_alle_textschreibenden_prompts_enthalten_musik_und_ansagen_regeln():
+    prompts = {
+        "correct": correct._correct_prompt("b", "t.txt", "c.json", "g.json", "kontext"),
+        "verify": correct._verify_prompt("b", "t.txt", "c.json", "kontext"),
+        "light": correct._light_prompt("b", "t.txt", "c.json", "kontext"),
+    }
+    richtung = {
+        "correct": ("Bei GESUNGENEN Stellen", "schreibe als text exakt „[Musik]“",
+                    "bekommen einen LEEREN text", "GESPROCHENE Bühnenansagen sind KEINE Musik"),
+        "verify": ("„[Musik]“ steht für eine gesungene", "ein leerer text",
+                   "gesprochene Bühnenansagen gehören zurück in Text"),
+        "light": ("Bei eindeutig gesungenen oder sprachlosen Stellen",
+                  "schreibe als text exakt „[Musik]“", "bekommen einen leeren text",
+                  "GESPROCHENE Bühnenansagen bleiben Text"),
+    }
+    for name, prompt in prompts.items():
+        for regel in richtung[name]:
+            assert regel in prompt, f"{name}: {regel}"
+
+
 def test_cluster_regel_nennt_den_gemessenen_grund():
     """Eine blosse Erlaubnis reichte nicht — sie stand da, und die Aufspaltung passierte
     trotzdem (#267, gemessen an Rhyathlon/00114307 mit vorgegebener Sprecherzahl 5). Die Regel

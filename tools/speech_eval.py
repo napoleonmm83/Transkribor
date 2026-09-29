@@ -115,7 +115,7 @@ def _select(segments: list, start: float, end: float) -> tuple:
     method = next(iter(methods)) if len(methods) == 1 else "mixed" if methods else "no_overlap"
     return " ".join(text for _, text in sorted(pieces, key=lambda p: p[0]) if text), {
         "method": method, "boundary_crossings": crossings,
-        "approximate": crossings > 0, "word_fallbacks": fallbacks,
+        "word_fallbacks": fallbacks,
     }
 
 
@@ -143,16 +143,18 @@ def _metric(reference, hypothesis) -> dict:
             "errors": errors, "rate": errors / len(reference) if reference else None}
 
 
-def _silence_summary(rows: list) -> dict:
+def _silence_summary(rows: list, *, include_hallucinations: bool = True) -> dict:
     # Absent documents are unknown output; an existing empty transcript is silence.
     available = [row for row in rows if row["selection"]["method"] != "missing_hypothesis"]
-    return {
+    result = {
         "case_count": len(available),
         "annotated_case_seconds": sum(row["end"] - row["start"] for row in available),
-        "hallucinated_word_count": sum(row["wer"]["hypothesis_length"] for row in available),
-        "hallucinated_cases": sum(row["wer"]["hypothesis_length"] > 0 for row in available),
         "missing_hypothesis_cases": len(rows) - len(available),
     }
+    if include_hallucinations:
+        result["hallucinated_word_count"] = sum(row["wer"]["hypothesis_length"] for row in available)
+        result["hallucinated_cases"] = sum(row["wer"]["hypothesis_length"] > 0 for row in available)
+    return result
 
 
 def _aggregate(rows: list) -> dict:
@@ -170,7 +172,7 @@ def score_cases(cases: list, hypothesis: dict) -> dict:
     """Score every case; missing audio is empty speech, never a dropped case.
 
     hypothesis maps audio IDs to raw documents, or is a single raw document
-    for cases naming one audio. Approximate span selection is reported.
+    for cases naming one audio. Boundary crossings are diagnostic only.
     """
     if not isinstance(cases, list) or not isinstance(hypothesis, dict):
         raise ValueError("cases must be a list and hypothesis an object")
@@ -246,8 +248,8 @@ def score_cases(cases: list, hypothesis: dict) -> dict:
     # Getrennt wird nur, was in die KENNZAHL eingeht.
     reviewed_count = len(reviewed_alle) + len(silence_alle)
     return {
-        "version": 1, "quality_evidence_available": bool(reviewed or silence_summary["case_count"]),
-        "scope": "Text agreement in supplied spans only; no speaker/timing score. Explicit reviewed silence counted separately. Seconds sum case durations including overlaps. Candidate distances are not quality evidence. Cases whose span selection fell back to whole segments (no usable word times) are reported under reviewed_untimed (speech) and reviewed_silence_untimed (silence) and are NOT part of the reviewed rate or the silence hallucination counts: that fallback repeats segment text across overlapping windows, so its insertions measure timing availability, not transcript quality, and its words are not evidenced to lie inside the window at all.",
+        "version": 2, "quality_evidence_available": bool(reviewed or silence_summary["case_count"]),
+        "scope": "Text agreement in supplied spans only; no speaker/timing score. Explicit reviewed silence counted separately. Seconds sum case durations including overlaps. Candidate distances are not quality evidence. Boundary crossings are a diagnostic count, not a quality uncertainty label. Cases whose span selection fell back to whole segments (no usable word times) are reported under reviewed_untimed (speech) and reviewed_silence_untimed (silence) and are NOT part of the reviewed rate or the reviewed_silence hallucination counts: that fallback repeats segment text across overlapping windows, so its insertions measure timing availability, not transcript quality, and its words are not evidenced to lie inside the window at all.",
         "normalization": "NFKC, casefold (ss), numeric minus preserved/canonicalized, other punctuation to spaces, collapsed whitespace; CER includes spaces",
         "coverage": {"total_cases": len(rows), "reviewed_cases": reviewed_count,
                      "reviewed_speech_cases": len(reviewed_alle), "reviewed_silence_cases": len(silence_alle),
@@ -268,10 +270,12 @@ def score_cases(cases: list, hypothesis: dict) -> dict:
                      # `scored_speech_cases`.
                      "reviewed_case_seconds": sum(row["end"] - row["start"] for row in reviewed_alle + silence_alle),
                      "missing_hypothesis_cases": sum(row["selection"]["method"] == "missing_hypothesis" for row in rows),
-                     "boundary_uncertain_cases": sum(row["selection"]["approximate"] for row in rows)},
+                     "boundary_crossing_cases": sum(row["selection"]["boundary_crossings"] > 0 for row in rows)},
         "reviewed": _aggregate(reviewed), "reviewed_untimed": _aggregate(untimed),
         "candidate_only": _aggregate(candidates),
-        "reviewed_silence": silence_summary, "reviewed_silence_untimed": _silence_summary(silence_untimed), "candidate_silence": _silence_summary(draft_silence), "cases": rows,
+        "reviewed_silence": silence_summary,
+        "reviewed_silence_untimed": _silence_summary(silence_untimed, include_hallucinations=False),
+        "candidate_silence": _silence_summary(draft_silence), "cases": rows,
     }
 
 
