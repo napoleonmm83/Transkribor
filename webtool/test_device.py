@@ -1,7 +1,7 @@
 """Geraetewahl — mit gefaelschtem torch, damit der Test ohne GPU ueberall laeuft."""
+import builtins
 import sys
 import types
-import builtins
 
 import pytest
 
