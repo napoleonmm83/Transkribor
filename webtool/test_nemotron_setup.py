@@ -65,7 +65,8 @@ def test_pip_streaming_verwendet_raw_und_begrenzt_fehler(monkeypatch):
 
 
 @pytest.mark.parametrize(("version", "erwartet"), [
-    ("23.0.1", False), ("23.1", True), ("25.2", True), (None, False), ("kaputt", False),
+    ("23.0.1", False), ("23.1", False), ("24.0", False), ("24.1", True),
+    ("25.2", True), (None, False), ("kaputt", False),
 ])
 def test_raw_fortschritt_nur_mit_kompatiblem_pip(monkeypatch, version, erwartet):
     monkeypatch.setattr(nemotron_setup, "_version", lambda name: version if name == "pip" else None)
@@ -85,7 +86,7 @@ def test_altes_pip_installiert_ohne_raw_option(monkeypatch):
         def wait(self, timeout=None):
             return self.returncode
 
-    monkeypatch.setattr(nemotron_setup, "_version", lambda name: "23.0" if name == "pip" else None)
+    monkeypatch.setattr(nemotron_setup, "_version", lambda name: "24.0" if name == "pip" else None)
     monkeypatch.setattr(nemotron_setup.subprocess, "Popen", FakeProcess)
     assert nemotron_setup._run(["-m", "pip", "install", "some-package"], 5) is None
     assert gesehen["command"] == [nemotron_setup.sys.executable, "-m", "pip", "install", "some-package"]

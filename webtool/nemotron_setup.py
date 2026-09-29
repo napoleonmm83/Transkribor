@@ -218,7 +218,7 @@ def _pip_raw_supported() -> bool:
     if not version:
         return False
     try:
-        return bool(Version(version) >= Version("23.1"))
+        return bool(Version(version) >= Version("24.1"))
     except InvalidVersion:
         return False
 
