@@ -381,6 +381,15 @@ test('nach fehlgeschlagener Python-Migration startet die wiederhergestellte alte
   assert.ok(w.gesendet.some(g => g.kanal === 'fehler' && g.nutzlast.includes('Python 3.13')))
 })
 
+test('nach abgebrochener Python-Migration startet die wiederhergestellte alte Umgebung ohne Fehlermeldung', async () => {
+  const w = await laden({ status: { venv: false }, einrichtErgebnis: {
+    ok: false, weiterMitAlt: true, abgebrochen: true, fehler: 'Abgebrochen',
+  } })
+  await w.ruf('einrichten')
+  assert.ok(w.spur.includes('backend.start'))
+  assert.ok(!w.gesendet.some(g => g.kanal === 'fehler'))
+})
+
 test('Abbrechen ohne laufende Einrichtung ist wirkungslos', async () => {
   const w = await laden()
   await w.ruf('einrichten:abbrechen')

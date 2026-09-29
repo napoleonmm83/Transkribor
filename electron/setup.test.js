@@ -147,14 +147,16 @@ test('Migration behaelt neue venv bei Erfolg und beseitigt Backup; unterbrochene
   fs.mkdirSync(venv + '.python-3.14-backup')
   fs.writeFileSync(path.join(venv + '.python-3.14-backup', 'alt'), 'x')
   try {
+    let zielWarVorArbeitDa = null
     const result = await migrationAusfuehren(venv, async () => {
       assert.ok(fs.existsSync(path.join(venv + '.python-3.14-backup', 'alt')))
-      assert.ok(!fs.existsSync(path.join(venv, 'halb')))
+      zielWarVorArbeitDa = fs.existsSync(venv)
       fs.mkdirSync(venv)
       fs.writeFileSync(path.join(venv, 'neu'), 'x')
       return { ok: true }
     }, root, async () => fs.existsSync(path.join(venv, 'neu')))
     assert.strictEqual(result.ok, true)
+    assert.strictEqual(zielWarVorArbeitDa, false, 'halbe Ziel-venv muss vor Neuaufbau entfernt sein')
     assert.ok(fs.existsSync(path.join(venv, 'neu')))
     await warteBis(() => !fs.existsSync(venv + '.python-3.14-backup'))
   } finally { fs.rmSync(root, { recursive: true, force: true }) }

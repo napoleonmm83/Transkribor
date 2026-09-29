@@ -205,9 +205,21 @@ def _run(args: list[str], timeout: int) -> str | None:
     return None
 
 
+def _pip_raw_supported() -> bool:
+    """An older pip can still install NeMo, but cannot report raw progress."""
+    version = _version("pip")
+    if not version:
+        return False
+    try:
+        return bool(Version(version) >= Version("23.1"))
+    except InvalidVersion:
+        return False
+
+
 def _run_pip(args: list[str], timeout: int) -> str | None:
     """Read pip's documented raw byte counters while retaining a bounded error tail."""
-    command = [sys.executable, *args[:3], "--progress-bar=raw", *args[3:]]
+    progress_arg = ["--progress-bar=raw"] if _pip_raw_supported() else []
+    command = [sys.executable, *args[:3], *progress_arg, *args[3:]]
     try:
         proc = subprocess.Popen(command, stdout=subprocess.PIPE,  # noqa: S603 — fixed Python executable and pip args
                                 stderr=subprocess.PIPE, bufsize=0)
