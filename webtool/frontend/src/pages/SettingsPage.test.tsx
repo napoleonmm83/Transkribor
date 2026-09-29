@@ -20,7 +20,8 @@ const BASIS: Settings = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false, env_key: '',
   whisper_model: 'large-v3', whisper_lang: 'de',
   diarization_model: 'pyannote', nemotron_da: false,
-  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '' },
+  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '',
+              phase: '', download_current: 0, download_total: 0, download_speed: 0, download_eta: null },
   whisper_choices: [
     { id: 'turbo', label: 'Schnell und gut', hint: 'nahe large-Qualität' },
     { id: 'large-v3', label: 'Beste Qualität', hint: 'bester Dialekt' },
@@ -65,7 +66,7 @@ describe('SettingsPage', () => {
     expect(await screen.findByText(/NeMo fehlt/)).toBeInTheDocument()
   })
   it('prüft NeMo per Knopf und zeigt den laufenden Paketabgleich', async () => {
-    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, bereit: false, version: '', revision: '', geprueft: '', laeuft: true, ergebnis: '', fehler: '' })
+    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, ...BASIS.nemotron, laeuft: true })
     zeige({ diarization_model: 'nemotron3' })
     const knopf = await screen.findByRole('button', { name: /Neuesten NeMo-Stand holen/ })
     // Entscheidung 2026-09-24: automatisch nur die geprüfte Fassung — und das Modell ist
@@ -80,13 +81,68 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledWith('neuester'))
     expect(await screen.findByText(/NeMo-Pakete werden geprüft und installiert/)).toBeInTheDocument()
   })
+  it('zeigt nur für den messbaren Download Prozent, Geschwindigkeit und Restzeit', async () => {
+    zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron, laeuft: true,
+      phase: 'nemo', download_current: 50, download_total: 100,
+      download_speed: 1048576, download_eta: 50 } })
+    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Einrichtung' })
+    expect(balken).toHaveAttribute('aria-valuenow', '50')
+    expect(screen.getByText(/50 % dieses Downloads.*1.0 MiB\/s.*50 Sek./)).toBeInTheDocument()
+  })
+  it('zeigt bei unbekannter Downloadgröße einen unbestimmten Fortschritt', async () => {
+    zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron, laeuft: true,
+      phase: 'pruefung' } })
+    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Einrichtung' })
+    expect(balken).not.toHaveAttribute('aria-valuenow')
+    expect(screen.getByText('NeMo wird geprüft')).toBeInTheDocument()
+    expect(screen.queryByText(/MiB\/s/)).not.toBeInTheDocument()
+  })
+  it('hält beim NeMo-Statuspoll auch die gemeinsame yt-dlp-Sperre aktuell', async () => {
+    vi.useFakeTimers()
+    try {
+      zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron, laeuft: true } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      vi.mocked(api.getNemotronStatus).mockResolvedValue({
+        nemotron: { ...BASIS.nemotron, laeuft: true, phase: 'nemo' },
+        ytdlp: { ...BASIS.ytdlp, laeuft: true, nemo_haelt: true },
+      })
+      await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+      expect(screen.getByText(/NeMo-Einrichtung benutzt gerade die Paketverwaltung/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Jetzt aktualisieren/ })).toBeDisabled()
+    } finally { vi.useRealTimers() }
+  })
   it('richtet per zweitem Knopf die geprüfte Fassung ein', async () => {
     // Entscheidung 2026-09-24: nach einem Fehlschlag darf der einzige Weg am selben Tag nicht
     // der ungeprüfte sein. Der zweite Knopf schickt ausdrücklich `geprueft`.
-    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, bereit: false, version: '', revision: '', geprueft: '', laeuft: true, ergebnis: '', fehler: '' })
+    vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, ...BASIS.nemotron, laeuft: true })
     zeige({ diarization_model: 'nemotron3' })
     fireEvent.click(await screen.findByRole('button', { name: /Geprüfte Fassung einrichten/ }))
     await waitFor(() => expect(api.updateNemotron).toHaveBeenCalledWith('geprueft'))
+  })
+  it('meldet während und nach dem Verbindungstest den Zustand direkt am Knopf', async () => {
+    let antwort!: (wert: { ok: boolean; detail: string }) => void
+    vi.mocked(api.testSettings).mockReturnValue(new Promise(resolve => { antwort = resolve }))
+    zeige({ provider: 'codex-cli' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Verbindung testen' }))
+    expect(screen.getByRole('button', { name: /Verbindung wird getestet/ })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Verbindung zum Anbieter wird geprüft')
+    await act(async () => { antwort({ ok: true, detail: 'Modell erreichbar' }) })
+    expect(screen.getByRole('status')).toHaveTextContent('Verbindung erfolgreich: Modell erreichbar')
+    expect(screen.getByRole('button', { name: 'Verbindung testen' })).toBeEnabled()
+  })
+  it('verwirft ein altes Testergebnis nach Änderung des Modells', async () => {
+    let antwort!: (wert: { ok: boolean; detail: string }) => void
+    vi.mocked(api.testSettings).mockReturnValue(new Promise(resolve => { antwort = resolve }))
+    vi.mocked(api.listModels).mockResolvedValue([])
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, provider: 'custom', model: 'neu' })
+    zeige({ provider: 'custom', model: 'alt' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Verbindung testen' }))
+    const modell = await screen.findByPlaceholderText('Modellname')
+    fireEvent.change(modell, { target: { value: 'neu' } })
+    fireEvent.blur(modell)
+    expect(screen.queryByText(/Verbindung zum Anbieter wird geprüft/)).not.toBeInTheDocument()
+    await act(async () => { antwort({ ok: true, detail: 'Altes Modell erreichbar' }) })
+    expect(screen.queryByText(/Altes Modell erreichbar/)).not.toBeInTheDocument()
   })
   it('sagt nach einem Fehlschlag nicht mehr, dass die Einrichtung automatisch startet', async () => {
     zeige({ diarization_model: 'nemotron3',
@@ -113,6 +169,7 @@ describe('SettingsPage', () => {
     // heraus, die ihn nicht meinen. Ohne die Vorgabe liefert der Automock `undefined`,
     // und `.then` darauf reisst jeden Test um.
     vi.mocked(api.getAuth).mockResolvedValue({ unterstuetzt: false, angemeldet: false, detail: '' })
+    vi.mocked(api.getNemotronStatus).mockResolvedValue({ nemotron: BASIS.nemotron, ytdlp: BASIS.ytdlp })
   })
 
   it('zeigt im Abo kein Key-Feld — aber sehr wohl die Modellwahl', async () => {
@@ -933,16 +990,16 @@ describe('SettingsPage', () => {
     vi.useFakeTimers()                                   // vor dem Aufbau, s. Test darüber
     try {
       zeige(laeuft)
-      vi.mocked(api.getSettings).mockResolvedValue(laeuft)
+      vi.mocked(api.getNemotronStatus).mockResolvedValue({ nemotron: laeuft.nemotron, ytdlp: laeuft.ytdlp })
       await act(async () => { await vi.advanceTimersByTimeAsync(0) })
       expect(screen.getByText(/NeMo-Pakete werden geprüft und installiert/)).toBeInTheDocument()
-      vi.mocked(api.getSettings).mockClear()
+      vi.mocked(api.getNemotronStatus).mockClear()
       await act(async () => { await vi.advanceTimersByTimeAsync(1310 * 3000) })
-      const nachDeckel = vi.mocked(api.getSettings).mock.calls.length
+      const nachDeckel = vi.mocked(api.getNemotronStatus).mock.calls.length
       expect(nachDeckel).toBeGreaterThan(1200)           // hat wirklich gepollt
       expect(nachDeckel).toBeLessThanOrEqual(1300)
       await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
-      expect(vi.mocked(api.getSettings).mock.calls.length).toBe(nachDeckel)  // und danach Ruhe
+      expect(vi.mocked(api.getNemotronStatus).mock.calls.length).toBe(nachDeckel)  // und danach Ruhe
     } finally {
       vi.useRealTimers()
     }

@@ -1,11 +1,100 @@
 """Vertrag fuer die optionale, selbst gepflegte NeMo-Umgebung."""
 
+import io
 import json
+import tracemalloc
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 
 from webtool import nemotron_setup, sperre, ytdlp_update
+
+
+def test_raw_progress_zaehlt_nur_aktuelle_datei_und_unbekannte_groesse():
+    nemotron_setup._phase("nemo")
+    previous = nemotron_setup._progress("Progress 10 of 100", None, 1.0)
+    previous = nemotron_setup._progress("Progress 30 of 100", previous, 3.0)
+    status = nemotron_setup.zustand()
+    assert (status["download_current"], status["download_total"],
+            status["download_speed"], status["download_eta"]) == (30, 100, 10, 7)
+    previous = nemotron_setup._progress("Progress 0 of 50", previous, 4.0)
+    status = nemotron_setup.zustand()
+    assert (status["download_current"], status["download_total"],
+            status["download_speed"], status["download_eta"]) == (0, 50, 0, None)
+    previous = nemotron_setup._progress("Progress 20 of 50", previous, 6.0)
+    previous = nemotron_setup._progress("Progress 0 of 50", previous, 7.0)
+    status = nemotron_setup.zustand()
+    assert (status["download_current"], status["download_total"],
+            status["download_speed"], status["download_eta"]) == (0, 50, 0, None)
+    previous = nemotron_setup._progress("Progress 8 of 0", previous, 8.0)
+    status = nemotron_setup.zustand()
+    assert (status["download_current"], status["download_total"],
+            status["download_speed"], status["download_eta"]) == (8, 0, 0, None)
+    assert nemotron_setup._progress("not Progress 99 of 99", previous, 9.0) == previous
+    nemotron_setup._phase("triton")
+    assert nemotron_setup.zustand()["download_current"] == 0
+
+
+def test_pip_streaming_verwendet_raw_und_begrenzt_fehler(monkeypatch):
+    gesehen = {}
+
+    class FakeProcess:
+        def __init__(self, command, **kwargs):
+            gesehen["command"] = command
+            self.stdout = io.BytesIO(b"Progress 1 of 10\rProgress 7 of 10\nSECRET_STDOUT\n")
+            self.stderr = io.BytesIO(b"pip stderr: failed to install\n")
+            self.returncode = 1
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(nemotron_setup.subprocess, "Popen", FakeProcess)
+    nemotron_setup._phase("nemo")
+    error = nemotron_setup._run(["-m", "pip", "install", "some-package"], 5)
+    assert gesehen["command"][1:5] == ["-m", "pip", "install", "--progress-bar=raw"]
+    assert error == "pip stderr: failed to install"
+    assert "SECRET_STDOUT" not in error
+    assert nemotron_setup.zustand()["download_current"] == 7
+    monkeypatch.setattr(nemotron_setup, "_state", dict(nemotron_setup._state))
+    monkeypatch.setattr(nemotron_setup, "_install",
+                        lambda *args: (_ for _ in ()).throw(RuntimeError(error)))
+    nemotron_setup._hintergrund(force=True)
+    assert nemotron_setup.zustand()["fehler"] == error
+    assert "SECRET_STDOUT" not in nemotron_setup.zustand()["fehler"]
+
+
+def test_pip_streaming_begrenzt_auch_zeile_ohne_umbruch(monkeypatch):
+    payload = b"SECRET_STDOUT" + b"x" * 2_000_000
+
+    class FakeProcess:
+        def __init__(self, command, **kwargs):
+            self.stdout = io.BytesIO(payload)
+            self.stderr = io.BytesIO(b"failed\n")
+            self.returncode = 1
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(nemotron_setup.subprocess, "Popen", FakeProcess)
+    tracemalloc.start()
+    try:
+        error = nemotron_setup._run(["-m", "pip", "install", "some-package"], 5)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert error == "failed"
+    assert peak < 1_000_000
+
+
+def test_python_314_blockiert_vor_pip_und_meldet_grund(monkeypatch):
+    monkeypatch.setattr(nemotron_setup, "sys", SimpleNamespace(version_info=(3, 14)))
+    monkeypatch.setattr(nemotron_setup, "_run",
+                        lambda *args: (_ for _ in ()).throw(AssertionError("pip started")))
+    assert "Python 3.14" in nemotron_setup._pin_fehler()
+    assert nemotron_setup._faellig() is False
+    with pytest.raises(RuntimeError, match="Python 3.14"):
+        nemotron_setup._install(force=True)
 
 
 # AIRLOCK-OHNE-PLANWERKZEUG: Der Benutzer hat die automatische Installation und

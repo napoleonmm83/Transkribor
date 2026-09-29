@@ -17,11 +17,13 @@ import contextlib
 import datetime as dt
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.request
 from importlib import metadata
 from pathlib import Path
@@ -34,8 +36,39 @@ _TRITON = {"2.10": "3.6.0.post26", "2.11": "3.6.0.post26",
            "2.12": "3.7.1.post27", "2.13": "3.7.1.post27",
            "2.14": "3.8.0.post28"}
 _lock = threading.Lock()
-_state = {"laeuft": False, "ergebnis": "", "fehler": ""}
+_state = {"laeuft": False, "ergebnis": "", "fehler": "", "phase": "",
+          "download_current": 0, "download_total": 0, "download_speed": 0,
+          "download_eta": None}
 _haelt_pip_lock = False
+_RAW_PROGRESS = re.compile(r"^Progress (\d+) of (\d+)\s*$")
+
+
+def _phase(name: str) -> None:
+    with _lock:
+        _state.update(phase=name, download_current=0, download_total=0,
+                      download_speed=0, download_eta=None)
+
+
+def _progress(line: str, previous: tuple[int, int, float] | None,
+              now: float) -> tuple[int, int, float] | None:
+    """One pip raw sample describes one file; a new file starts a new measurement."""
+    match = _RAW_PROGRESS.fullmatch(line.strip())
+    if not match:
+        return previous
+    current, total = map(int, match.groups())
+    if total:
+        current = min(current, total)
+    prior = previous if previous and previous[1] == total and current >= previous[0] else None
+    speed = 0
+    eta = None
+    if prior and total and current > prior[0] and now > prior[2]:
+        speed = int((current - prior[0]) / (now - prior[2]))
+        if speed > 0:
+            eta = (total - current) / speed
+    with _lock:
+        _state.update(download_current=current, download_total=total,
+                      download_speed=speed, download_eta=eta)
+    return current, total, now
 
 
 def _marker_path() -> Path:
@@ -92,6 +125,9 @@ def _bereit(marker: dict) -> bool:
 
 def _pin_fehler() -> str:
     """Grund, aus dem KEINE Installation gelingen kann — leer, wenn es keinen gibt."""
+    if sys.version_info >= (3, 14):
+        return ("NeMo kann mit Python 3.14 oder neuer derzeit nicht eingerichtet werden. "
+                "Bitte Python 3.13 oder eine kompatible Transkribor-Umgebung verwenden.")
     try:
         _triton_pin()
     except RuntimeError as exc:
@@ -156,6 +192,8 @@ def _latest_revision() -> str:
 
 
 def _run(args: list[str], timeout: int) -> str | None:
+    if args[:3] == ["-m", "pip", "install"]:
+        return _run_pip(args, timeout)
     try:
         done = subprocess.run([sys.executable, *args], capture_output=True, text=True,  # noqa: S603
                               encoding="utf-8", errors="replace", timeout=timeout,
@@ -164,6 +202,90 @@ def _run(args: list[str], timeout: int) -> str | None:
         return f"{type(exc).__name__}: {exc}"
     if done.returncode:
         return (done.stderr or done.stdout).strip()[-700:] or f"Exit {done.returncode}"
+    return None
+
+
+def _run_pip(args: list[str], timeout: int) -> str | None:
+    """Read pip's documented raw byte counters while retaining a bounded error tail."""
+    command = [sys.executable, *args[:3], "--progress-bar=raw", *args[3:]]
+    try:
+        proc = subprocess.Popen(command, stdout=subprocess.PIPE,  # noqa: S603 — fixed Python executable and pip args
+                                stderr=subprocess.PIPE, bufsize=0)
+    except OSError as exc:
+        return f"{type(exc).__name__}: {exc}"
+    chunks: queue.Queue[tuple[str, bytes | None]] = queue.Queue(maxsize=32)
+    stopped = threading.Event()
+
+    def offer(source: str, chunk: bytes | None) -> None:
+        while not stopped.is_set():
+            try:
+                chunks.put((source, chunk), timeout=0.1)
+                return
+            except queue.Full:
+                continue
+
+    def read_output(source: str) -> None:
+        stream = proc.stdout if source == "stdout" else proc.stderr
+        if stream is None:
+            offer(source, None)
+            return
+        try:
+            while chunk := stream.read(4096):
+                offer(source, chunk)
+        finally:
+            offer(source, None)
+
+    for source in ("stdout", "stderr"):
+        threading.Thread(target=read_output, args=(source,),
+                         name=f"nemotron-pip-{source}", daemon=True).start()
+    stderr_tail = b""
+    previous = None
+    progress_line = bytearray()
+    oversized = False
+    finished = set()
+    deadline = time.monotonic() + timeout
+    try:
+        while len(finished) < 2:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                source, chunk = chunks.get(timeout=remaining)
+            except queue.Empty:
+                raise subprocess.TimeoutExpired(command, timeout) from None
+            if chunk is None:
+                finished.add(source)
+            elif source == "stderr":
+                stderr_tail = (stderr_tail + chunk)[-700:]
+            else:
+                for char in chunk:
+                    if char in (10, 13):
+                        if progress_line and not oversized:
+                            previous = _progress(progress_line.decode("ascii", "replace"),
+                                                 previous, time.monotonic())
+                        progress_line.clear()
+                        oversized = False
+                    elif not oversized:
+                        if len(progress_line) < 128:
+                            progress_line.append(char)
+                        else:
+                            progress_line.clear()
+                            oversized = True
+        if progress_line and not oversized:
+            _progress(progress_line.decode("ascii", "replace"), previous, time.monotonic())
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(command, timeout)
+        proc.wait(timeout=remaining)
+    except subprocess.TimeoutExpired as exc:
+        stopped.set()
+        proc.kill()
+        proc.wait()
+        return f"{type(exc).__name__}: {exc}"
+    finally:
+        stopped.set()
+    if proc.returncode:
+        return stderr_tail.decode("utf-8", "replace").strip()[-700:] or f"Exit {proc.returncode}"
     return None
 
 
@@ -214,6 +336,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
         _marker_entwerten()
         constraints = _torch_festhalten()
         try:
+            _phase("nemo")
             error = _run(["-m", "pip", "install", "--no-cache-dir", "--upgrade",
                           *(["-c", constraints] if constraints else []),
                           f"nemo-toolkit[asr] @ {url}"], 900)
@@ -225,6 +348,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
             raise RuntimeError(f"NeMo-Installation: {error}")
         result = "installiert"
     if pin and _version("triton-windows") != pin:
+        _phase("triton")
         error = _run(["-m", "pip", "install", "--no-cache-dir",
                       f"triton-windows=={pin}"], 300)
         if error:
@@ -235,6 +359,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
              "from nemo.collections.asr.modules.transformer_encoder import "
              "_SUPPORTED_SELF_ATTENTION_MODELS; "
              "assert 'rope' in _SUPPORTED_SELF_ATTENTION_MODELS")
+    _phase("pruefung")
     error = _run(["-c", probe], 120)
     if error:
         _marker_entwerten()
@@ -243,19 +368,23 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
             # Die bekannten Begleitpakete koennen ebenso beschaedigt sein.
             lhotse_version = _version("lhotse")
             if lhotse_version:
+                _phase("lhotse_reparatur")
                 repair = _run(["-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
                                "--no-deps", f"lhotse=={lhotse_version}"], 300)
                 if repair:
                     raise RuntimeError(f"Lhotse-Reparatur: {repair}")
             if pin:
+                _phase("triton_reparatur")
                 repair = _run(["-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
                                "--no-deps", f"triton-windows=={pin}"], 300)
                 if repair:
                     raise RuntimeError(f"Triton-Reparatur: {repair}")
+            _phase("nemo_reparatur")
             repair = _run(["-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
                            "--no-deps", f"nemo-toolkit[asr] @ {url}"], 900)
             if repair:
                 raise RuntimeError(f"NeMo-Reparatur: {repair}")
+            _phase("pruefung")
             error = _run(["-c", probe], 120)
             if not error:
                 result = "installiert"
@@ -325,10 +454,14 @@ def _hintergrund(force: bool, neuester: bool = True) -> None:
     try:
         result = _install(force, neuester)
         with _lock:
-            _state.update(laeuft=False, ergebnis=result, fehler="")
+            _state.update(laeuft=False, ergebnis=result, fehler="", phase="fertig",
+                          download_current=0, download_total=0, download_speed=0,
+                          download_eta=None)
     except Exception as exc:
         with _lock:
-            _state.update(laeuft=False, ergebnis="fehler", fehler=str(exc)[-700:])
+            _state.update(laeuft=False, ergebnis="fehler", fehler=str(exc)[-700:],
+                          phase="fehler", download_current=0, download_total=0,
+                          download_speed=0, download_eta=None)
 
 
 def starten(force: bool = False, neuester: bool = True) -> bool:
@@ -340,12 +473,15 @@ def starten(force: bool = False, neuester: bool = True) -> bool:
     with _lock:
         if _state["laeuft"]:
             return False
-        _state.update(laeuft=True, ergebnis="", fehler="")
+        _state.update(laeuft=True, ergebnis="", fehler="", phase="vorbereitung",
+                      download_current=0, download_total=0, download_speed=0,
+                      download_eta=None)
     try:
         threading.Thread(target=_hintergrund, args=(force, neuester), name="nemotron-setup",
                          daemon=True).start()
     except RuntimeError:
         with _lock:
-            _state.update(laeuft=False, ergebnis="fehler", fehler="Installationsfaden nicht gestartet")
+            _state.update(laeuft=False, ergebnis="fehler", fehler="Installationsfaden nicht gestartet",
+                          phase="fehler")
         return False
     return True

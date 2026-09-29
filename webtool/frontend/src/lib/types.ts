@@ -201,8 +201,10 @@ export type Settings = {
   whisper_model: string; whisper_lang: string; whisper_choices: WhisperChoice[];
   diarization_model: 'pyannote' | 'nemotron3';
   nemotron_da: boolean;
-  nemotron: { bereit: boolean; version: string; revision: string; geprueft: string;
-              laeuft: boolean; ergebnis: string; fehler: string };
+    nemotron: { bereit: boolean; version: string; revision: string; geprueft: string;
+                laeuft: boolean; ergebnis: string; fehler: string; phase: string;
+                download_current: number; download_total: number; download_speed: number;
+                download_eta: number | null };
   /** Gleichzeitige Korrektur-Anfragen an die KI ("1".."parallel_max"). Wie `ytdlp_auto` der
    *  GESPEICHERTE Wert; er gilt, solange `parallel_env` leer ist — sonst gewinnt die
    *  Umgebung, und die wirksame Zahl steht in `parallel_env_wirksam`. (Hier stand „was
