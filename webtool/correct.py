@@ -1245,8 +1245,9 @@ def _light_prompt(base: str, tagged_path: str, cpath: str, context: str,
 Projekt-Kontext: {context or _default_context(ziel, dialekt, mehrsprachig)}
 1) Lies die Rohsegmente (Read-Tool): {tagged_path}
 2) KORRIGIERE NUR offensichtliche ASR-Fehler und Eigennamen{norm_satz} KEIN Umschreiben, keine Dialekt-Glättung, keine Normalisierung. Entferne [[...]]-Markierungen. {WIDERSPRUCH_REGEL} Löse ihn auf, wenn die richtige Lesart aus Klang und Zusammenhang EINDEUTIG folgt, und vermerke unter annotations als AUFLÖSUNG, was du woraus gemacht hast; sonst lass die Stelle unverändert und vermerke sie als UNGEKLÄRT.
-3) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
-4) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
+3) MUSIK/GESANG UND ASR-ARTEFAKTE: Bei eindeutig gesungenen oder sprachlosen Stellen (Musik, Jubel, Applaus) schreibe als text exakt „[Musik]“ statt erratenen Liedtextes. Offensichtliche ASR-Wiederholungsschleifen über Musik/Stille bekommen einen leeren text (""). GESPROCHENE Bühnenansagen bleiben Text. Im Zweifel den Rohtext belassen und den Zweifel unter annotations vermerken.
+4) SPRECHER: vergib pro (Sprecher N)-Cluster einen konsistenten Namen (meist „Interviewer" und die befragte Person). {CLUSTER_REGEL} Gib JEDEM Segment einen speaker.
+5) SUMMARY: eine Inhalts-Zusammenfassung (3-5 Sätze; nur echter Gesprächsinhalt, keine Berichte über ASR-Fehler oder leere Abschnitte).
 
 Schema (Write-Tool nach {cpath}):
 {{"base":"{base}","context":"1-2 Sätze","speakers":["…"],
