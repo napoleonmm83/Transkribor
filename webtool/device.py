@@ -39,6 +39,20 @@ def pick() -> str:
     return "cpu"
 
 
+def nemotron_eignung() -> tuple[bool, str]:
+    """Nemotron/NeMo nur auf CUDA-GPUs der von NVIDIA genannten Generationen anbieten."""
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return False, "Nemotron 3 benötigt eine NVIDIA-GPU mit CUDA (Ampere oder neuer)."
+        major, _ = torch.cuda.get_device_capability(0)
+    except (ImportError, OSError, RuntimeError, AssertionError):
+        return False, "Die CUDA-GPU konnte nicht geprüft werden."
+    if major < 8:
+        return False, "Die NVIDIA-GPU ist für Nemotron 3 zu alt (benötigt Ampere oder neuer)."
+    return True, ""
+
+
 def pick_asr() -> str:
     """"cuda" | "cpu" — fuer die Transkription mit faster-whisper/CTranslate2.
 

@@ -420,8 +420,9 @@ def _wirksames_diarisierungsmodell() -> str:
     gewaehlt = str(settings.load()["diarization_model"])  # `_lesen` normalisiert ohnehin
     if gewaehlt != "nemotron3":
         return gewaehlt
-    from . import nemotron_setup                    # lazy: liest nur Paket-Metadaten
-    if nemotron_setup.zustand()["bereit"]:
+    from . import nemotron_setup
+    status = nemotron_setup.zustand()
+    if status["bereit"] and status["geeignet"]:
         return gewaehlt
     print("↷ Nemotron 3 ist noch nicht bereit — Sprechertrennung mit pyannote", flush=True)
     return "pyannote"

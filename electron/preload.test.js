@@ -39,10 +39,11 @@ test('abbrechen ist die Bruecke für den Rückweg der Einrichtung (#242)', async
   assert.deepStrictEqual(aufrufe.at(-1), ['einrichten:abbrechen'])
 })
 
-test('der Kanal update ist erlaubt, ein erfundener nicht', () => {
+test('die Kanaele update und progress sind erlaubt, ein erfundener nicht', () => {
   freigegeben.on('update', () => {})
+  freigegeben.on('progress', () => {})
   freigegeben.on('kanal-den-es-nicht-gibt', () => {})
-  assert.deepStrictEqual(kanaele, ['update'])
+  assert.deepStrictEqual(kanaele, ['update', 'progress'])
 })
 
 test('on gibt eine Abmeldefunktion zurueck, die den Hoerer wieder entfernt', () => {

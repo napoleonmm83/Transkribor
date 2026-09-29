@@ -10,7 +10,7 @@ const BASIS = {
   provider: 'claude-cli', model: '', base_url: '', has_key: false,
   env_key: '', whisper_model: 'large-v3', whisper_lang: 'de', whisper_choices: [],
   diarization_model: 'pyannote', nemotron_da: false,
-  nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '',
+  nemotron: { geeignet: true, hardware_grund: '', bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '',
               phase: '', download_current: 0, download_total: 0, download_speed: 0, download_eta: null },
   providers: [], ai_ready: true, ai_reason: '', kaputt: '', projekte_pfad: '/tmp/projekte',
   parallel: '3', parallel_max: 16, parallel_default: '3', parallel_env: '', parallel_env_wirksam: '',

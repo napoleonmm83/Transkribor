@@ -23,6 +23,10 @@ def verfuegbar() -> bool:
 def _model():
     global _MODEL
     if _MODEL is None:
+        from . import device
+        geeignet, grund = device.nemotron_eignung()
+        if not geeignet:
+            raise RuntimeError(grund)
         from .hf_tls import configure
 
         configure()
@@ -32,7 +36,6 @@ def _model():
             raise RuntimeError("Nemotron 3 braucht die optionale Installation nemo-toolkit[asr]") from exc
         model = SortformerEncLabelModel.from_pretrained(MODEL_ID)
         model.eval()
-        from . import device
         model.to(device.pick())
         modules = model.sortformer_modules
         modules.spkcache_len = 264

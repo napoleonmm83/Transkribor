@@ -18,7 +18,7 @@ const nemoPhasen: Record<string, string> = {
   vorbereitung: 'Installation wird vorbereitet',
   nemo: 'NeMo-Pakete werden geladen und installiert',
   triton: 'Triton wird installiert',
-  pruefung: 'NeMo wird geprüft',
+  pruefung: 'Installation und Audiodekodierung prüfen',
   lhotse_reparatur: 'Lhotse wird repariert',
   triton_reparatur: 'Triton wird repariert',
   nemo_reparatur: 'NeMo wird repariert',
@@ -1109,9 +1109,10 @@ export function SettingsPage() {
           <SelectTrigger className="w-full" aria-labelledby="lbl-diarization-model"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="pyannote">pyannote · Standard</SelectItem>
-            <SelectItem value="nemotron3">NVIDIA Nemotron 3 · bis zu 8 Sprecher</SelectItem>
+            <SelectItem value="nemotron3" disabled={!s.nemotron.geeignet}>NVIDIA Nemotron 3 · bis zu 8 Sprecher</SelectItem>
           </SelectContent>
         </Select>
+        {!s.nemotron.geeignet && <p className="text-xs text-muted-foreground">{s.nemotron.hardware_grund}</p>}
         <p className="text-sm">
           Transkribor trennt die Sprecher akustisch. Die Auswahl gilt für künftige Diarisierungen.
         </p>
@@ -1120,29 +1121,20 @@ export function SettingsPage() {
             {/* Nach einem Fehlschlag sagt die Seite NICHT mehr „startet automatisch": die
                 Tagesbremse lässt die Automatik am selben Tag nicht wieder anlaufen (und bei
                 einem torch außerhalb der Triton-Tabelle gar nicht) — der Satz wäre falsch. */}
-            <p>{s.nemotron.laeuft ? 'NeMo-Pakete werden geprüft und installiert …'
+            <p>{!s.nemotron.geeignet ? 'Nemotron 3 ist auf dieser Hardware nicht verfügbar.'
+              : s.nemotron.laeuft ? 'NeMo-Pakete werden geprüft und installiert …'
               : s.nemotron.bereit ? `NeMo ${s.nemotron.version} ist bereit.`
               : s.nemotron.fehler
               ? 'Die Einrichtung hat nicht geklappt (Grund unten). „Geprüfte Fassung einrichten" versucht es sofort erneut.'
               : 'NeMo fehlt oder ist für Nemotron 3 nicht geeignet. Die Einrichtung der geprüften Fassung startet automatisch.'}
               {!s.nemotron.bereit && ' Bis dahin trennt das Standardmodell pyannote die Sprecher.'}
               {' '}Eine feste Sprecherzahl kann Nemotron 3 nicht übernehmen.</p>
-            {s.nemotron.laeuft && <div className="space-y-1.5" role="status">
-              <p className="text-sm text-foreground">
-                {nemoPhasen[s.nemotron.phase] || 'Installation läuft'}
-              </p>
-              <div role="progressbar" aria-label="NeMo-Einrichtung" aria-valuemin={0}
-                aria-valuemax={s.nemotron.download_total || undefined}
-                aria-valuenow={s.nemotron.download_total ? s.nemotron.download_current : undefined}
-                aria-valuetext={s.nemotron.download_total
-                  ? `${Math.round(100 * s.nemotron.download_current / s.nemotron.download_total)} Prozent dieses Downloads`
-                  : 'Installationsschritt läuft'}
-                className="h-2 overflow-hidden rounded-full bg-muted">
-                <div className={`h-full rounded-full bg-primary transition-[width] ${s.nemotron.download_total ? '' : 'w-1/3 animate-pulse'}`}
-                  style={s.nemotron.download_total
-                    ? { width: `${Math.min(100, 100 * s.nemotron.download_current / s.nemotron.download_total)}%` }
-                    : undefined} />
-              </div>
+            {s.nemotron.laeuft && <div className="space-y-2" role="status">
+              <p>{nemoPhasen[s.nemotron.phase] || s.nemotron.phase || 'NeMo-Pakete installieren'}</p>
+              <progress aria-label="NeMo-Gesamtfortschritt" max={100}
+                value={s.nemotron.fortschritt ?? 0} className="h-2 w-full accent-primary" />
+              <p>Gesamtfortschritt: {s.nemotron.fortschritt ?? 0} % der Einrichtungsschritte abgeschlossen.
+                {' '}Die verbleibende Gesamtzeit lässt sich derzeit nicht abschätzen.</p>
               {s.nemotron.download_total > 0 && <p>
                 {Math.round(100 * s.nemotron.download_current / s.nemotron.download_total)} % dieses Downloads
                 {s.nemotron.download_speed > 0 && ` · ${(s.nemotron.download_speed / 1048576).toFixed(1)} MiB/s`}
@@ -1152,12 +1144,12 @@ export function SettingsPage() {
             {s.nemotron.fehler && <p role="alert" className="text-destructive">{s.nemotron.fehler}</p>}
             {s.nemotron.geprueft && <p>Zuletzt geprüft: {tag(s.nemotron.geprueft)}</p>}
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft}
+              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft || !s.nemotron.geeignet}
                 onClick={() => nemotronJetzt('geprueft')}>
                 {s.nemotron.laeuft && <Loader2 className="size-3.5 animate-spin" />}
                 Geprüfte Fassung einrichten
               </Button>
-              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft}
+              <Button variant="outline" size="sm" disabled={s.nemotron.laeuft || !s.nemotron.geeignet}
                 onClick={() => nemotronJetzt('neuester')}>
                 Neuesten NeMo-Stand holen
               </Button>

@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('transkribor', {
   // Gibt eine Abmeldefunktion zurueck, damit Hoerer (z.B. in React-Hooks beim Unmount)
   // sich wieder loesen koennen — sonst haeuft ein wiederholt geoeffneter Screen sie an.
   on: (kanal, fn) => {
-    if (!['log', 'phase', 'status', 'fehler', 'update'].includes(kanal)) return () => {}
+    if (!['log', 'phase', 'progress', 'status', 'fehler', 'update'].includes(kanal)) return () => {}
     const hoerer = (_e, nutzlast) => fn(nutzlast)
     ipcRenderer.on(kanal, hoerer)
     return () => ipcRenderer.removeListener(kanal, hoerer)

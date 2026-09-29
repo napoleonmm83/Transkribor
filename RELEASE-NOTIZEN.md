@@ -28,6 +28,11 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Der Gesamtfortschritt der Einrichtung beginnt beim Wechsel zum nächsten Paket nicht mehr von vorn; Download-Prozent und Restzeit beziehen sich getrennt auf die aktuelle Datei.
+- Nach der Nemotron-Einrichtung funktionieren Transkription und Sprecher-Erkennung auch mit den gemeinsam installierten Audio-Paketen wieder.
+- Nemotron lässt sich nur mit einer geeigneten NVIDIA-GPU auswählen und laden; bei ungeeigneter Hardware erscheint der Grund direkt in den Einstellungen.
+
 ## v0.58.1 — 2026-09-29
 
 **Neu**

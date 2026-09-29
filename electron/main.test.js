@@ -188,6 +188,7 @@ function attrappen(opt = {}) {
     log: () => ['zeile'],
   }
   w.setup = {
+    pipFortschritt: z => opt.pipFortschritt?.(z) || null,
     status: async () => w.status,
     einrichten: async (onLog, onPhase) => {
       w.spur.push('setup.einrichten')
@@ -348,6 +349,14 @@ test('zwei Klicks auf Einrichten ergeben EIN pip install (einrichtungLaeuft)', a
   const [a, b] = [w.ruf('einrichten'), w.ruf('einrichten')]
   await Promise.all([a, b])
   assert.strictEqual(w.spur.filter(s => s === 'setup.einrichten').length, 1)
+})
+
+test('pip-Bytes erreichen die Seite als Fortschritt und nicht als Protokollflut', async () => {
+  const w = await laden({ status: { venv: false }, einrichtLog: 'Progress 5 of 10',
+    pipFortschritt: () => ({ bytes: 5, gesamt: 10 }) })
+  await w.ruf('einrichten')
+  assert.ok(w.gesendet.some(g => g.kanal === 'progress' && g.nutzlast.bytes === 5))
+  assert.ok(!w.protokollzeilen.includes('Progress 5 of 10'))
 })
 
 test('nach dem Lauf ist der Riegel wieder offen (finally)', async () => {

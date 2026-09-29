@@ -65,7 +65,8 @@ def test_pip_streaming_verwendet_raw_und_begrenzt_fehler(monkeypatch):
 
 
 @pytest.mark.parametrize(("version", "erwartet"), [
-    ("23.0.1", False), ("23.1", True), ("25.2", True), (None, False), ("kaputt", False),
+    ("23.0.1", False), ("23.1", False), ("24.0", False), ("24.1", True),
+    ("25.2", True), (None, False), ("kaputt", False),
 ])
 def test_raw_fortschritt_nur_mit_kompatiblem_pip(monkeypatch, version, erwartet):
     monkeypatch.setattr(nemotron_setup, "_version", lambda name: version if name == "pip" else None)
@@ -85,7 +86,7 @@ def test_altes_pip_installiert_ohne_raw_option(monkeypatch):
         def wait(self, timeout=None):
             return self.returncode
 
-    monkeypatch.setattr(nemotron_setup, "_version", lambda name: "23.0" if name == "pip" else None)
+    monkeypatch.setattr(nemotron_setup, "_version", lambda name: "24.0" if name == "pip" else None)
     monkeypatch.setattr(nemotron_setup.subprocess, "Popen", FakeProcess)
     assert nemotron_setup._run(["-m", "pip", "install", "some-package"], 5) is None
     assert gesehen["command"] == [nemotron_setup.sys.executable, "-m", "pip", "install", "some-package"]
@@ -122,6 +123,62 @@ def test_python_314_blockiert_vor_pip_und_meldet_grund(monkeypatch):
     assert nemotron_setup._faellig() is False
     with pytest.raises(RuntimeError, match="Python 3.14"):
         nemotron_setup._install(force=True)
+
+
+@pytest.fixture(autouse=True)
+def passende_gpu(monkeypatch):
+    monkeypatch.setattr(nemotron_setup.device, "nemotron_eignung", lambda: (True, ""))
+
+
+def test_grundsetup_begrenzt_pyav_auf_decoder_kompatible_fassungen():
+    from pathlib import Path
+
+    from packaging.requirements import Requirement
+
+    zeilen = (Path(__file__).parents[1] / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    av = next((Requirement(z) for z in zeilen if z.startswith("av")), None)
+    assert av is not None, "Der reale Decodervertrag muss im Grundsetup stehen"
+    assert av.specifier.contains("18.1.0")
+    assert not av.specifier.contains("19.0.0")
+
+
+def test_nemo_constraints_schuetzen_den_gemeinsamen_audio_decoder(monkeypatch):
+    from pathlib import Path
+
+    monkeypatch.setattr(nemotron_setup, "_version", lambda n: "2.11.0+cu128" if n == "torch" else None)
+    pfad = Path(nemotron_setup._torch_festhalten())
+    try:
+        assert "av>=11,<19" in pfad.read_text(encoding="utf-8").splitlines()
+    finally:
+        pfad.unlink()
+
+
+def test_nemo_gesamtfortschritt_nennt_installation_gpu_und_pruefung(monkeypatch, tmp_path):
+    _marker_setzen(monkeypatch, tmp_path, {})
+    monkeypatch.setattr(nemotron_setup, "_triton_pin", lambda: None)
+    monkeypatch.setattr(nemotron_setup, "_version", lambda n: None)
+    monkeypatch.setattr(nemotron_setup, "_state", {"laeuft": True})
+    gesehen = []
+
+    def run(args, timeout):
+        gesehen.append(dict(nemotron_setup._state))
+        return None
+
+    monkeypatch.setattr(nemotron_setup, "_run", run)
+    nemotron_setup._hintergrund(True, False)
+    assert gesehen[0]["fortschritt"] == 0
+    assert gesehen[0]["phase"] == "nemo"
+    assert gesehen[-1]["fortschritt"] == 67
+    assert gesehen[-1]["phase"] == "pruefung"
+    assert nemotron_setup._state["fortschritt"] == 100
+
+
+# AIRLOCK-OHNE-PLANWERKZEUG: Plan im Gespraech vorgelegt und am 29.09.2026 freigegeben.
+def test_nemotron_startet_ohne_passende_cuda_gpu_nicht(monkeypatch):
+    monkeypatch.setattr(nemotron_setup.device, "nemotron_eignung", lambda: (False, "CUDA-GPU fehlt"))
+    assert nemotron_setup.starten(force=True) is False
+    assert nemotron_setup.zustand()["geeignet"] is False
+    assert nemotron_setup.zustand()["hardware_grund"] == "CUDA-GPU fehlt"
 
 
 # AIRLOCK-OHNE-PLANWERKZEUG: Der Benutzer hat die automatische Installation und
@@ -444,7 +501,7 @@ def test_nemo_pip_haelt_die_installierte_torch_fassung_fest(monkeypatch, tmp_pat
 
     monkeypatch.setattr(nemotron_setup, "_run", run)
     assert nemotron_setup._install_gesperrt(force=False) == "installiert"
-    assert gesehen["inhalt"].split() == ["torch==2.11.0+cu128", "torchaudio==2.11.0+cu128"]
+    assert gesehen["inhalt"].split() == ["torch==2.11.0+cu128", "torchaudio==2.11.0+cu128", "av>=11,<19"]
     import os
     assert not os.path.exists(gesehen["pfad"])
 

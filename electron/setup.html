@@ -33,6 +33,11 @@
   #balken { display:none; height:3px; margin:0 0 20px; border-radius:3px;
             background:var(--line); overflow:hidden; }
   #balken.an { display:block; }
+  #balken.bestimmt::after { display:none; }
+  #fuellung { display:none; height:100%; background:var(--akzent); transition:width .25s linear; }
+  #balken.bestimmt #fuellung { display:block; }
+  #gesamt-stand { display:none; margin:0 0 6px; font-size:13px; }
+  #fortschritt { display:none; margin:-12px 0 18px; color:var(--fg); font-size:13px; }
   #balken::after { content:""; display:block; height:100%; width:30%; border-radius:3px;
                    background:var(--akzent); animation:gleiten 1.5s cubic-bezier(.65,0,.35,1) infinite; }
   @keyframes gleiten { from { transform:translateX(-100%) } to { transform:translateX(333%) } }
@@ -60,8 +65,8 @@
   button.leise { background:transparent; color:var(--fg); border-color:var(--line); font-weight:400; }
   /* Im Fehlerfall ist die Protokolldatei das Einzige, was der Nutzer weitergeben kann. */
   button.hervor { border-color:var(--akzent); color:var(--akzent); }
-  .zeile { display:flex; gap:10px; align-items:center; }
-  #phase { color:var(--akzent); }
+  .zeile { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  #phase { color:var(--akzent); overflow-wrap:anywhere; min-width:0; }
   #log { display:none; margin-top:18px; max-height:34vh; overflow:auto; background:var(--log-bg); border:1px solid var(--line);
          border-radius:8px; padding:10px 12px; font:12px/1.5 ui-monospace, Consolas, monospace; color:var(--dim);
          white-space:pre-wrap; word-break:break-word; }
@@ -80,7 +85,9 @@
   <h1>Transkribor</h1>
   <p class="sub" id="sub">Prüfe die Umgebung …</p>
 
-  <div id="balken" class="an" role="progressbar" aria-label="Vorgang läuft"></div>
+  <p id="gesamt-stand" aria-live="polite"></p>
+  <div id="balken" class="an" role="progressbar" aria-label="Gesamtfortschritt der Einrichtung" aria-valuemin="0" aria-valuemax="100"><div id="fuellung"></div></div>
+  <p id="fortschritt" aria-live="polite"></p>
 
   <ul class="check" id="check">
     <li class="skel"><span style="width:42%"></span></li>
@@ -131,6 +138,78 @@ const log = $('log'), check = $('check')
 /** Der Fortschrittsbalken. `an` heisst: die App arbeitet gerade. Wartet sie auf einen Klick,
  *  muss er aus sein — sonst behauptet die Seite Arbeit, die niemand tut. */
 const laeuft = an => $('balken').classList.toggle('an', an)
+let downloadStand = null
+let kernschritt = 0
+let einrichtungFertig = false
+function schrittFortschritt(name) {
+  if (name === 'pip aktualisieren') kernschritt = 1
+  else if (name.startsWith('PyTorch')) kernschritt = 2
+  else if (name === 'Whisper und Werkzeuge laden') kernschritt = 3
+  else if (name === 'Prüfen') kernschritt = 4
+  const anteil = kernschritt ? Math.round((kernschritt - 1) / 4 * 100) : 0
+  $('balken').classList.toggle('bestimmt', kernschritt > 0)
+  if (kernschritt) {
+    $('balken').setAttribute('aria-valuenow', String(anteil))
+    $('fuellung').style.width = anteil + '%'
+    $('gesamt-stand').textContent = `Gesamtfortschritt: ${anteil} % · ${kernschritt - 1} von 4 Einrichtungsschritten abgeschlossen`
+    $('gesamt-stand').style.display = 'block'
+  }
+}
+function fortschrittReset() {
+  downloadStand = null
+  $('fortschritt').style.display = 'none'
+}
+function einrichtungReset() {
+  fortschrittReset()
+  kernschritt = 0
+  einrichtungFertig = false
+  $('gesamt-stand').style.display = 'none'
+  $('balken').classList.remove('bestimmt')
+  $('balken').removeAttribute('aria-valuenow')
+  $('fuellung').style.width = '0%'
+}
+const groesse = bytes => (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+function downloadFortschritt(p) {
+  if (p.fertig) {
+    einrichtungFertig = true
+    fortschrittReset()
+    $('balken').classList.add('bestimmt')
+    $('balken').setAttribute('aria-valuenow', '100')
+    $('fuellung').style.width = '100%'
+    $('gesamt-stand').textContent = 'Gesamtfortschritt: 100 % · 4 von 4 Einrichtungsschritten abgeschlossen'
+    $('gesamt-stand').style.display = 'block'
+    $('fortschritt').textContent = 'Einrichtung abgeschlossen · Anwendung startet …'
+    $('fortschritt').style.display = 'block'
+    return
+  }
+  if (p.installation) {
+    fortschrittReset()
+    $('fortschritt').textContent = 'Heruntergeladene Pakete werden jetzt installiert' +
+      ' · Restzeit derzeit nicht abschätzbar.'
+    $('fortschritt').style.display = 'block'
+    return
+  }
+  if (p.aktion && p.paket) {
+    fortschrittReset()
+    $('fortschritt').textContent = `${p.aktion}: ${p.paket}`
+    $('fortschritt').style.display = 'block'
+    return
+  }
+  if (!Number.isFinite(p.bytes) || !Number.isFinite(p.gesamt) || p.gesamt <= 0) return
+  const jetzt = Date.now()
+  if (!downloadStand || (p.download && p.download !== downloadStand.name)
+      || p.bytes < downloadStand.anfang || p.gesamt !== downloadStand.gesamt || p.bytes === 0) {
+    downloadStand = { anfang: p.bytes, gesamt: p.gesamt, seit: jetzt, name: p.download || 'Paket' }
+  }
+  const bytes = Math.min(p.bytes, p.gesamt)
+  const prozent = Math.floor(bytes / p.gesamt * 100)
+  const sekunden = (jetzt - downloadStand.seit) / 1000
+  const tempo = sekunden > 3 ? (bytes - downloadStand.anfang) / sekunden : 0
+  const rest = tempo > 0 ? Math.ceil((p.gesamt - bytes) / tempo / 60) : null
+  $('fortschritt').textContent = `${downloadStand.name}: ${prozent} % · ${groesse(bytes)} / ${groesse(p.gesamt)}`
+    + (rest === null ? ' · Restzeit wird ermittelt' : ` · ca. ${rest} Min. verbleibend`)
+  $('fortschritt').style.display = 'block'
+}
 
 function zeile(was, ok, wert) {
   const li = document.createElement('li')
@@ -216,8 +295,17 @@ window.transkribor.on('status', zeigeStatus)
 window.transkribor.on('log', anhaengen)
 // Phasen kommen auch, wenn main.js von sich aus einrichtet — dann hat niemand geklickt und
 // der Balken stuende sonst still, waehrend Minuten Arbeit laufen.
-window.transkribor.on('phase', p => { $('phase').textContent = p.schritt + ' …'; laeuft(true) })
+window.transkribor.on('phase', p => {
+  if (!(einrichtungFertig && p.schritt === 'Server starten')) {
+    fortschrittReset(); schrittFortschritt(p.schritt)
+  }
+  $('los').style.display = 'none'
+  $('abbrechen').style.display = ''
+  $('phase').textContent = p.schritt + ' …'; laeuft(true)
+})
+window.transkribor.on('progress', downloadFortschritt)
 window.transkribor.on('fehler', t => {
+  einrichtungReset()
   laeuft(false)
   $('fehler').style.display = 'block'
   $('fehler').textContent = t
@@ -248,6 +336,7 @@ $('los').onclick = async () => {
     return
   }
   scharf = false
+  einrichtungReset()
   $('los').style.display = 'none'
   $('abbrechen').style.display = ''
   // Fokus nachziehen: los ist versteckt, der Fokus hinge sonst auf einem unsichtbaren
@@ -263,6 +352,7 @@ $('los').onclick = async () => {
     // der Knopf fuer einen erneuten Versuch frei. Merker ungeschrieben => venv gilt als
     // veraltet, die Seite fragt beim naechsten Start wieder (#181-Konsistenz).
     laeuft(false)
+    einrichtungReset()
     $('phase').textContent = ''
     $('sub').textContent = 'Abgebrochen — die Einrichtung wird beim nächsten Start wieder angeboten.'
     $('los').textContent = 'Erneut versuchen'
