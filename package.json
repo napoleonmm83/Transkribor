@@ -48,6 +48,7 @@
           "!models/ggml/**",
           "!webtool/frontend/**",
           "!webtool/test_*.py",
+          "!webtool/conftest.py",
           "!**/__pycache__/**"
         ]
       }
