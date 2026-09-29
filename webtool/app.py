@@ -725,12 +725,13 @@ def dateieinstellungen(project: str, base: str):
     # wuerde, sagt das SCHWESTERFELD `pyannote_da` (#270): gecacht je Serverlauf, ohne
     # torch im Request-Pfad (find_spec + Dateistat, Details in diarize.verfuegbar).
     # Offen bleibt dort der Laufzeitfall (GPU voll) — best-effort beim Lauf wie bisher.
+    nemotron = nemotron_setup.zustand()
     return {**_projekt.datei_ansicht(project, base),
             "sprach_choices": _sprachen.fuer_frontend(), "tiefen": _sprachen.TIEFEN,
             "sprecher_max": _sprachen.SPRECHER_MAX,
             "diarisierung_aktiv": _correct.diarize_enabled(),
             "pyannote_da": _diarize.verfuegbar(),
-            "nemotron_da": nemotron_setup.zustand()["bereit"],
+            "nemotron_da": nemotron["bereit"] and nemotron["geeignet"],
             "diarization_model": settings.load()["diarization_model"]}
 
 
@@ -2541,7 +2542,7 @@ def _settings_body(cfg: dict | None = None) -> dict:
     return {**settings.public(cfg), "providers": llm.provider_list(),
             "env_key": llm.env_key_hint(),
             "whisper_choices": list(settings.WHISPER_CHOICES),
-            "nemotron_da": nemotron["bereit"],
+            "nemotron_da": nemotron["bereit"] and nemotron["geeignet"],
             "nemotron": nemotron,
             # Wo die Arbeit des Nutzers liegt (#218). Der Server ist die richtige Quelle: in
             # der gepackten App setzt `electron/backend.js` `TRANSKRIBOR_PROJEKTE` aus
@@ -2581,6 +2582,10 @@ def put_settings(body: SettingsBody):
                             detail=f"unbekanntes Whisper-Modell: {patch['whisper_model']}")
     if "diarization_model" in patch and patch["diarization_model"] not in settings.DIARIZATION_MODELS:
         raise HTTPException(status_code=400, detail="unbekanntes Diarisierungsmodell")
+    if patch.get("diarization_model") == "nemotron3":
+        geeignet, grund = device.nemotron_eignung()
+        if not geeignet:
+            raise HTTPException(status_code=400, detail=grund)
     if "parallel" in patch and not settings.parallel_ok(patch["parallel"]):
         raise HTTPException(
             status_code=400,
@@ -2613,6 +2618,9 @@ class NemotronUpdateBody(BaseModel):
 
 @app.post("/api/settings/nemotron/update")
 def settings_nemotron_update(body: NemotronUpdateBody | None = None):
+    geeignet, grund = device.nemotron_eignung()
+    if not geeignet:
+        raise HTTPException(status_code=400, detail=grund)
     ziel = (body or NemotronUpdateBody()).ziel
     if ziel not in ("geprueft", "neuester"):
         raise HTTPException(status_code=400, detail="unbekanntes Ziel")

@@ -1,6 +1,7 @@
 """Geraetewahl — mit gefaelschtem torch, damit der Test ohne GPU ueberall laeuft."""
 import sys
 import types
+import builtins
 
 import pytest
 
@@ -32,6 +33,30 @@ def _torch(cuda=False, mps=False, name="Fake GPU"):
 def test_cuda_gewinnt_vor_mps(monkeypatch):
     monkeypatch.setitem(sys.modules, "torch", _torch(cuda=True, mps=True))
     assert device.pick() == "cuda"
+
+
+@pytest.mark.parametrize(("cuda", "major", "geeignet"), [
+    (False, 0, False), (True, 7, False), (True, 8, True), (True, 12, True),
+])
+def test_nemotron_eignung_nutzt_cuda_architektur(monkeypatch, cuda, major, geeignet):
+    t = _torch(cuda=cuda)
+    t.cuda.get_device_capability = lambda i: (major, 0)
+    monkeypatch.setitem(sys.modules, "torch", t)
+    assert device.nemotron_eignung()[0] is geeignet
+
+
+def test_nemotron_eignung_uebersteht_defekte_torch_dll(monkeypatch):
+    original = builtins.__import__
+
+    def importieren(name, *args, **kwargs):
+        if name == "torch":
+            raise OSError("DLL konnte nicht geladen werden")
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", importieren)
+    geeignet, grund = device.nemotron_eignung()
+    assert geeignet is False
+    assert "CUDA-GPU" in grund
 
 
 def test_mps_wenn_kein_cuda(monkeypatch):

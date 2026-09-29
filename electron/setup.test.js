@@ -208,6 +208,14 @@ test('Migration lehnt venv ausserhalb des benannten Datenordners vor jedem Versc
   } finally { fs.rmSync(root, { recursive: true, force: true }) }
 })
 
+// AIRLOCK-OHNE-PLANWERKZEUG: Plan im Gespraech vorgelegt und am 29.09.2026 freigegeben.
+test('pip-Rohfortschritt liefert Bytes und ignoriert unbekannte Gesamtgroessen', () => {
+  const { pipFortschritt } = require('./setup')
+  assert.deepStrictEqual(pipFortschritt('Progress 1048576 of 2097152'), { bytes: 1048576, gesamt: 2097152 })
+  assert.strictEqual(pipFortschritt('Progress 1048576 of 0'), null)
+  assert.strictEqual(pipFortschritt('Collecting torch'), null)
+})
+
 /** process.platform ist read-only — fuer den Test kurz umbiegen und sicher zuruecksetzen. */
 function aufPlattform(p, fn) {
   const echt = process.platform

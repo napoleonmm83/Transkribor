@@ -202,7 +202,8 @@ export type Settings = {
   diarization_model: 'pyannote' | 'nemotron3';
   nemotron_da: boolean;
     nemotron: { bereit: boolean; version: string; revision: string; geprueft: string;
-                laeuft: boolean; ergebnis: string; fehler: string; phase: string;
+                laeuft: boolean; ergebnis: string; fehler: string; phase: string; fortschritt?: number;
+                geeignet: boolean; hardware_grund: string;
                 download_current: number; download_total: number; download_speed: number;
                 download_eta: number | null };
   /** Gleichzeitige Korrektur-Anfragen an die KI ("1".."parallel_max"). Wie `ytdlp_auto` der

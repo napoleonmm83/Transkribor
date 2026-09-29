@@ -621,7 +621,27 @@ ipcMain.handle('projekteOeffnen', async () => {
 let einrichtungLaeuft = null
 ipcMain.handle('einrichten', () => {
   if (einrichtungLaeuft) return einrichtungLaeuft
-  einrichtungLaeuft = setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
+  let download = ''
+  einrichtungLaeuft = setup.einrichten(z => {
+    const p = setup.pipFortschritt(z)
+    if (p) {
+      senden('progress', { ...p, download })
+      return
+    }
+    if (/^Progress \d+ of 0$/.test(z)) return // pip kennt die Dateigroesse nicht
+    const m = /^\s*Downloading\s+(.+?)(?:\s+\(|$)/.exec(z)
+    if (m) {
+      download = m[1]
+      senden('progress', { aktion: 'Herunterladen', paket: download })
+    }
+    const paket = /^\s*(Collecting|Using cached|Building wheel for)\s+(.+)$/.exec(z)
+    if (paket) senden('progress', {
+      aktion: { Collecting: 'Abhängigkeiten auflösen', 'Using cached': 'Aus dem Cache laden',
+        'Building wheel for': 'Paket bauen' }[paket[1]], paket: paket[2],
+    })
+    if (z.startsWith('Installing collected packages:')) senden('progress', { installation: true })
+    senden('log', z)
+  }, s => { download = ''; senden('phase', { schritt: s }) })
     .then(async r => {
       if (r.weiterMitAlt) {
         // Eine gescheiterte 3.13-Migration hat die vorherige 3.14-venv wiederhergestellt.
@@ -630,7 +650,10 @@ ipcMain.handle('einrichten', () => {
         if (!r.abgebrochen) senden('fehler', r.fehler)
         senden('log', 'Bisherige Python-Umgebung wiederhergestellt — starte Transkribor damit.')
         await serverStarten()
-      } else if (r.ok) await serverStarten()
+      } else if (r.ok) {
+        senden('progress', { fertig: true })
+        await serverStarten()
+      }
       // Ein GEWOLLTER Abbruch ist kein Fehler: die Seite zeigt ihn aus dem Rueckgabewert,
       // nicht rot (#242). Ohne die Ausnahme stuende "Abgebrochen" als FEHLER-Zeile im
       // Protokoll und auf der Seite.

@@ -6,6 +6,14 @@ import pytest
 from webtool import nemotron_diarize
 
 
+def test_modell_download_beginnt_ohne_passende_gpu_nicht(monkeypatch):
+    monkeypatch.setattr(nemotron_diarize, "_MODEL", None)
+    monkeypatch.setattr("webtool.device.nemotron_eignung", lambda: (False, "CUDA-GPU fehlt"))
+    monkeypatch.setattr("webtool.hf_tls.configure", lambda: pytest.fail("Downloadvorbereitung gestartet"))
+    with pytest.raises(RuntimeError, match="CUDA-GPU fehlt"):
+        nemotron_diarize._model()
+
+
 def test_diarize_file_converts_nemo_segments(monkeypatch):
     class Model:
         def diarize(self, **kwargs):
@@ -42,6 +50,7 @@ def test_availability_does_not_break_settings_when_nemo_import_is_broken(monkeyp
 
 def test_model_loads_offline_configuration_lazily(monkeypatch):
     called = []
+    monkeypatch.setattr("webtool.device.nemotron_eignung", lambda: (True, ""))
     monkeypatch.setattr("webtool.hf_tls.configure", lambda: called.append("tls"))
 
     class Model:

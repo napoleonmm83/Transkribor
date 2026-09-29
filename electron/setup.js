@@ -121,7 +121,14 @@ async function paketmanager() {
 }
 
 /** Kommando ausfuehren und jede Zeile melden. Loest mit dem Exitcode auf, wirft nie. */
-function lauf(cmd, args, onLine, opts = {}) {
+async function lauf(cmd, args, onLine, opts = {}) {
+  if (abbruchFlag) return -1
+  const pipInstall = args[0] === '-m' && args[1] === 'pip' && args[2] === 'install'
+  // Das Selbstupgrade muss auch mit alten pip-Fassungen ohne "raw" gelingen.
+  if (pipInstall && !args.slice(3).includes('pip')) {
+    const hilfe = await ausgabe(cmd, ['-m', 'pip', 'install', '--help'])
+    args = [...args, '--progress-bar', /\braw\b/.test(hilfe || '') ? 'raw' : 'off']
+  }
   return new Promise(resolve => {
     // Abbruch VOR dem Start: ein Merker aus der Zeit eines kurzen Sondierungs-Schritts
     // darf nicht noch einen neuen Prozess aufmachen (#242).
@@ -161,6 +168,12 @@ function lauf(cmd, args, onLine, opts = {}) {
       resolve(code === null ? -1 : code)
     })
   })
+}
+
+function pipFortschritt(zeile) {
+  const treffer = /^Progress (\d+) of (\d+)$/.exec(zeile.trim())
+  if (!treffer || !Number(treffer[2])) return null
+  return { bytes: Number(treffer[1]), gesamt: Number(treffer[2]) }
 }
 
 /** Ergebnis eines abgebrochenen Laufs. Eigener Schluessel `abgebrochen`, damit die Seite
@@ -351,7 +364,11 @@ async function importeDa() {
   // faster_whisper statt whisper: seit dem Engine-Wechsel ist openai-whisper nicht mehr
   // installiert — die alte Zeile haette JEDE fertige venv als unvollstaendig gemeldet und
   // bei jedem Start eine Neuinstallation ausgeloest.
-  const r = await ausgabe(py, ['-c', 'import torch, faster_whisper, fastapi, uvicorn; print("ok")'])
+  const probe = `import sys; sys.path.insert(0, ${JSON.stringify(P.pyRoot)}); `
+    + 'import torch, faster_whisper, fastapi, uvicorn; '
+    + 'from webtool.audio_runtime import pruefen; pruefen(); print("ok")'
+  // Python darf auch bei dieser Probe kein __pycache__ ins signierte macOS-Bundle schreiben.
+  const r = await ausgabe(py, ['-B', '-c', probe])
   return r !== null && r.includes('ok')
 }
 
@@ -723,4 +740,4 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
 module.exports = { status, einrichten, abbrechen, abbruchZurueck, lauf, findePython, plan, spawnEnv, wingetFfmpeg,
                    nutztWhisperCpp, paketeAktuell, stempelSchreiben, stempelSchreibbar,
                    venvZustand, cudaVerloren, cudaZurueckholen, venvVersion, migrationAusfuehren,
-                   migrationNoetig, migrationsStatus, bereinigeBackup }
+                   migrationNoetig, migrationsStatus, bereinigeBackup, pipFortschritt }

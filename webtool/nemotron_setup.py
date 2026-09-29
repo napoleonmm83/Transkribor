@@ -30,23 +30,28 @@ from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
 
+from . import device
+
 GEPRUEFTE_REVISION = "cf724ac337d1ebc7d0dda1e23fb80916f52927a5"
 _GITHUB_API = "https://api.github.com/repos/NVIDIA-NeMo/Speech/commits/main"
 _TRITON = {"2.10": "3.6.0.post26", "2.11": "3.6.0.post26",
            "2.12": "3.7.1.post27", "2.13": "3.7.1.post27",
            "2.14": "3.8.0.post28"}
 _lock = threading.Lock()
-_state = {"laeuft": False, "ergebnis": "", "fehler": "", "phase": "",
+_state = {"laeuft": False, "ergebnis": "", "fehler": "", "phase": "", "fortschritt": 0,
           "download_current": 0, "download_total": 0, "download_speed": 0,
           "download_eta": None}
+_AV = "av>=11,<19"
 _haelt_pip_lock = False
 _RAW_PROGRESS = re.compile(r"^Progress (\d+) of (\d+)\s*$")
 
 
-def _phase(name: str) -> None:
+def _phase(name: str, fortschritt: int | None = None) -> None:
     with _lock:
         _state.update(phase=name, download_current=0, download_total=0,
                       download_speed=0, download_eta=None)
+        if fortschritt is not None:
+            _state["fortschritt"] = fortschritt
 
 
 def _progress(line: str, previous: tuple[int, int, float] | None,
@@ -152,7 +157,9 @@ def zustand() -> dict:
         elif not lauf["fehler"] and not bereit and marker.get("quelle") == "knopf":
             lauf["fehler"] = ("Die per Knopf geholte NeMo-Fassung ist unvollständig — "
                               "„Geprüfte Fassung einrichten“ richtet sie neu ein.")
-    return {"bereit": bereit, "version": _version("nemo-toolkit") or "",
+    geeignet, hardware_grund = device.nemotron_eignung()
+    return {"bereit": bereit, "geeignet": geeignet, "hardware_grund": hardware_grund,
+            "version": _version("nemo-toolkit") or "",
             "revision": marker.get("revision", ""), "geprueft": marker.get("geprueft", ""),
             **lauf}
 
@@ -301,8 +308,8 @@ def _run_pip(args: list[str], timeout: int) -> str | None:
     return None
 
 
-def _torch_festhalten() -> str | None:
-    """Constraint-Datei mit der INSTALLIERTEN torch-Fassung — oder None ohne torch.
+def _torch_festhalten() -> str:
+    """Constraints fuer den Audio-Decoder und die INSTALLIERTE torch-Fassung.
 
     CodeRabbit-Bot an PR #645: NeMo verlangt `torch>=2.7.0`, und `pip install --upgrade`
     hebt eine aeltere Abhaengigkeit dann von PyPI — auf Windows ein CPU-Rad statt des
@@ -312,8 +319,7 @@ def _torch_festhalten() -> str | None:
     erfuellt >=2.7.0); er ist die Wache fuer den naechsten Pin.
     """
     zeilen = [f"{name}=={v}" for name in ("torch", "torchaudio") if (v := _version(name))]
-    if not zeilen:
-        return None
+    zeilen.append(_AV)
     fd, pfad = tempfile.mkstemp(prefix="nemo-constraints-", suffix=".txt")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(zeilen) + "\n")
@@ -333,6 +339,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
     nach einem Fehlschlag am selben Tag nur der ungepruefte Weg weiter)."""
     if not force and not _faellig():
         return "aktuell"
+    _phase("nemo", 0)
     # Zuerst: steht fest, dass Triton nicht passt, wirft das HIER — vorher lief erst das
     # 900-s-pip von NeMo komplett durch und scheiterte danach.
     pin = _triton_pin()
@@ -351,7 +358,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
             _phase("nemo")
             error = _run(["-m", "pip", "install", "--no-cache-dir", "--upgrade",
                           *(["-c", constraints] if constraints else []),
-                          f"nemo-toolkit[asr] @ {url}"], 900)
+                          _AV, f"nemo-toolkit[asr] @ {url}"], 900)
         finally:
             if constraints:
                 with contextlib.suppress(OSError):
@@ -359,6 +366,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
         if error:
             raise RuntimeError(f"NeMo-Installation: {error}")
         result = "installiert"
+    _phase("triton", 33)
     if pin and _version("triton-windows") != pin:
         _phase("triton")
         error = _run(["-m", "pip", "install", "--no-cache-dir",
@@ -367,7 +375,9 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
             raise RuntimeError(f"Triton-Installation: {error}")
         result = "installiert"
     # Eigener Prozess: der Server hat vielleicht schon eine alte NeMo-Fassung importiert.
-    probe = ("from nemo.collections.asr.models import SortformerEncLabelModel; "
+    _phase("pruefung", 67)
+    probe = ("from webtool.audio_runtime import pruefen; pruefen(); "
+             "from nemo.collections.asr.models import SortformerEncLabelModel; "
              "from nemo.collections.asr.modules.transformer_encoder import "
              "_SUPPORTED_SELF_ATTENTION_MODELS; "
              "assert 'rope' in _SUPPORTED_SELF_ATTENTION_MODELS")
@@ -393,7 +403,7 @@ def _install_gesperrt(force: bool = False, neuester: bool = True) -> str:
                     raise RuntimeError(f"Triton-Reparatur: {repair}")
             _phase("nemo_reparatur")
             repair = _run(["-m", "pip", "install", "--no-cache-dir", "--force-reinstall",
-                           "--no-deps", f"nemo-toolkit[asr] @ {url}"], 900)
+                           "--no-deps", _AV, f"nemo-toolkit[asr] @ {url}"], 900)
             if repair:
                 raise RuntimeError(f"NeMo-Reparatur: {repair}")
             _phase("pruefung")
@@ -466,7 +476,7 @@ def _hintergrund(force: bool, neuester: bool = True) -> None:
     try:
         result = _install(force, neuester)
         with _lock:
-            _state.update(laeuft=False, ergebnis=result, fehler="", phase="fertig",
+            _state.update(laeuft=False, ergebnis=result, fehler="", phase="fertig", fortschritt=100,
                           download_current=0, download_total=0, download_speed=0,
                           download_eta=None)
     except Exception as exc:
@@ -480,12 +490,14 @@ def starten(force: bool = False, neuester: bool = True) -> bool:
     """`force=False` = Automatik (Pin, Tagesbremse). Die Knoepfe setzen `force=True`:
     `neuester=True` holt den ungeprueften NVIDIA-Stand, `neuester=False` richtet die
     gepruefte Fassung ein — auch am Tag eines Fehlschlags."""
+    if not device.nemotron_eignung()[0]:
+        return False
     if not force and not _faellig():
         return False
     with _lock:
         if _state["laeuft"]:
             return False
-        _state.update(laeuft=True, ergebnis="", fehler="", phase="vorbereitung",
+        _state.update(laeuft=True, ergebnis="", fehler="", phase="vorbereitung", fortschritt=0,
                       download_current=0, download_total=0, download_speed=0,
                       download_eta=None)
     try:

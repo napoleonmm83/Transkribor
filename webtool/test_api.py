@@ -2192,6 +2192,7 @@ def test_nemotron_knopf_waehlt_das_ziel(client, monkeypatch):
     # Zwei Knoepfe (Entscheidung 2026-09-24): "geprueft" bleibt auf dem Pin, "neuester" holt
     # main; ohne Rumpf wie bisher "neuester". Ein Tippfehler wird 400, nicht still "neuester".
     from webtool import nemotron_setup
+    monkeypatch.setattr(nemotron_setup.device, "nemotron_eignung", lambda: (True, ""))
     aufrufe = []
     monkeypatch.setattr(nemotron_setup, "starten",
                         lambda force=False, neuester=True: aufrufe.append((force, neuester)) or True)
@@ -2220,8 +2221,33 @@ def test_nemotron_status_poll_liest_nur_beide_paketstaende(client, monkeypatch):
     }
 
 
+def test_nemotron_ohne_cuda_weder_waehlbar_noch_ladbar(client, monkeypatch):
+    from webtool import nemotron_setup
+    monkeypatch.setattr(nemotron_setup.device, "nemotron_eignung",
+                        lambda: (False, "Passende CUDA-GPU fehlt"))
+    assert client.get("/api/settings").json()["nemotron"]["geeignet"] is False
+    auswahl = client.put("/api/settings", json={"diarization_model": "nemotron3"})
+    assert auswahl.status_code == 400
+    assert "CUDA-GPU" in auswahl.json()["detail"]
+    download = client.post("/api/settings/nemotron/update", json={"ziel": "geprueft"})
+    assert download.status_code == 400
+    assert "CUDA-GPU" in download.json()["detail"]
+
+
+@pytest.mark.parametrize("geeignet", [False, True])
+def test_nemotron_verfuegbarkeit_beruecksichtigt_hardware_auch_bei_installierten_paketen(
+        client, tmp_projekt, monkeypatch, geeignet):
+    from webtool import nemotron_setup
+
+    monkeypatch.setattr(nemotron_setup, "zustand", lambda: {"bereit": True, "geeignet": geeignet})
+    assert client.get("/api/settings").json()["nemotron_da"] is geeignet
+    datei = client.get(f"/api/projects/{tmp_projekt}/files/S1/einstellungen").json()
+    assert datei["nemotron_da"] is geeignet
+
+
 def test_diarization_model_roundtrip_and_validation(client, tmp_projekt, monkeypatch):
     from webtool import nemotron_setup
+    monkeypatch.setattr(nemotron_setup.device, "nemotron_eignung", lambda: (True, ""))
     starts = []
     monkeypatch.setattr(nemotron_setup, "starten", lambda force=False: starts.append(force) or True)
     assert client.get("/api/settings").json()["diarization_model"] == "pyannote"

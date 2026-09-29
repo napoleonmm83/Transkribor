@@ -21,7 +21,7 @@ const BASIS: Settings = {
   whisper_model: 'large-v3', whisper_lang: 'de',
   diarization_model: 'pyannote', nemotron_da: false,
   nemotron: { bereit: false, version: '', revision: '', geprueft: '', laeuft: false, ergebnis: '', fehler: '',
-              phase: '', download_current: 0, download_total: 0, download_speed: 0, download_eta: null },
+              geeignet: true, hardware_grund: '', phase: '', download_current: 0, download_total: 0, download_speed: 0, download_eta: null },
   whisper_choices: [
     { id: 'turbo', label: 'Schnell und gut', hint: 'nahe large-Qualität' },
     { id: 'large-v3', label: 'Beste Qualität', hint: 'bester Dialekt' },
@@ -54,6 +54,21 @@ const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name:
 }
 
 describe('SettingsPage', () => {
+  it('sperrt Nemotron-Auswahl und Download ohne geeignete GPU und nennt den Grund', async () => {
+    zeige({ nemotron: { ...BASIS.nemotron, geeignet: false,
+      hardware_grund: 'Nemotron 3 benötigt eine NVIDIA-GPU mit CUDA.' } })
+    expect(await screen.findByText(/benötigt eine NVIDIA-GPU mit CUDA/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Diarisierungsmodell' }))
+    expect(screen.getByRole('option', { name: /NVIDIA Nemotron 3/ })).toHaveAttribute('data-disabled')
+  })
+  it('sperrt auch bei einem früher gespeicherten Nemotron-Wert beide Download-Knöpfe', async () => {
+    zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron,
+      geeignet: false, hardware_grund: 'CUDA-GPU fehlt' } })
+    expect(await screen.findByText('CUDA-GPU fehlt')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Geprüfte Fassung einrichten/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Neuesten NeMo-Stand holen/ })).toBeDisabled()
+    expect(screen.queryByText(/startet automatisch/)).not.toBeInTheDocument()
+  })
   it('speichert Nemotron 3 und zeigt die optionale Einrichtung', async () => {
     vi.mocked(api.saveSettings).mockResolvedValue({
       ...GESPEICHERT, diarization_model: 'nemotron3', nemotron_da: false,
@@ -64,6 +79,13 @@ describe('SettingsPage', () => {
     fireEvent.click(await screen.findByRole('option', { name: /NVIDIA Nemotron 3/ }))
     await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ diarization_model: 'nemotron3' }))
     expect(await screen.findByText(/NeMo fehlt/)).toBeInTheDocument()
+  })
+  it('zeigt den Gesamtfortschritt und den aktuellen NeMo-Schritt', async () => {
+    zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron,
+      laeuft: true, fortschritt: 67, phase: 'Installation und Audiodekodierung prüfen' } })
+    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Gesamtfortschritt' })
+    expect(balken).toHaveAttribute('value', '67')
+    expect(screen.getByText(/Installation und Audiodekodierung prüfen/)).toBeInTheDocument()
   })
   it('prüft NeMo per Knopf und zeigt den laufenden Paketabgleich', async () => {
     vi.mocked(api.updateNemotron).mockResolvedValue({ gestartet: true, ...BASIS.nemotron, laeuft: true })
@@ -85,16 +107,17 @@ describe('SettingsPage', () => {
     zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron, laeuft: true,
       phase: 'nemo', download_current: 50, download_total: 100,
       download_speed: 1048576, download_eta: 50 } })
-    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Einrichtung' })
-    expect(balken).toHaveAttribute('aria-valuenow', '50')
+    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Gesamtfortschritt' })
+    expect(balken).toHaveAttribute('value', '0')
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
     expect(screen.getByText(/50 % dieses Downloads.*1.0 MiB\/s.*50 Sek./)).toBeInTheDocument()
   })
   it('zeigt bei unbekannter Downloadgröße einen unbestimmten Fortschritt', async () => {
     zeige({ diarization_model: 'nemotron3', nemotron: { ...BASIS.nemotron, laeuft: true,
       phase: 'pruefung' } })
-    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Einrichtung' })
-    expect(balken).not.toHaveAttribute('aria-valuenow')
-    expect(screen.getByText('NeMo wird geprüft')).toBeInTheDocument()
+    const balken = await screen.findByRole('progressbar', { name: 'NeMo-Gesamtfortschritt' })
+    expect(balken).toHaveAttribute('value', '0')
+    expect(screen.getByText('Installation und Audiodekodierung prüfen')).toBeInTheDocument()
     expect(screen.queryByText(/MiB\/s/)).not.toBeInTheDocument()
   })
   it('hält beim NeMo-Statuspoll auch die gemeinsame yt-dlp-Sperre aktuell', async () => {
