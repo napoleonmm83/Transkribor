@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.58.0 — 2026-09-29
+
 **Neu**
 - Beim ChatGPT-Abo kannst du für die Korrektur „Automatisch“, Astra, Sol oder Luna wählen und bei Bedarf eine weitere Modell-ID eingeben.
 - In den Einstellungen lässt sich für die Sprecher-Erkennung optional NVIDIA Nemotron 3 wählen; pyannote bleibt die Voreinstellung.
