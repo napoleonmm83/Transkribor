@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.58.1 — 2026-09-29
+
 **Neu**
 - Die Nemotron-Einrichtung zeigt ihren aktuellen Schritt und beim Herunterladen, soweit messbar, Fortschritt, Geschwindigkeit und Restzeit für die jeweilige Datei.
 - Der Verbindungstest in den Einstellungen zeigt während der Prüfung einen laufenden Status und danach das Ergebnis direkt am Knopf.
