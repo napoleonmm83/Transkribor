@@ -242,7 +242,7 @@ def _run_pip(args: list[str], timeout: int) -> str | None:
     previous = None
     progress_line = bytearray()
     oversized = False
-    finished = set()
+    finished: set[str] = set()
     deadline = time.monotonic() + timeout
     try:
         while len(finished) < 2:

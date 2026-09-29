@@ -39,7 +39,8 @@ test('Windows findet Python 3.13 im PATH auch wenn der Launcher nur 3.14 meldet'
   assert.deepStrictEqual(gefragt, ['py -3.13 --version', 'py -3 --version', 'python --version'])
 })
 
-test('Python 3.14 allein fuehrt bei neuer Windows-Umgebung zur 3.13-Installation', async () => {
+test('Python 3.14 allein fuehrt bei neuer Windows-Umgebung zur 3.13-Installation',
+  { skip: process.platform !== 'win32' }, async () => {
   const spur = await einrichtenMit({
     istPaket: true,
     findePython: async () => ({ cmd: 'py', args: ['-3'], version: '3.14' }),
