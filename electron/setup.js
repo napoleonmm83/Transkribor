@@ -246,21 +246,101 @@ function ausgabe(cmd, args) {
   })
 }
 
-/** Erstes brauchbares System-Python. `py -3` zuerst: der Launcher findet auch Installationen, die nicht im PATH stehen. */
-async function findePython() {
-  const kandidaten = process.platform === 'win32'
-    ? [['py', ['-3', '--version']], ['python', ['--version']], ['python3', ['--version']]]
+/** Erstes brauchbares System-Python. Windows bevorzugt 3.13 wegen der ML-Raeder. */
+async function findePython(pruefen = ausgabe, platform = process.platform) {
+  const kandidaten = platform === 'win32'
+    ? [['py', ['-3.13', '--version']], ['py', ['-3', '--version']], ['python', ['--version']], ['python3', ['--version']]]
     : [['python3', ['--version']], ['python', ['--version']]]
+  let fallback = null
   for (const [cmd, args] of kandidaten) {
-    const v = await ausgabe(cmd, args)
+    const v = await pruefen(cmd, args)
     const m = v && v.match(/(\d+)\.(\d+)/)
     if (!m) continue
     const [maj, min] = [+m[1], +m[2]]
     if (maj > MIN_PY[0] || (maj === MIN_PY[0] && min >= MIN_PY[1])) {
-      return { cmd, args: args.slice(0, -1), version: `${maj}.${min}` }
+      const kandidat = { cmd, args: args.slice(0, -1), version: `${maj}.${min}` }
+      if (platform !== 'win32' || kandidat.version === '3.13') return kandidat
+      fallback ??= kandidat
     }
   }
-  return null
+  return fallback
+}
+
+/** pyvenv.cfg ist auch bei einer unvollstaendigen Installation lesbar. */
+function venvVersion(venvDir = P.venv) {
+  try {
+    const cfg = fs.readFileSync(path.join(venvDir, 'pyvenv.cfg'), 'utf8')
+    return /^version\s*=\s*(\d+\.\d+)/im.exec(cfg)?.[1] || ''
+  } catch { return '' }
+}
+
+function migrationsPfade(venvDir, datenDir) {
+  const ziel = path.resolve(venvDir)
+  const daten = path.resolve(datenDir)
+  const backup = ziel + '.python-3.14-backup'
+  if (path.basename(ziel).toLowerCase() !== 'venv'
+      || path.dirname(ziel) !== daten || path.dirname(backup) !== daten) {
+    throw new Error('Unerwarteter venv-Pfad fuer Migration')
+  }
+  return { ziel, backup }
+}
+
+const backupBereinigung = new Set()
+
+function bereinigeBackup(venvDir = P.venv, datenDir = P.daten) {
+  const { backup } = migrationsPfade(venvDir, datenDir)
+  if (!P.exists(backup) || backupBereinigung.has(backup)) return Promise.resolve()
+  backupBereinigung.add(backup)
+  // promises.rm arbeitet im Dateisystem-Threadpool. Ein mehrere GB grosses Backup
+  // darf den Electron-Hauptprozess nicht waehrend status() blockieren.
+  return fs.promises.rm(backup, { recursive: true, force: true })
+    .catch(() => {}) // Beim naechsten Status erneut versuchen; die neue venv bleibt gueltig.
+    .finally(() => backupBereinigung.delete(backup))
+}
+
+function migrationsStatus(version, importe, aktuell, backupDa) {
+  return version === '3.14' || (backupDa && !(version === '3.13' && importe && aktuell))
+}
+
+function migrationNoetig(importe = false, aktuell = false) {
+  if (!P.istPaket || process.platform !== 'win32') return false
+  const { backup } = migrationsPfade(P.venv, P.daten)
+  // Erst Version, Importe UND Merker belegen den Abschluss. Bei einem Absturz
+  // zwischen Importprobe und Stempelschreiben gehoert das Backup noch zur Rettung.
+  return migrationsStatus(venvVersion(), importe, aktuell, P.exists(backup))
+}
+
+/** Nur das venv-Verzeichnis darf verschoben oder entfernt werden. Das Geschwister-Backup
+ *  erlaubt Rueckkehr nach Fehler, Abbruch oder einem beendeten Prozess. */
+async function migrationAusfuehren(venvDir, arbeit, datenDir = P.daten,
+  validieren = async () => false, altValidieren = async () => false) {
+  const { ziel, backup } = migrationsPfade(venvDir, datenDir)
+  // Ein alter Backup-Merker bedeutet: der vorige Lauf endete vor dem Abschluss.
+  if (fs.existsSync(backup)) {
+    if (fs.existsSync(ziel) && await validieren()) {
+      void bereinigeBackup(ziel, datenDir)
+      return { ok: true }
+    }
+    if (fs.existsSync(ziel)) await fs.promises.rm(ziel, { recursive: true, force: true })
+    fs.renameSync(backup, ziel)
+  }
+  fs.renameSync(ziel, backup)
+  let ergebnis
+  try {
+    ergebnis = await arbeit()
+    if (ergebnis?.ok && !(await validieren())) ergebnis = { ok: false, fehler: 'Neue Python-Umgebung ist unvollstaendig.' }
+  } catch (e) {
+    ergebnis = { ok: false, fehler: `Umgebung konnte nicht erneuert werden: ${e.message}` }
+  }
+  if (ergebnis?.ok) {
+    // Das Ergebnis ist jetzt verbindlich. Ein fehlgeschlagenes Aufraeumen darf
+    // keine funktionierende 3.13-venv durch ein womöglich halbes Backup ersetzen.
+    void bereinigeBackup(ziel, datenDir)
+    return ergebnis
+  }
+  if (fs.existsSync(ziel)) await fs.promises.rm(ziel, { recursive: true, force: true })
+  fs.renameSync(backup, ziel)
+  return { ...ergebnis, weiterMitAlt: await altValidieren() }
 }
 
 /** Die venv gilt erst als fertig, wenn sie wirklich importierbar ist — ein abgebrochener
@@ -379,8 +459,10 @@ function stempelSchreiben(venvDir = P.venv, reqDatei = P.requirements) {
  * inline in status(), waere genau der Riegel ungetestet: `venv: importe` allein liesse einen
  * veralteten Stand durch, und keine Attrappe der Welt merkt das.
  */
-function venvZustand(importe, aktuell) {
-  return { venv: importe && aktuell, venvVeraltet: importe && !aktuell }
+function venvZustand(importe, aktuell, pythonVeraltet = false) {
+  return { venv: importe && aktuell && !pythonVeraltet,
+    venvVeraltet: importe && !aktuell && !pythonVeraltet,
+    ...(pythonVeraltet ? { venvPythonVeraltet: true } : {}) }
 }
 
 /** Nutzt diese Maschine ueberhaupt whisper.cpp? Spiegelt device.apple_silicon() —
@@ -408,6 +490,9 @@ async function status() {
   const macFehlt = nutztWhisperCpp() && !wcpp
   const importe = await importeDa()
   const aktuell = paketeAktuell()
+  const pythonVeraltet = migrationNoetig(importe, aktuell)
+  if (!pythonVeraltet && P.istPaket && process.platform === 'win32'
+      && venvVersion() === '3.13' && importe && aktuell) void bereinigeBackup()
   // Beide Haelften einzeln, damit die Seite den Unterschied nennen kann: eine veraltete venv
   // ist installiert und funktioniert — sie ist nur nicht auf dem Stand der requirements.txt.
   // Als blosses rotes "fehlt" gemeldet, laese der Nutzer einen Defekt daraus (#181).
@@ -415,7 +500,7 @@ async function status() {
     python: py ? `Python ${py.version}` : '',
     ffmpeg: ff,
     whispercpp: wcpp,
-    ...venvZustand(importe, aktuell),
+    ...venvZustand(importe, aktuell, pythonVeraltet),
     stempelPfad: stempel(P.venv),
     // Nur im degradierten Fall gefragt (#230): sonst kostet jeder Start zwei Systemaufrufe
     // fuer eine Auskunft, die niemand sieht. `true` heisst hier "kein Grund zur Meldung" —
@@ -494,11 +579,11 @@ async function cudaZurueckholen(vpy, pl, onLine, werkzeug = { ausgabe, lauf }) {
  * kosten: `plan` ist eine reine Funktion mit eigenen Tests, gebraucht wird hier nur ihr
  * Ergebnis — und die beiden Sondierungen dahinter starten je einen echten Prozess.
  */
-async function einrichten(onLine, onSchritt, werkzeug = {}) {
+async function einrichtenKern(onLine, onSchritt, werkzeug = {}) {
   const w = {
     planen: async () => plan(process.platform, await paketmanager(), process.arch, await brewDa()),
     lauf, findePython, findeFfmpeg, findeWhisperCpp, importeDa, stempelSchreiben,
-    cudaZurueckholen, exists: P.exists,
+    cudaZurueckholen, exists: P.exists, istPaket: P.istPaket,
     mkdir: d => fs.mkdirSync(d, { recursive: true }),
     ...werkzeug,
   }
@@ -508,6 +593,11 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
   const schritte = []
   let py = await w.findePython()
   const pl = await w.planen()
+  // Eine neue gepackte Windows-Umgebung darf nicht aus 3.14 entstehen: fuer Nemotron
+  // fehlen dort die benoetigten Paket-Raeder. Bestehende 3.13-venvs bleiben unberuehrt.
+  const neueWindowsVenv = w.istPaket && process.platform === 'win32' && pl.installer === 'winget'
+    && !w.exists(P.venvPython(P.venv))
+  if (neueWindowsVenv && py?.version !== '3.13') py = null
   /** Ein Paket ueber den Installer dieser Plattform. `null` = hier installiert die App nicht. */
   const holen = (winget, brewPaket) => {
     if (pl.installer === 'winget') {
@@ -525,7 +615,9 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
     if (abbruchFlag) return ABBRUCH
     if (code !== 0) return { ok: false, fehler: 'Python konnte nicht installiert werden. Bitte von python.org installieren und Transkribor neu starten.' }
     py = await w.findePython()
-    if (!py) return { ok: false, fehler: 'Python wurde installiert, ist aber noch nicht im PATH. Bitte Transkribor neu starten.' }
+    if (!py || (neueWindowsVenv && py.version !== '3.13')) {
+      return { ok: false, fehler: 'Python 3.13 wurde installiert, ist aber noch nicht im PATH erreichbar. Bitte Transkribor neu starten.' }
+    }
   }
   if (!py) return { ok: false, fehler: `Kein Python >= 3.10 gefunden. ${pl.hinweis}` }
   schritte.push(`Python: ${py.version}`)
@@ -610,8 +702,25 @@ async function einrichten(onLine, onSchritt, werkzeug = {}) {
   return { ok: true }
 }
 
+async function einrichten(onLine, onSchritt, werkzeug = {}) {
+  const importe = P.exists(P.venv + '.python-3.14-backup') && venvVersion() === '3.13'
+    ? await importeDa() : false
+  const aktuell = importe && paketeAktuell()
+  if (!migrationNoetig(importe, aktuell)) return einrichtenKern(onLine, onSchritt, werkzeug)
+  onSchritt('Python-Umgebung vollstaendig erneuern')
+  onLine('Python 3.14 ist fuer Nemotron ungeeignet. Die bisherige Umgebung wird gesichert; Projekte und Einstellungen bleiben erhalten.')
+  try {
+    return await migrationAusfuehren(P.venv, () => einrichtenKern(onLine, onSchritt, werkzeug),
+      P.daten, async () => venvVersion() === '3.13' && await importeDa() && paketeAktuell(),
+      async () => venvVersion() === '3.14' && await importeDa())
+  } catch (e) {
+    return { ok: false, fehler: `Umgebung konnte nicht erneuert werden: ${e.message}` }
+  }
+}
+
 // venvVollstaendig() ist ersatzlos weg: status() beantwortet dieselbe Frage ueber venvZustand(),
 // und ein zweiter Weg dorthin waere genau der, den kein Test bewacht (er hatte keinen Aufrufer).
 module.exports = { status, einrichten, abbrechen, abbruchZurueck, lauf, findePython, plan, spawnEnv, wingetFfmpeg,
                    nutztWhisperCpp, paketeAktuell, stempelSchreiben, stempelSchreibbar,
-                   venvZustand, cudaVerloren, cudaZurueckholen }
+                   venvZustand, cudaVerloren, cudaZurueckholen, venvVersion, migrationAusfuehren,
+                   migrationNoetig, migrationsStatus, bereinigeBackup }

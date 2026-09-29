@@ -158,7 +158,8 @@ function zeigeStatus(s) {
   // auch, wenn ein pip-Lauf auf halber Strecke abgebrochen ist (#217). Beide Male ist die
   // Umgebung da, beide Male fehlen Pakete, beide Male hilft derselbe Klick.
   zeile('Python-Umgebung (Whisper, PyTorch)', s.venv,
-        s.venv ? s.venvPfad : (s.venvVeraltet ? 'vorhanden, aber nicht auf dem Stand der Paketliste' : ''))
+        s.venv ? s.venvPfad : (s.venvPythonVeraltet ? 'Python 3.14 — vollständiger Neuaufbau erforderlich'
+          : (s.venvVeraltet ? 'vorhanden, aber nicht auf dem Stand der Paketliste' : '')))
   $('hinweis').textContent = 'Projekte liegen in ' + s.projektePfad
   // Auf macOS/Linux installiert die App Python/ffmpeg nicht selbst. Dann ist dieser Befehl das
   // Einzige, was weiterhilft — er gehört vor den Klick, nicht in eine rote Box danach.
@@ -168,6 +169,11 @@ function zeigeStatus(s) {
   if (s.venv) {
     $('sub').textContent = 'Alles bereit — starte …'
     $('los').style.display = 'none'
+  } else if (s.venvPythonVeraltet) {
+    $('sub').textContent = 'Diese Python-Umgebung nutzt Version 3.14. Für Nemotron muss sie mit Python 3.13 ' +
+      'vollständig neu aufgebaut werden (mehrere GB). ' +
+      'Deine Projekte und Einstellungen bleiben erhalten. Bei Fehler oder Abbruch wird die alte Umgebung wiederhergestellt.'
+    $('los').style.display = ''
   } else if (s.venvVeraltet && !s.hinweis) {
     // Kein „mehrere GB“-Text: hier fehlen nur die Pakete, die seit der Installation
     // dazugekommen sind. PyTorch und Whisper liegen längst da.

@@ -7,6 +7,206 @@ Module._load = (req, ...rest) =>
 const test = require('node:test')
 const assert = require('node:assert')
 const { plan, spawnEnv, wingetFfmpeg } = require('./setup')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
+async function warteBis(pruefen) {
+  for (let i = 0; i < 50 && !pruefen(); i++) await new Promise(r => setTimeout(r, 10))
+  assert.ok(pruefen(), 'asynchrone Backup-Bereinigung muss fertig werden')
+}
+
+test('Windows bevorzugt Python 3.13 vor dem generischen Launcher', async () => {
+  const { findePython } = require('./setup')
+  const gefragt = []
+  const py = await findePython(async (cmd, args) => {
+    gefragt.push([cmd, ...args].join(' '))
+    return args[0] === '-3.13' ? 'Python 3.13.9' : 'Python 3.14.1'
+  }, 'win32')
+  assert.deepStrictEqual(py, { cmd: 'py', args: ['-3.13'], version: '3.13' })
+  assert.deepStrictEqual(gefragt, ['py -3.13 --version'])
+})
+
+test('Windows findet Python 3.13 im PATH auch wenn der Launcher nur 3.14 meldet', async () => {
+  const { findePython } = require('./setup')
+  const gefragt = []
+  const py = await findePython(async (cmd, args) => {
+    gefragt.push(`${cmd} ${args.join(' ')}`)
+    if (args[0] === '-3.13') return null
+    return cmd === 'python' ? 'Python 3.13.10' : 'Python 3.14.1'
+  }, 'win32')
+  assert.deepStrictEqual(py, { cmd: 'python', args: [], version: '3.13' })
+  assert.deepStrictEqual(gefragt, ['py -3.13 --version', 'py -3 --version', 'python --version'])
+})
+
+test('Python 3.14 allein fuehrt bei neuer Windows-Umgebung zur 3.13-Installation',
+  { skip: process.platform !== 'win32' }, async () => {
+  const spur = await einrichtenMit({
+    istPaket: true,
+    findePython: async () => ({ cmd: 'py', args: ['-3'], version: '3.14' }),
+    exists: () => false,
+  })
+  assert.ok(spur.rufe.some(([cmd, args]) => cmd === 'winget' && args.includes('Python.Python.3.13')))
+  assert.strictEqual(spur.r.ok, false, 'ohne erreichbares 3.13 darf keine neue 3.14-venv entstehen')
+  assert.ok(!spur.rufe.some(([, args]) => args.includes('-m venv')))
+})
+
+test('Migration rollt bei Fehler zur alten venv zurueck und raeumt den Neubau weg', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  fs.writeFileSync(path.join(venv, 'alt'), 'projektfremde venv-Daten')
+  try {
+    const result = await migrationAusfuehren(venv, async () => {
+      fs.mkdirSync(venv)
+      fs.writeFileSync(path.join(venv, 'halb'), 'x')
+      return { ok: false, fehler: 'pip fehlgeschlagen' }
+    }, root, async () => false, async () => fs.existsSync(path.join(venv, 'alt')))
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(result.weiterMitAlt, true)
+    assert.ok(fs.existsSync(path.join(venv, 'alt')))
+    assert.ok(!fs.existsSync(path.join(venv, 'halb')))
+    assert.ok(!fs.existsSync(venv + '.python-3.14-backup'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Migration stellt auch nach gewolltem Abbruch die alte venv wieder her', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  fs.writeFileSync(path.join(venv, 'alt'), 'x')
+  try {
+    const result = await migrationAusfuehren(venv, async () => ({ ok: false, abgebrochen: true }),
+      root, async () => false, async () => fs.existsSync(path.join(venv, 'alt')))
+    assert.strictEqual(result.abgebrochen, true)
+    assert.strictEqual(result.weiterMitAlt, true)
+    assert.ok(fs.existsSync(path.join(venv, 'alt')))
+    assert.ok(!fs.existsSync(venv + '.python-3.14-backup'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('venv-Zustand sperrt Python 3.14 auch bei aktuellen Paketen', () => {
+  const { venvZustand } = require('./setup')
+  assert.deepStrictEqual(venvZustand(true, true, true),
+    { venv: false, venvVeraltet: false, venvPythonVeraltet: true })
+})
+
+test('3.13 mit Importen aber ohne aktuellen Paketmerker behaelt das Backup', () => {
+  const { migrationsStatus } = require('./setup')
+  assert.strictEqual(migrationsStatus('3.13', true, false, true), true)
+  assert.strictEqual(migrationsStatus('3.13', true, true, true), false)
+})
+
+test('Absturz nach 3.13-Importen vor Paketmerker stellt die alte venv wieder her', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  fs.writeFileSync(path.join(venv, 'pyvenv.cfg'), 'version = 3.13.9\n')
+  fs.writeFileSync(path.join(venv, 'importe-da'), 'x')
+  fs.mkdirSync(venv + '.python-3.14-backup')
+  fs.writeFileSync(path.join(venv + '.python-3.14-backup', 'pyvenv.cfg'), 'version = 3.14.1\n')
+  try {
+    const result = await migrationAusfuehren(venv, async () => ({ ok: false }), root,
+      async () => fs.existsSync(path.join(venv, 'importe-da')) && fs.existsSync(path.join(venv, '.requirements')))
+    assert.strictEqual(result.ok, false)
+    assert.strictEqual(fs.readFileSync(path.join(venv, 'pyvenv.cfg'), 'utf8'), 'version = 3.14.1\n')
+    assert.ok(!fs.existsSync(path.join(venv, 'importe-da')))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Backup-Bereinigung laeuft asynchron und blockiert den Statuspfad nicht', async () => {
+  const { bereinigeBackup } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv + '.python-3.14-backup')
+  const echtRm = fs.promises.rm
+  let aufruf = false
+  let freigeben
+  fs.promises.rm = async () => { aufruf = true; await new Promise(r => { freigeben = r }) }
+  try {
+    const aufraeumen = bereinigeBackup(venv, root)
+    assert.strictEqual(aufruf, true)
+    assert.ok(fs.existsSync(venv + '.python-3.14-backup'), 'Aufruf darf das Backup nicht synchron entfernen')
+    freigeben()
+    await aufraeumen
+  } finally {
+    fs.promises.rm = echtRm
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('Migration behaelt neue venv bei Erfolg und beseitigt Backup; unterbrochene Migration ist wiederholbar', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  fs.writeFileSync(path.join(venv, 'halb'), 'x')
+  fs.mkdirSync(venv + '.python-3.14-backup')
+  fs.writeFileSync(path.join(venv + '.python-3.14-backup', 'alt'), 'x')
+  try {
+    let zielWarVorArbeitDa = null
+    const result = await migrationAusfuehren(venv, async () => {
+      assert.ok(fs.existsSync(path.join(venv + '.python-3.14-backup', 'alt')))
+      zielWarVorArbeitDa = fs.existsSync(venv)
+      fs.mkdirSync(venv)
+      fs.writeFileSync(path.join(venv, 'neu'), 'x')
+      return { ok: true }
+    }, root, async () => fs.existsSync(path.join(venv, 'neu')))
+    assert.strictEqual(result.ok, true)
+    assert.strictEqual(zielWarVorArbeitDa, false, 'halbe Ziel-venv muss vor Neuaufbau entfernt sein')
+    assert.ok(fs.existsSync(path.join(venv, 'neu')))
+    await warteBis(() => !fs.existsSync(venv + '.python-3.14-backup'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Rest-Backup ersetzt nach erfolgreicher 3.13-Migration niemals die fertige venv', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  fs.writeFileSync(path.join(venv, 'neu'), 'x')
+  fs.mkdirSync(venv + '.python-3.14-backup')
+  fs.writeFileSync(path.join(venv + '.python-3.14-backup', 'alt'), 'x')
+  try {
+    const result = await migrationAusfuehren(venv, async () => {
+      assert.fail('ein fertiger Zielordner darf nicht neu aufgebaut werden')
+    }, root, async () => fs.existsSync(path.join(venv, 'neu')))
+    assert.strictEqual(result.ok, true)
+    assert.ok(fs.existsSync(path.join(venv, 'neu')))
+    await warteBis(() => !fs.existsSync(venv + '.python-3.14-backup'))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('unterbrochene Migration ohne Zielordner stellt vor dem Wiederanlauf das Backup her', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv + '.python-3.14-backup')
+  fs.writeFileSync(path.join(venv + '.python-3.14-backup', 'alt'), 'x')
+  try {
+    const result = await migrationAusfuehren(venv, async () => {
+      assert.ok(!fs.existsSync(venv))
+      return { ok: false, fehler: 'erwarteter Testabbruch' }
+    }, root)
+    assert.strictEqual(result.ok, false)
+    assert.ok(fs.existsSync(path.join(venv, 'alt')))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('Migration lehnt venv ausserhalb des benannten Datenordners vor jedem Verschieben ab', async () => {
+  const { migrationAusfuehren } = require('./setup')
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'transkribor-migration-'))
+  const venv = path.join(root, 'venv')
+  fs.mkdirSync(venv)
+  try {
+    await assert.rejects(migrationAusfuehren(venv, async () => ({ ok: true }), path.join(root, 'andere')),
+      /Unerwarteter venv-Pfad/)
+    assert.ok(fs.existsSync(venv))
+  } finally { fs.rmSync(root, { recursive: true, force: true }) }
+})
 
 /** process.platform ist read-only — fuer den Test kurz umbiegen und sicher zuruecksetzen. */
 function aufPlattform(p, fn) {

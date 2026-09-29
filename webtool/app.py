@@ -2620,6 +2620,12 @@ def settings_nemotron_update(body: NemotronUpdateBody | None = None):
     return {"gestartet": gestartet, **nemotron_setup.zustand()}
 
 
+@app.get("/api/settings/nemotron/status")
+def settings_nemotron_status():
+    """Cheap poll for installation progress and the shared pip lock's visible state."""
+    return {"nemotron": nemotron_setup.zustand(), "ytdlp": ytdlp_update.zustand()}
+
+
 @app.delete("/api/settings/kaputt")
 def settings_kaputt_weg():
     """Die beiseitegelegte Einstellungsdatei entfernen — der Knopf unter dem Hinweis (#192).

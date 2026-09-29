@@ -623,7 +623,14 @@ ipcMain.handle('einrichten', () => {
   if (einrichtungLaeuft) return einrichtungLaeuft
   einrichtungLaeuft = setup.einrichten(z => senden('log', z), s => senden('phase', { schritt: s }))
     .then(async r => {
-      if (r.ok) await serverStarten()
+      if (r.weiterMitAlt) {
+        // Eine gescheiterte 3.13-Migration hat die vorherige 3.14-venv wiederhergestellt.
+        // Sie kann die übrigen Funktionen für diesen Start weiter tragen; Nemotron bleibt
+        // bis zum nächsten Einrichtungsversuch gesperrt.
+        if (!r.abgebrochen) senden('fehler', r.fehler)
+        senden('log', 'Bisherige Python-Umgebung wiederhergestellt — starte Transkribor damit.')
+        await serverStarten()
+      } else if (r.ok) await serverStarten()
       // Ein GEWOLLTER Abbruch ist kein Fehler: die Seite zeigt ihn aus dem Rueckgabewert,
       // nicht rot (#242). Ohne die Ausnahme stuende "Abgebrochen" als FEHLER-Zeile im
       // Protokoll und auf der Seite.

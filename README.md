@@ -556,7 +556,7 @@ verfügbar“ heisst, ihr fehlt ein Baustein (etwa nach einer halben Einrichtung
 Fällen werden die Sprecher allein aus dem Gesprächsverlauf erschlossen, und die Zahl ändert
 daran nichts.
 
-**Zweites Modell zur Wahl (ab der nächsten Fassung).** Unter *Einstellungen → Sprecher-Erkennung*
+**Zweites Modell zur Wahl (ab v0.58.0).** Unter *Einstellungen → Sprecher-Erkennung*
 lässt sich statt des mitgelieferten Modells **NVIDIA Nemotron 3** wählen. Es erkennt bis zu acht
 Sprecher selbst und nimmt deshalb keine feste Zahl an — das Feld oben steht dann grau, dein
 eingetragener Wert bleibt aber für das Standardmodell erhalten. Ist Nemotron noch nicht
@@ -565,6 +565,13 @@ eine Aufnahme bleibt also nie ohne Sprechertrennung, und die eingetragene Zahl g
 Transkribor die nötigen Pakete in einer von uns geprüften Fassung ein und lädt das Modell einmalig
 herunter (rund 190 MB); ein Konto braucht es dafür nicht. Ein Knopf holt auf Wunsch den neuesten Stand von NVIDIA — der ist dann nicht von
 uns geprüft.
+
+Während der NeMo-Einrichtung zeigen die Einstellungen den aktuellen Schritt. Bei Downloads mit
+bekannter Dateigröße siehst du auch Fortschritt, Geschwindigkeit und die geschätzte Restzeit
+für diese Datei. Hatte die gepackte Windows-App zuvor Python 3.14 eingerichtet, erstellt sie
+beim nächsten Start eine neue Python-3.13-Umgebung; das kann die benötigten Pakete erneut
+herunterladen. Projekte und Einstellungen bleiben erhalten. Der Verbindungstest für die
+KI-Korrektur zeigt direkt in den Einstellungen, dass er läuft, und anschließend sein Ergebnis.
 
 Bei Aufnahmen, die du **vor dieser Fassung** hinzugefügt hast, steht meist „Ja“ oder „Nein“ —
 damals wurde die Einstellung bei jedem Hinzufügen fest an der Aufnahme vermerkt. Wenn du

@@ -381,6 +381,12 @@ export async function updateNemotron(
 ): Promise<{ gestartet: boolean } & Settings['nemotron']> {
   return jn(await post('/api/settings/nemotron/update', { ziel }))
 }
+
+export async function getNemotronStatus(): Promise<{
+  nemotron: Settings['nemotron']; ytdlp: Settings['ytdlp'];
+}> {
+  return jn(await fetch('/api/settings/nemotron/status'))
+}
 export async function listModels(): Promise<ModelInfo[]> {
   return (await jn<{ models: ModelInfo[] }>(await fetch('/api/settings/models'))).models
 }

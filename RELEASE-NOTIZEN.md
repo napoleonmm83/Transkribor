@@ -28,6 +28,13 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Die Nemotron-Einrichtung zeigt ihren aktuellen Schritt und beim Herunterladen, soweit messbar, Fortschritt, Geschwindigkeit und Restzeit für die jeweilige Datei.
+- Der Verbindungstest in den Einstellungen zeigt während der Prüfung einen laufenden Status und danach das Ergebnis direkt am Knopf.
+
+**Behoben**
+- Nemotron 3 lässt sich auch nach einer früheren Einrichtung mit Python 3.14 installieren: Unter Windows baut Transkribor die Python-Umgebung mit 3.13 neu auf und behält Projekte und Einstellungen.
+
 ## v0.58.0 — 2026-09-29
 
 **Neu**

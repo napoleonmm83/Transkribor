@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Check, Copy, FolderOpen, KeyRound, Loader2, LogIn, RefreshCw } from 'lucide-react'
 import {
-  cancelLogin, getAuth, getHardware, getSettings, listModels, loginState,
+  cancelLogin, getAuth, getHardware, getNemotronStatus, getSettings, listModels, loginState,
   saveSettings, startLogin, submitLoginCode, testSettings, updateNemotron, updateYtdlp, verwerfeKaputt,
 } from '@/lib/api'
 import { PageHeader } from '@/components/PageHeader'
@@ -13,6 +13,23 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { tag } from '@/lib/utils'
 import type { AuthStatus, Hardware, LoginState, ModelInfo, ProviderInfo, Settings, YtdlpStand } from '@/lib/types'
+
+const nemoPhasen: Record<string, string> = {
+  vorbereitung: 'Installation wird vorbereitet',
+  nemo: 'NeMo-Pakete werden geladen und installiert',
+  triton: 'Triton wird installiert',
+  pruefung: 'NeMo wird geprüft',
+  lhotse_reparatur: 'Lhotse wird repariert',
+  triton_reparatur: 'Triton wird repariert',
+  nemo_reparatur: 'NeMo wird repariert',
+  fertig: 'Installation abgeschlossen',
+  fehler: 'Installation fehlgeschlagen',
+}
+
+function dauer(sekunden: number): string {
+  const s = Math.max(0, Math.ceil(sekunden))
+  return s >= 60 ? `${Math.floor(s / 60)} Min. ${s % 60} Sek.` : `${s} Sek.`
+}
 
 /**
  * Der „Ordner öffnen"-Griff der Electron-Brücke, oder `null` im Browser (#218).
@@ -257,6 +274,9 @@ export function SettingsPage() {
   const [key, setKey] = useState('')
   const [laedt, setLaedt] = useState(false)
   const [testet, setTestet] = useState(false)
+  const [testSekunden, setTestSekunden] = useState(0)
+  const [testErgebnis, setTestErgebnis] = useState<{ ok: boolean; text: string } | null>(null)
+  const testVersion = useRef(0)
   const [ytLaeuft, setYtLaeuft] = useState(false)
   // Der Nachhol-Poll (#252) hat seine Obergrenze erreicht. Ohne diesen Merker fröre die Zeile
   // „läuft gerade" danach WIEDER ein — also #252s Symptom, nur um zwölf Minuten verschoben.
@@ -285,19 +305,25 @@ export function SettingsPage() {
   useEffect(() => { getSettings().then(setS).catch(e => toast.error(String(e))) }, [])
   useEffect(() => { getHardware().then(setHw).catch(() => setHw(null)) }, [])
   useEffect(() => {
+    if (!testet) return
+    const timer = setInterval(() => setTestSekunden(Math.floor((Date.now() - testBeginn.current) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [testet])
+  const testBeginn = useRef(0)
+  useEffect(() => {
     if (!s?.nemotron.laeuft) return
     let aktiv = true
-    // 3 s wie der yt-dlp-Fremdlauf-Poll (jede Runde kostet den Server einen
-    // `llm.available()`-Subprozess, #250), und eine Obergrenze. Sie deckt WARTEN plus Weg:
+    // 3 s wie der yt-dlp-Fremdlauf-Poll, aber ohne den teuren `llm.available()`-Subprozess.
+    // Die Obergrenze deckt WARTEN plus Weg:
     // an der geteilten pip-Sperre bis frist(1900) = 1905 s, danach der längste NeMo-Weg von
     // 1750 s — 1300 x 3 s = 65 min (Kalt-Leser; 700 Runden deckten nur den Weg). `ytdlp` fährt
     // mit, weil dessen Zeile an `nemo_haelt` hängt und sonst bis zum Neuladen falsch stünde.
     let runden = 0
     const timer = setInterval(() => {
       if (++runden > 1300) { clearInterval(timer); return }
-      getSettings().then(neu => {
+      getNemotronStatus().then(neu => {
         if (aktiv) setS(alt => alt && {
-          ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron_da, ytdlp: neu.ytdlp,
+          ...alt, nemotron: neu.nemotron, nemotron_da: neu.nemotron.bereit, ytdlp: neu.ytdlp,
         })
       }).catch(() => {})
     }, 3000)
@@ -372,6 +398,11 @@ export function SettingsPage() {
   // kommt NACH `danach?.()`, damit sie nicht unter dessen Erfolgsmeldung („Key gespeichert")
   // liegt: gespeichert wurde ja wirklich, die Einschraenkung ist die neue Nachricht.
   const speichern = async (patch: Record<string, string>, danach?: () => void) => {
+    if (['provider', 'model', 'base_url', 'api_key'].some(feld => feld in patch)) {
+      testVersion.current += 1
+      setTestErgebnis(null)
+      setTestet(false)
+    }
     // **Der Busy-Zustand gehört in `speichern` selbst (#249), nicht zu den Aufrufern.**
     // Seit #239 zahlt auch der PUT `llm.available()`, und das startet bei den Abo-CLIs
     // einen Subprozess: 0,09 s (codex) bzw. 0,26 s (claude) normal — die DECKE ist aber
@@ -436,6 +467,9 @@ export function SettingsPage() {
   }
 
   const modellSpeichern = (patch: Record<string, string>) => {
+    testVersion.current += 1
+    setTestErgebnis(null)
+    setTestet(false)
     modellSpeicherKette.current = modellSpeicherKette.current
       .catch(() => undefined)
       .then(() => speichern(patch))
@@ -473,9 +507,15 @@ export function SettingsPage() {
   }
 
   const testen = async () => {
+    const version = ++testVersion.current
+    testBeginn.current = Date.now()
+    setTestSekunden(0)
+    setTestErgebnis(null)
     setTestet(true)
     const r = await testSettings().catch(e => ({ ok: false, detail: String(e) }))
+    if (version !== testVersion.current) return
     setTestet(false)
+    setTestErgebnis({ ok: r.ok, text: r.detail || (r.ok ? 'Verbindung steht' : 'Verbindung fehlgeschlagen') })
     r.ok ? toast.success(r.detail || 'Verbindung steht') : toast.error(r.detail || 'Fehlgeschlagen')
   }
 
@@ -1047,8 +1087,16 @@ export function SettingsPage() {
 
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-5">
           <Button onClick={testen} disabled={testet}>
-            {testet && <Loader2 className="size-4 animate-spin" />} Verbindung testen
+            {testet && <Loader2 className="size-4 animate-spin" />}
+            {testet ? 'Verbindung wird getestet …' : 'Verbindung testen'}
           </Button>
+          {testet && <span role="status" className="text-sm text-muted-foreground">
+            Verbindung zum Anbieter wird geprüft · {dauer(testSekunden)}
+          </span>}
+          {!testet && testErgebnis && <span role={testErgebnis.ok ? 'status' : 'alert'}
+            className={`text-sm ${testErgebnis.ok ? 'text-foreground' : 'text-destructive'}`}>
+            {testErgebnis.ok ? 'Verbindung erfolgreich: ' : 'Verbindung fehlgeschlagen: '}{testErgebnis.text}
+          </span>}
           <span className="text-xs text-muted-foreground">
             Änderungen greifen sofort — auch für schon laufende Korrekturen ab dem nächsten Block.
           </span>
@@ -1079,6 +1127,28 @@ export function SettingsPage() {
               : 'NeMo fehlt oder ist für Nemotron 3 nicht geeignet. Die Einrichtung der geprüften Fassung startet automatisch.'}
               {!s.nemotron.bereit && ' Bis dahin trennt das Standardmodell pyannote die Sprecher.'}
               {' '}Eine feste Sprecherzahl kann Nemotron 3 nicht übernehmen.</p>
+            {s.nemotron.laeuft && <div className="space-y-1.5" role="status">
+              <p className="text-sm text-foreground">
+                {nemoPhasen[s.nemotron.phase] || 'Installation läuft'}
+              </p>
+              <div role="progressbar" aria-label="NeMo-Einrichtung" aria-valuemin={0}
+                aria-valuemax={s.nemotron.download_total || undefined}
+                aria-valuenow={s.nemotron.download_total ? s.nemotron.download_current : undefined}
+                aria-valuetext={s.nemotron.download_total
+                  ? `${Math.round(100 * s.nemotron.download_current / s.nemotron.download_total)} Prozent dieses Downloads`
+                  : 'Installationsschritt läuft'}
+                className="h-2 overflow-hidden rounded-full bg-muted">
+                <div className={`h-full rounded-full bg-primary transition-[width] ${s.nemotron.download_total ? '' : 'w-1/3 animate-pulse'}`}
+                  style={s.nemotron.download_total
+                    ? { width: `${Math.min(100, 100 * s.nemotron.download_current / s.nemotron.download_total)}%` }
+                    : undefined} />
+              </div>
+              {s.nemotron.download_total > 0 && <p>
+                {Math.round(100 * s.nemotron.download_current / s.nemotron.download_total)} % dieses Downloads
+                {s.nemotron.download_speed > 0 && ` · ${(s.nemotron.download_speed / 1048576).toFixed(1)} MiB/s`}
+                {s.nemotron.download_eta != null && ` · noch etwa ${dauer(s.nemotron.download_eta)}`}
+              </p>}
+            </div>}
             {s.nemotron.fehler && <p role="alert" className="text-destructive">{s.nemotron.fehler}</p>}
             {s.nemotron.geprueft && <p>Zuletzt geprüft: {tag(s.nemotron.geprueft)}</p>}
             <div className="flex flex-wrap gap-2">

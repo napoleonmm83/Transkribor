@@ -2202,6 +2202,24 @@ def test_nemotron_knopf_waehlt_das_ziel(client, monkeypatch):
     assert aufrufe == [(True, False), (True, True), (True, True)]
 
 
+def test_nemotron_status_poll_liest_nur_beide_paketstaende(client, monkeypatch):
+    import webtool.app as appmod
+
+    monkeypatch.setattr(appmod.nemotron_setup, "zustand",
+                        lambda: {"laeuft": True, "phase": "nemo", "download_current": 5,
+                                 "download_total": 10, "download_speed": 2, "download_eta": 2.5})
+    monkeypatch.setattr(appmod.ytdlp_update, "zustand", lambda: {"nemo_haelt": True})
+    monkeypatch.setattr(appmod.llm, "available",
+                        lambda *args: (_ for _ in ()).throw(AssertionError("expensive probe")))
+    response = client.get("/api/settings/nemotron/status")
+    assert response.status_code == 200
+    assert response.json() == {
+        "nemotron": {"laeuft": True, "phase": "nemo", "download_current": 5,
+                      "download_total": 10, "download_speed": 2, "download_eta": 2.5},
+        "ytdlp": {"nemo_haelt": True},
+    }
+
+
 def test_diarization_model_roundtrip_and_validation(client, tmp_projekt, monkeypatch):
     from webtool import nemotron_setup
     starts = []
