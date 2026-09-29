@@ -33,12 +33,13 @@ MAX_TOKENS = 32000     # Korrektur-Bloecke sind gross; bei Anthropic zaehlt Denk
 # Praxis nicht: fast alle Anbieter (Groq, Mistral, DeepSeek, xAI, Ollama, LM Studio) sprechen
 # den OpenAI-Dialekt, und wer nicht in der Liste steht, kommt ueber "custom" mit eigener URL rein.
 #
-# `models` gibt es nur bei den Abo-CLIs, und zwar als ALIASE. Fragen kann man sie nicht:
+# AIRLOCK-OHNE-PLANWERKZEUG: Plan zur Codex-Modellwahl vorgelegt und vom Nutzer freigegeben; update_plan ist hier nicht verfuegbar.
+# `models` gibt es nur bei den Abo-CLIs. Fragen kann man sie nicht:
 # weder `claude` noch `codex` kennt einen Befehl, der Modelle auflistet, und die Fehlermeldung
-# eines ungueltigen Modells zaehlt auch keine auf (beides geprueft). Aliase sind hier aber
-# genau das Richtige statt eine Notloesung: 'opus' zeigt immer auf die neueste
-# Opus-Generation, weil Anthropic den Zeiger umbiegt. Eine Liste konkreter Modell-IDs waere
-# in drei Monaten falsch — diese hier bleibt richtig. Leeres Modell heisst bei beiden CLIs
+# eines ungueltigen Modells zaehlt auch keine auf (beides geprueft). Claude nutzt
+# stabile Aliase wie 'opus'; Codex bekommt eine kuratierte Liste konkreter IDs.
+# Weitere Codex-IDs koennen in den Einstellungen frei eingetragen werden.
+# Leeres Modell heisst bei beiden CLIs
 # "nimm deine eigene Voreinstellung", darum ist es kein Pflichtfeld.
 PROVIDERS = {
     "claude-cli": {"label": "Claude Code Abo (kein Key)", "shape": "cli", "needs_key": False,
@@ -47,9 +48,10 @@ PROVIDERS = {
                    "hint": "Nutzt das angemeldete Claude-Code-Abo auf diesem Rechner."},
     "codex-cli": {"label": "ChatGPT-Abo (Codex CLI, kein Key)", "shape": "codex",
                   "needs_key": False, "bin": "codex",
+                  "models": ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"],
                   "default_model": "",
                   "hint": "Nutzt das angemeldete ChatGPT-Abo auf diesem Rechner "
-                          "(einmalig `codex login`). Das Modell wird automatisch vom Abo verwaltet."},
+                          "(einmalig `codex login`). Die Modellauswahl haengt vom Abo ab."},
     "anthropic": {"label": "Anthropic (Claude)", "shape": "anthropic", "needs_key": True,
                   "base": "https://api.anthropic.com/v1", "default_model": "claude-opus-5",
                   "models": ["claude-opus-5", "claude-3-7-sonnet-latest", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
@@ -229,11 +231,13 @@ def _run_codex(cfg: dict, prov: dict, prompt: str) -> str:
         ziel = os.path.join(tmp, "antwort.txt")
         cmd = [exe, "exec", "--sandbox", "read-only", "--skip-git-repo-check",
                "--ignore-user-config", "-o", ziel]
-        # ChatGPT-Abo laesst keine API-Modell-Overrides (wie 'gpt-4o') zu und wirft 400.
-        # Nur wenn ein explizit benutzerdefiniertes Modell eingestellt ist, wird -m uebergeben.
+        # Eine explizite Wahl geht unveraendert an Codex. Ein fuer dieses Konto
+        # ungueltiges Modell meldet Codex als Fehler; es darf nicht still auf
+        # das Standardmodell zurueckfallen.
         m = (cfg.get("model") or "").strip()
-        incompatible = {"default", "standard", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "o1-mini", "gpt-4.5-preview"}
-        if m and m.lower() not in incompatible:
+        if m and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]*", m):
+            raise LLMError("Ungueltige Codex-Modell-ID: Erlaubt sind Buchstaben, Zahlen, Punkt, Unterstrich, Bindestrich und Slash.")
+        if m:
             cmd += ["-m", m]
         cmd.append("-")
         try:

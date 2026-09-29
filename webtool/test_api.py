@@ -2552,6 +2552,13 @@ def test_settings_modelle_ohne_key_400(client):
     assert r.status_code == 400 and "Key" in r.json()["detail"]
 
 
+def test_settings_codex_modelle_ohne_api_key(client):
+    client.put("/api/settings", json={"provider": "codex-cli", "model": ""})
+    r = client.get("/api/settings/models")
+    assert r.status_code == 200
+    assert [m["id"] for m in r.json()["models"]] == ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
+
+
 def test_settings_test_meldet_fehler_statt_zu_500en(client, monkeypatch):
     from webtool import llm
     monkeypatch.setattr(llm, "check", lambda: (_ for _ in ()).throw(llm.LLMError("HTTP 429: Rate limit reached")))

@@ -340,17 +340,26 @@ def test_codex_ohne_modell_laesst_die_cli_entscheiden(cfg, monkeypatch):
 
 
 def test_codex_mit_modell_reicht_es_durch(cfg, monkeypatch):
-    # Benutzerdefiniertes/valides Modell wird durchgereicht
-    settings.save({"provider": "codex-cli", "model": "custom-model"})
+    # Das in den Einstellungen gewaehlte Abo-Modell erreicht den CLI-Aufruf.
+    settings.save({"provider": "codex-cli", "model": "gpt-6-astra"})
     gesehen = _codex(monkeypatch, cfg, antwort="ok")
     llm.complete("hi")
-    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "custom-model"
+    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "gpt-6-astra"
 
-    # Inkompatibles ChatGPT-Modell (z. B. gpt-4o) wird nicht als -m übergeben, damit das Abo nicht mit 400 scheitert
+    # Auch eine freie, fuer das Abo ungeeignete ID darf nicht still ignoriert werden.
     settings.save({"provider": "codex-cli", "model": "gpt-4o"})
+    gesehen = _codex(monkeypatch, cfg, antwort=None, rc=1, stderr="model not supported")
+    with pytest.raises(llm.LLMError, match="model not supported"):
+        llm.complete("hi")
+    assert gesehen["cmd"][gesehen["cmd"].index("-m") + 1] == "gpt-4o"
+
+
+def test_codex_modell_id_mit_shell_metazeichen_wird_abgelehnt(cfg, monkeypatch):
+    settings.save({"provider": "codex-cli", "model": "gpt-6-sol&echo.GEFAHR"})
     gesehen = _codex(monkeypatch, cfg, antwort="ok")
-    llm.complete("hi")
-    assert "-m" not in gesehen["cmd"]
+    with pytest.raises(llm.LLMError, match="Ungueltige Codex-Modell-ID"):
+        llm.complete("hi")
+    assert "cmd" not in gesehen
 
 
 def test_codex_ohne_antwort_meldet_sich_trotz_exitcode_null(cfg, monkeypatch):
@@ -379,7 +388,7 @@ def test_abo_modelle_sind_aliase_ohne_netz(cfg, monkeypatch):
     settings.save({"provider": "claude-cli"})
     assert [m["id"] for m in llm.list_models()] == ["opus", "sonnet", "haiku", "fable"]
     settings.save({"provider": "codex-cli"})
-    assert [m["id"] for m in llm.list_models()] == []
+    assert [m["id"] for m in llm.list_models()] == ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"]
 
 
 def test_provider_list_nennt_die_abo_clis(cfg):

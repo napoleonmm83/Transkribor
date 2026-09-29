@@ -256,6 +256,46 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('combobox', { name: /Modell/ })).toBeInTheDocument()
   })
 
+  it('speichert beim Codex-Abo ein konkretes Modell und bietet Automatisch an', async () => {
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'gpt-6-astra', label: 'gpt-6-astra' }, { id: 'gpt-6-sol', label: 'gpt-6-sol' }])
+    vi.mocked(api.saveSettings).mockImplementation(async patch => ({ ...GESPEICHERT, provider: 'codex-cli', model: patch.model ?? '' }))
+    zeige({ provider: 'codex-cli', model: '' })
+    const auswahl = await screen.findByRole('combobox', { name: 'Modell' })
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'gpt-6-astra' }))
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ model: 'gpt-6-astra' }))
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'Automatisch' }))
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ model: '' }))
+  })
+
+  it('laesst beim Codex-Abo weitere Modell-IDs eingeben und zeigt gespeicherte IDs an', async () => {
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'gpt-6-sol', label: 'gpt-6-sol' }])
+    vi.mocked(api.saveSettings).mockResolvedValue({ ...GESPEICHERT, provider: 'codex-cli', model: 'gpt-6-zukunft' })
+    const { unmount } = zeige({ provider: 'codex-cli' })
+    const auswahl = await screen.findByRole('combobox', { name: 'Modell' })
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'Andere Modell-ID' }))
+    const feld = await screen.findByRole('textbox', { name: 'Andere Modell-ID' })
+    fireEvent.change(feld, { target: { value: 'gpt-6-zukunft' } })
+    fireEvent.blur(feld)
+    await waitFor(() => expect(api.saveSettings).toHaveBeenCalledWith({ model: 'gpt-6-zukunft' }))
+    unmount()
+
+    zeige({ provider: 'codex-cli', model: 'gpt-6-zukunft' })
+    expect((await screen.findByRole('textbox', { name: 'Andere Modell-ID' }) as HTMLInputElement).value).toBe('gpt-6-zukunft')
+  })
+
+  it('behaelt das gewaehlte Codex-Modell, wenn die freie Eingabe leer verlassen wird', async () => {
+    vi.mocked(api.listModels).mockResolvedValue([{ id: 'gpt-6-sol', label: 'gpt-6-sol' }])
+    zeige({ provider: 'codex-cli', model: 'gpt-6-sol' })
+    const auswahl = await screen.findByRole('combobox', { name: 'Modell' })
+    fireEvent.click(auswahl)
+    fireEvent.click(await screen.findByRole('option', { name: 'Andere Modell-ID' }))
+    fireEvent.blur(await screen.findByRole('textbox', { name: 'Andere Modell-ID' }))
+    expect(api.saveSettings).not.toHaveBeenCalledWith({ model: '' })
+  })
+
   it('bleibt beim Textfeld, wenn das automatische Laden scheitert — ohne Fehlblase', async () => {
     // Ein abgelaufener Key darf beim blossen Oeffnen der Seite nicht rot aufpoppen.
     // Verschluckt wird nichts: das Textfeld bleibt, und der Knopf meldet weiterhin laut.

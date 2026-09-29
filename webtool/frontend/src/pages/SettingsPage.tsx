@@ -252,6 +252,7 @@ function ytMelden(stand: YtdlpStand) {
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null)
   const [modelle, setModelle] = useState<ModelInfo[]>([])
+  const [anderesCodexModell, setAnderesCodexModell] = useState(false)
   // Nur das NEU Eingetippte; die gespeicherten Geheimnisse kommen nie zum Frontend zurueck.
   const [key, setKey] = useState('')
   const [laedt, setLaedt] = useState(false)
@@ -457,6 +458,7 @@ export function SettingsPage() {
   const anbieterWechseln = (id: string) => {
     const p = s?.providers.find(x => x.id === id)
     setModelle([])
+    setAnderesCodexModell(false)
     // Modell mitzurücksetzen ist Absicht: ein Modellname des alten Anbieters ist beim neuen ungültig.
     speichern({ provider: id, model: p?.default_model ?? '', base_url: '' })
   }
@@ -983,10 +985,20 @@ export function SettingsPage() {
               <label id="lbl-modell" htmlFor="feld-modell" className="mb-1.5 block text-sm font-medium">Modell</label>
               <div className="flex gap-2">
                 {modelle.length > 0 ? (
-                  <Select value={s.model} onValueChange={m => speichern({ model: m })}>
+                  <Select value={prov.id === 'codex-cli'
+                    ? (anderesCodexModell || (s.model && !modelle.some(m => m.id === s.model))
+                      ? '__other__' : s.model || '__auto__')
+                    : s.model}
+                    onValueChange={m => {
+                      if (m === '__other__') { setAnderesCodexModell(true); return }
+                      setAnderesCodexModell(false)
+                      speichern({ model: m === '__auto__' ? '' : m })
+                    }}>
                     <SelectTrigger className="w-full" aria-labelledby="lbl-modell"><SelectValue placeholder="Modell wählen" /></SelectTrigger>
                     <SelectContent>
+                      {prov.id === 'codex-cli' && <SelectItem value="__auto__">Automatisch</SelectItem>}
                       {modelle.map(m => <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>)}
+                      {prov.id === 'codex-cli' && <SelectItem value="__other__">Andere Modell-ID</SelectItem>}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -1009,6 +1021,17 @@ export function SettingsPage() {
                   <span className="sr-only">Modelle neu vom Anbieter laden</span>
                 </Button>
               </div>
+              {prov.id === 'codex-cli' && modelle.length > 0
+                && (anderesCodexModell || (!!s.model && !modelle.some(m => m.id === s.model))) && (
+                  <Input aria-label="Andere Modell-ID" key={`${s.provider}|${s.model}|${anderesCodexModell}`}
+                    defaultValue={modelle.some(m => m.id === s.model) ? '' : s.model}
+                    placeholder="Modell-ID eingeben"
+                    onBlur={e => {
+                      const m = e.target.value.trim()
+                      if (!m) { setAnderesCodexModell(false); return }
+                      if (m !== s.model) speichern({ model: m })
+                    }} />
+                )}
             </div>
           </div>
         )}
