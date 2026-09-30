@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.58.2 — 2026-09-30
+
 **Behoben**
 - Der Gesamtfortschritt der Einrichtung beginnt beim Wechsel zum nächsten Paket nicht mehr von vorn; Download-Prozent und Restzeit beziehen sich getrennt auf die aktuelle Datei.
 - Nach der Nemotron-Einrichtung funktionieren Transkription und Sprecher-Erkennung auch mit den gemeinsam installierten Audio-Paketen wieder.
