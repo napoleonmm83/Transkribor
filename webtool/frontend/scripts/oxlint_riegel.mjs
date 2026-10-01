@@ -131,18 +131,24 @@ function lintetDatei(root, file, { timeout = 30_000, toolPath = defaultTool(root
   return report.number_of_files > 0
 }
 
-/** Manuelles Einfrieren. Der normale Riegel liest die Baseline ausschliesslich. */
-export function writeBaseline(root, options) {
+/** Manuelles Einfrieren. Der normale Riegel liest die Baseline ausschliesslich.
+ *  `--schreiben` ist die vorgeschriebene Antwort auf eine geloeschte Datei; es darf
+ *  dabei keinen NEUEN Befund still in den Altbestand schieben. Neue Befunde brechen
+ *  deshalb ab, ausser `mitNeuen` ist ausdruecklich gesetzt (`--schreiben --mit-neuen`). */
+export function writeBaseline(root, options, { mitNeuen = false } = {}) {
   const { entries, files } = lint(root, options)
   const sum = values => values.reduce((total, entry) => total + entry.count, 0)
-  // Was gegenueber der alten Baseline NEU eingefroren wird, gehoert in die Meldung:
-  // sonst verschwindet ein neuer Befund eines PRs stumm im Altbestand.
-  let frozen = null
-  try {
-    frozen = sum(compare(entries, readBaseline(join(root, baselineName)).entries).added)
-  } catch { /* keine oder unlesbare alte Baseline: nichts zu vergleichen */ }
-  writeFileSync(join(root, baselineName), JSON.stringify({ version: 1, files, entries }, null, 2) + '\n')
-  return { files, count: sum(entries), frozen }
+  const path = join(root, baselineName)
+  // Fehlt die alte Baseline, ist das der Erstlauf. Ist sie da, aber unlesbar, wird
+  // nicht still alles eingefroren — das waere derselbe Weg um die Pruefung herum.
+  const added = existsSync(path) ? compare(entries, readBaseline(path).entries).added : null
+  if (added?.length && !mitNeuen) {
+    const details = added.map(entry => `  ${entry.count}x ${entry.file}: ${entry.rule} — ${entry.message}`)
+    throw new Error([`${sum(added)} neue Befunde wuerden eingefroren — beheben, oder bewusst mit ` +
+      '--schreiben --mit-neuen', ...details].join('\n'))
+  }
+  writeFileSync(path, JSON.stringify({ version: 1, files, entries }, null, 2) + '\n')
+  return { files, count: sum(entries), frozen: added === null ? null : sum(added) }
 }
 
 export function run(root, options) {
@@ -180,9 +186,11 @@ export function run(root, options) {
 
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   const args = process.argv.slice(2)
-  if (args.length === 1 && args[0] === '--schreiben') {
+  const schreiben = args[0] === '--schreiben' &&
+    (args.length === 1 || (args.length === 2 && args[1] === '--mit-neuen'))
+  if (schreiben) {
     try {
-      const { files, count, frozen } = writeBaseline(process.cwd())
+      const { files, count, frozen } = writeBaseline(process.cwd(), undefined, { mitNeuen: args.length === 2 })
       const neu = frozen === null ? 'keine alte Baseline' : `davon ${frozen} neu eingefroren`
       console.log(`oxlint-riegel: Baseline geschrieben (${files} Dateien; ${count} Befunde; ${neu})`)
     } catch (error) {
@@ -190,7 +198,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       process.exitCode = 2
     }
   } else if (args.length) {
-    console.error('oxlint-riegel: Verwendung: node scripts/oxlint_riegel.mjs [--schreiben]')
+    console.error('oxlint-riegel: Verwendung: node scripts/oxlint_riegel.mjs [--schreiben [--mit-neuen]]')
     process.exitCode = 2
   } else {
     const result = run(process.cwd())
