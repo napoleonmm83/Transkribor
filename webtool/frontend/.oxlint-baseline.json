@@ -8,8 +8,8 @@
       "severity": "warning",
       "message": "Calling setState synchronously within an effect can trigger cascading renders",
       "anchors": [
-        "[\"08a6317ecc7717e3b44aec71761c06640a583ed30797f9b35c75d9de34482de3\",\"useEffect(() => {\",\"useEffect\"]",
-        "[\"479b8f941b8abdfeb85d5428ed0df9d62ca67a28350ba6459dc9c97689aa7e8d\",\"if (!datei) { setRessource(null); return }\",\"setRessource\"]"
+        "[\"if (!datei) { setRessource(null); return }\",\"setRessource\"]",
+        "[\"useEffect(() => {\",\"useEffect\"]"
       ],
       "count": 1
     },
@@ -19,7 +19,7 @@
       "severity": "warning",
       "message": "React Hook useCallback has unnecessary dependency: erzwingen",
       "anchors": [
-        "[\"14995576c0fea3e7c4a00b10b278f1c3a68e97416f978009259b73ac6e3e166a\",\"}, [doc, project, base, konflikt, erzwingen, reload, verworfenStand])\",\"[doc, project, base, konflikt, erzwingen, reload, verworfenStand]\"]"
+        "[\"}, [doc, project, base, konflikt, erzwingen, reload, verworfenStand])\",\"[doc, project, base, konflikt, erzwingen, reload, verworfenStand]\"]"
       ],
       "count": 1
     }

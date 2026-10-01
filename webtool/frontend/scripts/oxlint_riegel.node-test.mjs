@@ -56,16 +56,28 @@ test('neue Quellstelle derselben Regel und Datei ist neu', t => {
   writeFileSync(join(root, 'src', 'probe.ts'), 'const neu = 1\n')
   assert.equal(compare(normalizeReport(report(), root), before).added.length, 1)
 })
-test('gleiche Warnung in anderer Funktion bleibt neu', t => {
-  const source = 'export function erster() {\n  const wert = 1;\n  return 0;\n}\nexport function zweiter() {\n  const wert = 1;\n  return wert;\n}\n'
+test('Aenderung oberhalb eines Altbefunds laesst seine Identitaet stehen', t => {
+  // Vorher hing die Identitaet am ganzen Text davor: ein Import oder eine Zeile in
+  // einer anderen Funktion machte den unveraenderten Befund zu "1 neu, 1 behoben".
+  const source = 'export function erster() {\n  return 0;\n}\nexport function zweiter() {\n  const wert = 1;\n}\n'
   const root = fixture(t, source)
   const data = report()
   data.diagnostics[0].labels[0].span.offset = Buffer.byteLength(source.slice(0, source.indexOf('wert')))
   const before = normalizeReport(data, root)
-  const changed = source.replace('return 0;', 'return wert;').replace(/return wert;(?=\n}\n$)/, 'return 0;')
+  const changed = "import { x } from './x'\n" + source.replace('return 0;', 'const neu = 2;\n  return neu;')
   writeFileSync(join(root, 'src', 'probe.ts'), changed)
-  data.diagnostics[0].labels[0].span.offset = Buffer.byteLength(changed.slice(0, changed.lastIndexOf('wert')))
-  assert.equal(compare(normalizeReport(data, root), before).added.length, 1)
+  data.diagnostics[0].labels[0].span.offset = Buffer.byteLength(changed.slice(0, changed.indexOf('wert')))
+  assert.deepEqual(compare(normalizeReport(data, root), before), { added: [], removed: [] })
+})
+test('ein zusaetzliches wortgleiches Vorkommen in derselben Datei ist neu', t => {
+  const source = 'export function erster() {\n  const wert = 1;\n}\nexport function zweiter() {\n  const wert = 1;\n}\n'
+  const root = fixture(t, source)
+  const at = index => ({ ...report().diagnostics[0], labels: [{ span: { offset: Buffer.byteLength(source.slice(0, index)), length: 4 } }] })
+  const one = normalizeReport(report({ diagnostics: [at(source.indexOf('wert'))] }), root)
+  const two = normalizeReport(report({ diagnostics: [at(source.indexOf('wert')), at(source.lastIndexOf('wert'))] }), root)
+  const { added } = compare(two, one)
+  assert.equal(added.length, 1)
+  assert.equal(added[0].count, 1)
 })
 test('semantischer Leerraum in Literal bleibt Teil der Identitaet', t => {
   const root = fixture(t, '"A B";\n')
@@ -76,13 +88,13 @@ test('semantischer Leerraum in Literal bleibt Teil der Identitaet', t => {
   data.diagnostics[0].labels[0].span.length = 6
   assert.equal(compare(normalizeReport(data, root), before).added.length, 1)
 })
-test('identische Texte an verschiedenen Spans einer Zeile bleiben verschieden', t => {
+test('identische Texte an zwei Spans einer Zeile zaehlen doppelt', t => {
   const root = fixture(t, 'wert; wert;\n')
-  const data = report()
-  data.diagnostics[0].labels[0].span = { offset: 0, length: 4 }
-  const before = normalizeReport(data, root)
-  data.diagnostics[0].labels[0].span.offset = 6
-  assert.equal(compare(normalizeReport(data, root), before).added.length, 1)
+  const at = offset => ({ ...report().diagnostics[0], labels: [{ span: { offset, length: 4 } }] })
+  const one = normalizeReport(report({ diagnostics: [at(0)] }), root)
+  const two = normalizeReport(report({ diagnostics: [at(0), at(6)] }), root)
+  assert.equal(two[0].count, 2)
+  assert.equal(compare(two, one).added[0].count, 1)
 })
 test('leerer sauberer Lauf braucht positive Dateizahl', t => {
   const root = fixture(t)

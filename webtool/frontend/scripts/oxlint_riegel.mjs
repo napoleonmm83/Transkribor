@@ -4,7 +4,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 
 const baselineName = '.oxlint-baseline.json'
@@ -32,9 +31,8 @@ function validateEntry(entry) {
   }
 }
 
-/** Oxlint-Spans sind UTF-8-Bytepositionen. Quelltextanker bleiben bei CRLF und
- *  vorangestellten Leer-/Kommentarzeilen gleich. Frueherer Quellkontext gilt
- *  konservativ als neuer Kontext, damit gleiche Warnungen nicht wandern. */
+/** Oxlint-Spans sind UTF-8-Bytepositionen. Quelltextanker (Zeilentext + markierter
+ *  Text) bleiben bei CRLF und bei Zeilenverschiebungen gleich. */
 export function normalizeReport(report, root) {
   if (!report || !Number.isSafeInteger(report.number_of_files) || report.number_of_files <= 0 ||
       !Array.isArray(report.diagnostics)) throw new Error('Kein vollstaendiger oxlint-Lauf')
@@ -56,14 +54,13 @@ export function normalizeReport(report, root) {
       const end = newline === -1 ? source.length : newline
       const line = source.subarray(start, end).toString('utf8').trim()
       const text = source.subarray(offset, offset + length).toString('utf8').replaceAll('\r\n', '\n')
-      // Gesamter vorheriger Kontext statt nur benachbarter Zeilen: gleiche
-      // Anweisungen in verschiedenen Funktionen duerfen nicht kollidieren.
-      const prefix = source.subarray(0, offset).toString('utf8').split('\n').map(value => value.trim())
-      // Nur ein fuehrendes Kommentarvorwort ausblenden: // innerhalb eines
-      // spaeteren Template-Literals ist Quelltext und darf nicht verschwinden.
-      while (prefix.length && (!prefix[0] || prefix[0].startsWith('//'))) prefix.shift()
-      const context = createHash('sha256').update(prefix.join('\n')).digest('hex')
-      return JSON.stringify([context, line, text])
+      // Bewusst KEIN Kontext ueber den Text davor (Entscheidung Marcus 2026-10-01):
+      // ein Hash ueber den ganzen Praefix machte jede Zeile oberhalb eines
+      // Altbefunds zu "1 neu, 1 behoben" und die CI rot. Gleiche Befunde derselben
+      // Datei fallen zusammen und werden ueber `count` gezaehlt; ein ZUSAETZLICHES
+      // Vorkommen bleibt so neu. Der Preis: wird ein Altbefund behoben und entsteht
+      // zugleich ein wortgleicher in derselben Datei, faellt der Tausch nicht auf.
+      return JSON.stringify([line, text])
     }).sort()
     const entry = { file, rule: diagnostic.code, severity: diagnostic.severity,
       message: diagnostic.message, anchors, count: 1 }
