@@ -95,7 +95,7 @@ export function useOsFortschritt(): void {
   // laufenden Balken nie rot. Folge war ein FEHLENDES Rot — die Richtung, die man nicht
   // bemerkt, weil nichts passiert.
   const alteFehler = useRef(new Set<string>())
-  // INTENTIONAL-UNTESTED: Gate übersieht TSX-Tests; useOsFortschritt.test.tsx reproduziert den Mehrfachversand (T031).
+  // INTENTIONAL-UNTESTED: Gate übersieht TSX-Tests; useOsFortschritt.test.tsx („sendet unveraenderten Fortschritt trotz weiterer Jobpolls nur einmal“) bewacht diese Rueckkehr: ohne sie sendet jeder Jobpoll denselben Stand erneut (T031).
   const zuletztGesendet = useRef<{ anteil: number; modus?: string; senden: NonNullable<ReturnType<typeof bruecke>> } | null>(null)
   useEffect(() => {
     if (leerlauf) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))

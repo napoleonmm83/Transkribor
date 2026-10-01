@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import { UmbenennenDialog } from './UmbenennenDialog'
 import { sprecherNamen } from '@/lib/sprecherNamen'
 import type { EditDoc } from '@/lib/types'
@@ -54,6 +54,24 @@ describe('UmbenennenDialog', () => {
     })
     await act(async () => { screen.getByRole('button', { name: 'Umbenennen' }).click() })
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
+  })
+
+  it('schliesst nicht, wenn der Dialog waehrend des Speicherns zu einem anderen Gegenstand wurde', async () => {
+    // Die `stand.active`-Wache hinter dem `await`: `key={wert}` baut den Inhalt fuer einen anderen
+    // Gegenstand neu auf, und die Antwort des ALTEN Laufs darf den neuen Dialog weder schliessen
+    // noch anfassen. Mutation „Wache raus" -> `onOpenChange(false)` feuert, der Test wird rot.
+    let fertig: () => void = () => {}
+    const onSpeichern = vi.fn(() => new Promise<void>(r => { fertig = r }))
+    const onOpenChange = vi.fn()
+    const props = { offen: true, onOpenChange, titel: 't', beschreibung: 'b', onSpeichern }
+    const { rerender } = render(<UmbenennenDialog {...props} wert="alt" />)
+    fireEvent.change(screen.getByLabelText('Neuer Name'), { target: { value: 'neu' } })
+    await act(async () => { screen.getByRole('button', { name: 'Umbenennen' }).click() })
+    expect(onSpeichern).toHaveBeenCalledWith('neu')
+    rerender(<UmbenennenDialog {...props} wert="anderes" />)
+    await act(async () => { fertig() })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Neuer Name')).toHaveValue('anderes')
   })
 
   it('ruft den Server nicht, wenn sich nichts geaendert hat', async () => {

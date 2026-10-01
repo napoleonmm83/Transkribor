@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within, act } from '@testing-library/react'
 import * as api from '@/lib/api'
 import { DateiEinstellungenDialog } from './DateiEinstellungenDialog'
 import type { ProjectFile } from '@/lib/types'
@@ -628,5 +628,32 @@ describe('auto-Regel erklaeren (#301)', () => {
     expect(screen.queryByText(/gilt der Projekt-Standard/)).toBeNull()
     expect(screen.queryByText(/Es gilt, was Whisper erkennt/)).toBeNull()
     getSpy.mockRestore()
+  })
+})
+
+describe('DateiEinstellungenDialog — Wechsel waehrend des Speicherns', () => {
+  it('schliesst den Dialog einer anderen Datei nicht, wenn Speichern der alten erst danach antwortet', async () => {
+    // Die `stand.active`-Wache hinter dem `await`: der Inhalt haengt an `[project, base]` und wird
+    // fuer eine andere Datei neu aufgebaut; der alte Lauf darf ihn nicht schliessen.
+    // Mutation „Wache raus" -> `onOpenChange(false)` feuert.
+    const getSpy = vi.spyOn(api, 'getFileEinstellungen').mockResolvedValue(BASIS)
+    let fertig: (v: { sprache: string; korrektur: string; mehrsprachig: boolean }) => void = () => {}
+    const saveSpy = vi.spyOn(api, 'saveFileEinstellungen')
+      .mockReturnValue(new Promise(r => { fertig = r }))
+    const onOpenChange = vi.fn()
+    const onGespeichert = vi.fn()
+    const { rerender } = render(<DateiEinstellungenDialog project="p" base="a" file={datei()} offen
+      onOpenChange={onOpenChange} onGespeichert={onGespeichert} />)
+    await sprachWaehlerDa()
+    await spracheWaehlen('Englisch')
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern & neu transkribieren' }))
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith('p', 'a', expect.anything()))
+    rerender(<DateiEinstellungenDialog project="p" base="b" file={datei({ base: 'b' })} offen
+      onOpenChange={onOpenChange} onGespeichert={onGespeichert} />)
+    await act(async () => { fertig({ sprache: 'en', korrektur: 'auto', mehrsprachig: false }) })
+    // Positivkontrolle: der alte Lauf ist wirklich hinter dem `await` angekommen.
+    expect(onGespeichert).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    getSpy.mockRestore(); saveSpy.mockRestore()
   })
 })

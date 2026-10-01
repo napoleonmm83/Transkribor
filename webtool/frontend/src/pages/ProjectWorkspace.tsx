@@ -106,11 +106,8 @@ export function ProjectWorkspace() {
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      .then(d => {
-        if (aktiveSitzung.current === sitzung) {
-          setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s)
-        }
-      })
+      // Der Updater prueft die Sitzung selbst; eine zweite Wache davor war gemessen wirkungslos.
+      .then(d => setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s))
       .catch(e => { if (aktiveSitzung.current === sitzung) meldeLadefehler(e) })
   }
 

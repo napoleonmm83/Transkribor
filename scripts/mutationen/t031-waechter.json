@@ -1,0 +1,93 @@
+{
+  "test": "npm --prefix webtool/frontend test -- src/components/UmbenennenDialog.test.tsx src/components/ProjektEinstellungenDialog.test.tsx src/components/DateiEinstellungenDialog.test.tsx src/components/MaterialDialog.test.tsx src/components/HoerBalken.test.tsx src/hooks/useProjectFiles.test.ts src/pages/ProjectWorkspace.test.tsx",
+  "pfade": [
+    "webtool/frontend/src/components/UmbenennenDialog.tsx",
+    "webtool/frontend/src/components/UmbenennenDialog.test.tsx",
+    "webtool/frontend/src/components/ProjektEinstellungenDialog.tsx",
+    "webtool/frontend/src/components/ProjektEinstellungenDialog.test.tsx",
+    "webtool/frontend/src/components/DateiEinstellungenDialog.tsx",
+    "webtool/frontend/src/components/DateiEinstellungenDialog.test.tsx",
+    "webtool/frontend/src/components/MaterialDialog.tsx",
+    "webtool/frontend/src/components/MaterialDialog.test.tsx",
+    "webtool/frontend/src/components/HoerBalken.tsx",
+    "webtool/frontend/src/components/HoerBalken.test.tsx",
+    "webtool/frontend/src/hooks/useProjectFiles.ts",
+    "webtool/frontend/src/hooks/useProjectFiles.test.ts",
+    "webtool/frontend/src/pages/ProjectWorkspace.tsx",
+    "webtool/frontend/src/pages/ProjectWorkspace.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "W1 der Umbenennen-Dialog schliesst nach einem Gegenstandswechsel den neuen Dialog (Wache nach dem await fehlt)",
+      "datei": "webtool/frontend/src/components/UmbenennenDialog.tsx",
+      "von": "if (!stand.active) return",
+      "nach": "if (false) return",
+      "rot": [
+        "schliesst nicht, wenn der Dialog waehrend des Speicherns zu einem anderen Gegenstand wurde"
+      ]
+    },
+    {
+      "id": "W2 der Projekt-Dialog wird von der Antwort des alten Projekts geschlossen",
+      "datei": "webtool/frontend/src/components/ProjektEinstellungenDialog.tsx",
+      "von": "if (stand.active) setOpen(false)",
+      "nach": "setOpen(false)",
+      "rot": [
+        "schliesst den Dialog eines anderen Projekts nicht, wenn Speichern von A erst nach dem Wechsel antwortet"
+      ]
+    },
+    {
+      "id": "W3 der Datei-Dialog wird von der Antwort der alten Datei geschlossen",
+      "datei": "webtool/frontend/src/components/DateiEinstellungenDialog.tsx",
+      "von": "if (stand.active) onOpenChange?.(false)",
+      "nach": "onOpenChange?.(false)",
+      "rot": [
+        "schliesst den Dialog einer anderen Datei nicht, wenn Speichern der alten erst danach antwortet"
+      ]
+    },
+    {
+      "id": "W4 ein veralteter refresh zaehlt die Kennung hoch und entwertet die Antwort des neuen Projekts",
+      "datei": "webtool/frontend/src/hooks/useProjectFiles.ts",
+      "von": "if (!project || aktiv.current !== sitzung) return",
+      "nach": "if (!project) return",
+      "rot": [
+        "ein refresh aus dem verlassenen Projekt entwertet die Antwort des neuen nicht"
+      ]
+    },
+    {
+      "id": "W5 der abgebaute Material-Dialog zaehlt seinen Lauf nicht mehr weiter und ruft onSchliessen fuer B",
+      "datei": "webtool/frontend/src/components/MaterialDialog.tsx",
+      "von": "useEffect(() => () => { laufNr.current++ }, [])",
+      "nach": "useEffect(() => () => { }, [])",
+      "rot": [
+        "ein erfolgreicher Lauf aus A schliesst nach dem Projektwechsel nicht Bs Dialog"
+      ]
+    },
+    {
+      "id": "W6 der Hoerbalken reicht im Zwischenrender die URL der vorigen Datei an die Welle",
+      "datei": "webtool/frontend/src/components/HoerBalken.tsx",
+      "von": "const url = ressource?.datei === datei ? ressource.url : null",
+      "nach": "const url = ressource?.url ?? null",
+      "rot": [
+        "reicht beim Dateiwechsel in KEINEM Render die URL der vorigen Datei an die Welle"
+      ]
+    },
+    {
+      "id": "W7 der Nachlade-Fehler eines verlassenen Projekts erscheint als Toast",
+      "datei": "webtool/frontend/src/pages/ProjectWorkspace.tsx",
+      "von": ".catch(e => { if (aktiveSitzung.current === sitzung) meldeLadefehler(e) })",
+      "nach": ".catch(e => { meldeLadefehler(e) })",
+      "rot": [
+        "meldet den Nachlade-Fehler von A nicht, wenn inzwischen B offen ist"
+      ]
+    },
+    {
+      "id": "W8 die verspaetete Nachlade-Antwort von A ersetzt Bs Einstellungen",
+      "datei": "webtool/frontend/src/pages/ProjectWorkspace.tsx",
+      "von": ".then(d => setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s))",
+      "nach": ".then(d => setProjektState(s => ({ ...s, einstellungen: d, sprache: d.sprache })))",
+      "rot": [
+        "ersetzt Bs Einstellungen nicht durch die verspaetete Nachlade-Antwort von A"
+      ]
+    }
+  ]
+}

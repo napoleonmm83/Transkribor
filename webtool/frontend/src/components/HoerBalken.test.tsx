@@ -10,6 +10,7 @@ import { ersteStelle } from '@/lib/ersteStelle'
 // Mutation „Wache raus" gruen, weil `onBereit` nie faellt (Reviewbefund W4).
 const springeZu = vi.hoisted(() => vi.fn())
 const abgespielteUrl = vi.hoisted(() => vi.fn())
+const gerendertUrl = vi.hoisted(() => vi.fn())
 // `await import('react')` IN der Factory, nicht `require` (das gibt es in diesem Baum nicht,
 // und `tsc -b` sagt es — `vitest` pruefte es nicht) und auch kein Import von aussen: die
 // Factory laeuft, bevor die Modulbindungen des Tests stehen.
@@ -21,6 +22,7 @@ vi.mock('@/components/Waveform', async () => {
       ref: React.Ref<{ springeZu: (s: number) => void }>,
     ) {
       useImperativeHandle(ref, () => ({ springeZu }))
+      gerendertUrl(url)
       useEffect(() => { abgespielteUrl(url) }, [url])
       useEffect(() => { onBereit?.(new Float32Array([0.001, 0.002, 0.9, 0.8]), 40) })
       return <div data-testid="welle" data-url={url} />
@@ -90,6 +92,19 @@ describe('HoerBalken', () => {
     rerender(<HoerBalken datei={datei('b.mp3')} anzeige="b.mp3" onSchliessen={() => {}} />)
     expect(freigegeben).toEqual([erzeugt[0]])
     expect(screen.getByTestId('welle')).toHaveAttribute('data-url', erzeugt[1])
+  })
+
+  it('reicht beim Dateiwechsel in KEINEM Render die URL der vorigen Datei an die Welle', () => {
+    /* Der Vergleich `ressource?.datei === datei`. Zwischen dem Wechsel der Prop und dem Effekt,
+       der die neue URL erzeugt, liegt ein Render; ohne den Vergleich traegt er noch die URL der
+       alten Datei — die der Cleanup im selben Commit freigibt. `abgespielteUrl` sieht das nicht
+       (Effekt, nur bei Aenderung), erst die Aufzeichnung JEDES Renders. */
+    const { rerender } = render(
+      <HoerBalken datei={datei('a.mp3')} anzeige="a.mp3" onSchliessen={() => {}} />)
+    gerendertUrl.mockClear()
+    rerender(<HoerBalken datei={datei('b.mp3')} anzeige="b.mp3" onSchliessen={() => {}} />)
+    expect(gerendertUrl).toHaveBeenCalledWith(erzeugt[1])        // Positivkontrolle: B wurde gerendert
+    expect(gerendertUrl).not.toHaveBeenCalledWith(erzeugt[0])
   })
 
   it('gibt die Blob-URL frei, wenn der Balken verschwindet', () => {

@@ -541,6 +541,26 @@ describe('MaterialDialog', () => {
     expect(screen.queryByText('a.mp3')).not.toBeInTheDocument()
   })
 
+  it('ein erfolgreicher Lauf aus A schliesst nach dem Projektwechsel nicht Bs Dialog', async () => {
+    /* Die `laufNr`-Erhoehung beim Abbau. `key={project}` baut den Inhalt neu auf, aber der
+       ALTE Lauf haelt seinen Zaehler weiter in der Hand: ohne die Erhoehung gilt `meiner ===
+       laufNr.current` auch nach dem Wechsel, und er ruft `onSchliessen` — den Rueckruf, den
+       die Arbeitsflaeche fuer den gerade offenen Dialog von B haelt. Der Test davor sieht das
+       nicht: `setZeilen` auf einer abgebauten Instanz tut ohnehin nichts. */
+    let aufloesen: (w: unknown) => void = () => {}
+    vi.mocked(api.uploadAudio).mockReturnValue(new Promise(r => { aufloesen = r as never }))
+    const schliessen = vi.fn()
+    const { rerender } = render(
+      <MaterialDialog {...basis} project="A" onSchliessen={schliessen}
+        vorbelegteDateien={[datei('a.mp3')]} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Los geht/ }))
+    rerender(<MaterialDialog {...basis} project="B" onSchliessen={schliessen} />)
+    await act(async () => { aufloesen({ base: 'a', file: 'a.mp3', job_id: 'j', started: true }) })
+    expect(schliessen).not.toHaveBeenCalled()
+  })
+
   it('meldet den Ausgang an den Rueckruf DES PROJEKTS, in dem der Lauf startete', async () => {
     /* Messung zu einem Reviewbefund (CodeRabbit-Bot, kritisch): `onFertig` laeuft ausserhalb
        der `laufNr`-Wache — meldet ein Lauf aus Projekt A seinen Job also an den Rueckruf von

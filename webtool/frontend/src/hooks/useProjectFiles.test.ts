@@ -212,3 +212,22 @@ it('eine Antwort aus dem ersten A-Aufenthalt ersetzt nach A-B-A keine neue Liste
   await act(async () => { erste({ name: 'A', files: [datei] }) })
   expect(result.current.files[0]?.base).toBe('neu')
 })
+
+it('ein refresh aus dem verlassenen Projekt entwertet die Antwort des neuen nicht', async () => {
+  // Die Wache `aktiv.current !== sitzung` am Kopf von `refresh`: ohne sie zaehlt ein veralteter
+  // Aufruf (etwa ein spaet feuernder Summenpoll aus A) die Kennung hoch, Bs Antwort faellt durch
+  // `aktuell()` und `loading` bleibt stehen. Der A-B-A-Test oben deckt nur den Antwortpfad.
+  let loeseB!: (r: { name: string; files: ProjectFile[] }) => void
+  vi.mocked(api.getProjectFiles).mockReset()
+  vi.mocked(api.getProjectFiles).mockImplementation((p: string) =>
+    p === 'B' ? new Promise(r => { loeseB = r }) : Promise.resolve({ name: 'A', files: [datei] }))
+  const { result, rerender } = renderHook(({ p }) => useProjectFiles(p), { initialProps: { p: 'A' } })
+  await waitFor(() => expect(result.current.files).toEqual([datei]))
+  const alterRefresh = result.current.refresh
+  rerender({ p: 'B' })
+  await act(async () => { alterRefresh() })
+  const bDatei = { ...datei, base: 'B1' }
+  await act(async () => { loeseB({ name: 'B', files: [bDatei] }) })
+  expect(result.current.files).toEqual([bDatei])
+  expect(result.current.loading).toBe(false)
+})
