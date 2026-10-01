@@ -89,6 +89,24 @@ eval/
 /.pytest-security-tmp/
 /.cg_tmp_efficiency/
 
+# Reste paralleler Codex-Laeufe (Entscheidung Marcus 2026-10-01): sie BLEIBEN liegen,
+# weil Codex sie evtl. noch braucht — nur git soll sie nicht mehr sehen. Gemessen
+# vorher: 32 801 unversionierte Dateien, davon 30 809 in drei `.tmp-*`-Ordnern,
+# 1 700 in .npm-cache/, 205 in .worktrees/; der Kalt-Review-Riegel riss damit an
+# einem Tag achtmal sein 300-s-Limit (er fasst jede Datei einzeln an).
+# DIE AUSNAHME von der Namensregel oben, bewusst: `/.tmp-*` ist ein MUSTER, weil
+# Codex je Lauf einen neuen Namen erfindet (`.tmp-pytest-t219g`,
+# `.tmp-auth-final3-20260924` …) — eine Namensliste waere nach dem naechsten Lauf
+# veraltet. Eng gehalten: verankert auf die Wurzel und nur mit Bindestrich; ohne
+# Schraegstrich am Ende trifft es Ordner UND einzelne `.tmp-*`-Notizdateien.
+# Derselbe Preis wie oben: der Kalt-Review-Riegel ist in diesen Pfaden blind.
+# scripts/test_ignoriermuster.py prueft Treffer UND Gegenproben.
+/.tmp-*
+/.npm-cache/
+/.worktrees/
+/scratchpad/
+/cg-codex-*/
+
 # Artefakte von scripts/osv_freeze.py (#284): das aufgeloeste Abbild driftet (wird je
 # Lauf in der CI neu erzeugt) und die pip-Reports sind Wegwerfzeug vom Dry-Run.
 requirements-resolved.txt
