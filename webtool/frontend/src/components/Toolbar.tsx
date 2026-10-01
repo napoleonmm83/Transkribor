@@ -7,7 +7,7 @@ import {
 import type { ExportFmt } from '@/lib/api'
 import type { SpeicherStand } from '@/hooks/useDoc'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { FLAGS } from './SegmentView'
+import { FLAGS } from '@/lib/segmentFlags'
 import { Suchfeld } from './Suchfeld'
 
 /**

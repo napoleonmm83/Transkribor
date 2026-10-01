@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, act, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { ProjectWorkspace } from './ProjectWorkspace'
-import { JobProvider } from '@/hooks/useActiveJob'
-import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
-import { EditorBrueckeProvider } from '@/hooks/useEditorBruecke'
+import { JobProvider } from '@/hooks/JobProvider'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
 import * as api from '@/lib/api'
 import type { Settings, ProjectFile } from '@/lib/types'
 
@@ -137,7 +137,7 @@ describe('ProjectWorkspace (Stub)', () => {
     vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'Demo',
       files: [{ base: 'S1', has_audio: true, has_raw: true, has_edit: false, has_md: false }] })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: ['→ Verifiziere S1 (Treue gegen Roh) …'] })
-    const { JobProvider } = await import('@/hooks/useActiveJob')
+    const { JobProvider } = await import('@/hooks/JobProvider')
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
@@ -169,7 +169,7 @@ describe('ProjectWorkspace (Stub)', () => {
       files: [{ base: 'S1', has_audio: true, has_raw: false, has_edit: false, has_md: false }] })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running',
       lines: ['[scope] S1', '[Demo] fertig S1: 12s, 30 Segmente, 1.2x'] })
-    const { JobProvider } = await import('@/hooks/useActiveJob')
+    const { JobProvider } = await import('@/hooks/JobProvider')
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
@@ -201,7 +201,7 @@ describe('ProjectWorkspace (Stub)', () => {
     ] })
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running',
       lines: ['[scope] S1\tS2', '[active] S1', '[Demo] -> transkribiere S1 …'] })
-    const { JobProvider } = await import('@/hooks/useActiveJob')
+    const { JobProvider } = await import('@/hooks/JobProvider')
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
@@ -237,7 +237,7 @@ describe('ProjectWorkspace (Stub)', () => {
     // die Auskunft.
     vi.mocked(api.getJob).mockResolvedValue({ status: 'running', gesehen: ['S1', 'S2'],
       lines: ['[scope] S1\tS2', '[active] S2', '[Demo] -> transkribiere S2 …'] })
-    const { JobProvider } = await import('@/hooks/useActiveJob')
+    const { JobProvider } = await import('@/hooks/JobProvider')
     render(
       <MemoryRouter initialEntries={['/p/Demo']}>
         <JobProvider intervalMs={5}>
@@ -819,4 +819,45 @@ describe('ProjectWorkspace (Stub)', () => {
     // Argument dazukommt. (CodeRabbit-Bot an PR #297.)
     expect(vi.mocked(api.uploadAudio).mock.calls.every(c => c[2] !== 'en')).toBe(true)
   })
+  it('verwirft A-Drop und spaete A-Einstellungen nach dem Wechsel zu B', async () => {
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'A', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] },
+      { name: 'B', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'B', files: [] })
+    let alt!: (d: Awaited<ReturnType<typeof api.getProjektEinstellungen>>) => void
+    const wahl = [{ id: 'en', label: 'Englisch', hint: '', dialekt: false },
+      { id: 'fr', label: 'Franzoesisch', hint: '', dialekt: false }]
+    const basis = { korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
+      sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] }
+    vi.mocked(api.getProjektEinstellungen)
+      .mockImplementationOnce(() => new Promise(r => { alt = r }))
+      .mockResolvedValueOnce({ ...basis, sprache: 'fr' })
+    const ZuB = () => {
+      const nav = useNavigate()
+      return <button onClick={() => nav('/p/B')}>zu B</button>
+    }
+    render(<MemoryRouter initialEntries={['/p/A']}>
+      <JobProvider><ProjektDatenProvider><EditorBrueckeProvider><Routes>
+        <Route path="/p/:project" element={<><ZuB /><ProjectWorkspace /></>} />
+      </Routes></EditorBrueckeProvider></ProjektDatenProvider></JobProvider>
+    </MemoryRouter>)
+    await waitFor(() => expect(api.getProjektEinstellungen).toHaveBeenCalledWith('A'))
+    // Simuliert den Parameterwechsel auch bei offenem modalem Dialog; sein Hintergrund
+    // ist dann absichtlich aus dem Accessibility-Baum genommen.
+    const wechsel = screen.getByRole('button', { name: 'zu B' })
+    fireEvent.drop(screen.getByTestId('drop-overlay-ziel'), {
+      dataTransfer: { files: [new File(['x'], 'nur-A.mp3', { type: 'audio/mpeg' })] },
+    })
+    expect(screen.getByText('nur-A.mp3')).toBeInTheDocument()
+    fireEvent.click(wechsel)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^Material$/ }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.queryByText('nur-A.mp3')).not.toBeInTheDocument()
+    await screen.findByText('Franzoesisch')
+    await act(async () => { alt({ ...basis, sprache: 'en' }) })
+    expect(screen.getByText('Franzoesisch')).toBeInTheDocument()
+    expect(screen.queryByText('Englisch')).not.toBeInTheDocument()
+  })
+
 })

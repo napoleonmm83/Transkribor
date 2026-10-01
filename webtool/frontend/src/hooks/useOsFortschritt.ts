@@ -95,11 +95,19 @@ export function useOsFortschritt(): void {
   // laufenden Balken nie rot. Folge war ein FEHLENDES Rot — die Richtung, die man nicht
   // bemerkt, weil nichts passiert.
   const alteFehler = useRef(new Set<string>())
+  // INTENTIONAL-UNTESTED: Gate übersieht TSX-Tests; useOsFortschritt.test.tsx reproduziert den Mehrfachversand (T031).
+  const zuletztGesendet = useRef<{ anteil: number; modus?: string; senden: NonNullable<ReturnType<typeof bruecke>> } | null>(null)
   useEffect(() => {
     if (leerlauf) alteFehler.current = new Set(jobs.filter(j => j.status === 'error').map(j => j.id))
-  }, [leerlauf, jobs])
-  const modus = anteil >= 0 && jobs.some(j =>
-    j.project === projekt?.name && j.status === 'error' && !alteFehler.current.has(j.id))
-    ? 'error' : undefined
-  useEffect(() => { bruecke()?.(anteil, modus)?.catch?.(() => {}) }, [anteil, modus])
+    const modus = anteil >= 0 && jobs.some(j =>
+      j.project === projekt?.name && j.status === 'error' && !alteFehler.current.has(j.id))
+      ? 'error' : undefined
+    const senden = bruecke()
+    if (!senden) return
+    const vorher = zuletztGesendet.current
+    if (vorher && Object.is(vorher.anteil, anteil) && vorher.modus === modus && vorher.senden === senden) return
+    // Jobpolls aktualisieren die Fehlerhistorie, senden aber nur einen neuen OS-Stand.
+    zuletztGesendet.current = { anteil, modus, senden }
+    senden(anteil, modus)?.catch?.(() => {})
+  }, [leerlauf, jobs, anteil, projekt?.name])
 }

@@ -1,10 +1,12 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, act, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { EditorView } from './EditorView'
-import { JobProvider } from '@/hooks/useActiveJob'
-import { EditorBrueckeProvider, useEditorBruecke } from '@/hooks/useEditorBruecke'
-import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
+import { JobProvider } from '@/hooks/JobProvider'
+import { useEditorBruecke } from '@/hooks/useEditorBruecke'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import * as api from '@/lib/api'
 import type { Settings, EditDoc } from '@/lib/types'
@@ -28,7 +30,11 @@ const doc: EditDoc = {
 
 /** Liest die Bruecke von aussen — so wie es die Leiste in der Huelle tut. */
 let bruecke: ReturnType<typeof useEditorBruecke>
-function Leser() { bruecke = useEditorBruecke(); return null }
+function Leser() {
+  const wert = useEditorBruecke()
+  useLayoutEffect(() => { bruecke = wert }, [wert])
+  return null
+}
 
 describe('EditorView (Stub)', () => {
   beforeEach(() => {

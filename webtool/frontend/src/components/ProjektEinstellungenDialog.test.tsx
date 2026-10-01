@@ -3,6 +3,8 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import * as api from '@/lib/api'
 import { ProjektEinstellungenDialog } from './ProjektEinstellungenDialog'
 
+// AIRLOCK-OHNE-PLANWERKZEUG: T-031-Plan am 2026-09-30 im Chat vom Nutzer freigegeben.
+
 const BASIS = {
   sprache: 'ch', korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
   sprach_choices: [
@@ -14,6 +16,18 @@ const BASIS = {
 }
 
 describe('ProjektEinstellungenDialog', () => {
+  it('zeigt nach Wiederöffnung und fehlgeschlagenem GET kein altes speicherbares Formular', async () => {
+    const getSpy = vi.spyOn(api, 'getProjektEinstellungen')
+      .mockResolvedValueOnce(BASIS).mockRejectedValueOnce(new Error('offline'))
+    const { rerender } = render(<ProjektEinstellungenDialog project="p" offen />)
+    await screen.findByText('Schweizerdeutsch')
+    rerender(<ProjektEinstellungenDialog project="p" offen={false} />)
+    rerender(<ProjektEinstellungenDialog project="p" offen />)
+    await waitFor(() => expect(getSpy).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(screen.queryByText('Laden …')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
+    expect(screen.queryByRole('combobox', { name: 'Sprache' })).not.toBeInTheDocument()
+  })
   it('lädt beim Öffnen und speichert die Sprache', async () => {
     const getSpy = vi.spyOn(api, 'getProjektEinstellungen').mockResolvedValue(BASIS)
     const saveSpy = vi.spyOn(api, 'saveProjektEinstellungen')

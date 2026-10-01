@@ -1,12 +1,15 @@
 import type React from 'react'
+import { StrictMode, Suspense } from 'react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { HoerBalken, ersteStelle } from './HoerBalken'
+import { HoerBalken } from './HoerBalken'
+import { ersteStelle } from '@/lib/ersteStelle'
 
 // Die Attrappe ruft `onBereit` bei JEDEM Render und reicht `springeZu` durch — sonst waere
 // die Sprung-Wache (`gesprungen.current`) ungedeckt: mit einer stummen Attrappe bleibt die
 // Mutation „Wache raus" gruen, weil `onBereit` nie faellt (Reviewbefund W4).
 const springeZu = vi.hoisted(() => vi.fn())
+const abgespielteUrl = vi.hoisted(() => vi.fn())
 // `await import('react')` IN der Factory, nicht `require` (das gibt es in diesem Baum nicht,
 // und `tsc -b` sagt es — `vitest` pruefte es nicht) und auch kein Import von aussen: die
 // Factory laeuft, bevor die Modulbindungen des Tests stehen.
@@ -18,6 +21,7 @@ vi.mock('@/components/Waveform', async () => {
       ref: React.Ref<{ springeZu: (s: number) => void }>,
     ) {
       useImperativeHandle(ref, () => ({ springeZu }))
+      useEffect(() => { abgespielteUrl(url) }, [url])
       useEffect(() => { onBereit?.(new Float32Array([0.001, 0.002, 0.9, 0.8]), 40) })
       return <div data-testid="welle" data-url={url} />
     }),
@@ -39,9 +43,42 @@ describe('HoerBalken', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
+  it('erzeugt keine Blob-URL in einem nicht committeten Render', () => {
+    const warten = new Promise<never>(() => {})
+    function Wartet(): never { throw warten }
+    render(<Suspense fallback={<span>wartet</span>}>
+      <HoerBalken datei={datei('a.mp3')} anzeige="a" onSchliessen={() => {}} />
+      <Wartet />
+    </Suspense>)
+    expect(screen.getByText('wartet')).toBeInTheDocument()
+    expect(erzeugt).toEqual([])
+    expect(freigegeben).toEqual([])
+  })
+
+  it('gibt im StrictMode jede committete Blob-URL genau einmal frei', () => {
+    const { unmount } = render(<StrictMode>
+      <HoerBalken datei={datei('a.mp3')} anzeige="a" onSchliessen={() => {}} />
+    </StrictMode>)
+    expect(erzeugt).toHaveLength(2)
+    unmount()
+    expect(freigegeben).toEqual(erzeugt)
+  })
+
   it('zeigt nichts, solange keine Datei klingt', () => {
     const { container } = render(<HoerBalken datei={null} anzeige="" onSchliessen={() => {}} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('verwendet nach Schliessen und Wiederöffnung derselben Datei keine freigegebene URL', () => {
+    const d = datei('a.mp3')
+    const props = { anzeige: 'a.mp3', onSchliessen: () => {} }
+    const { rerender } = render(<HoerBalken datei={d} {...props} />)
+    rerender(<HoerBalken datei={null} {...props} />)
+    expect(freigegeben).toEqual([erzeugt[0]])
+    abgespielteUrl.mockClear()
+    rerender(<HoerBalken datei={d} {...props} />)
+    expect(abgespielteUrl).not.toHaveBeenCalledWith(erzeugt[0])
+    expect(abgespielteUrl).toHaveBeenCalledWith(erzeugt[1])
   })
 
   it('gibt die alte Blob-URL frei, wenn eine andere Datei klingt', () => {

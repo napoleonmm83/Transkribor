@@ -3,7 +3,8 @@
   "pfade": [
     "webtool/frontend/jobPhases.vertrag.test.ts",
     "webtool/frontend/src/hooks/useActiveJob.test.tsx",
-    "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.ts",
+    "webtool/frontend/src/hooks/JobProvider.tsx",
     "webtool/frontend/src/lib/jobPhases.test.ts",
     "webtool/frontend/src/lib/jobPhases.ts"
   ],
@@ -44,7 +45,7 @@
         "die neue [active]-Zeile hebt die Sperre auf — #581 gilt auch fuer die Zweitleben (#591)",
         "durch nimmt heraus, wer geloescht ist (#581/#489)"
       ],
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts"
     },
     {
       "id": "M4 das Einsammeln von entferntJe faellt weg (der Schnitt laeuft leer)",
@@ -56,7 +57,7 @@
       "gruen": [
         "durch nimmt heraus, wer geloescht ist (#581/#489)"
       ],
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts"
     },
     {
       "id": "M5 das sechste Argument faellt weg (r.entfernt_je kommt nicht im Parser an)",
@@ -68,7 +69,7 @@
       "gruen": [
         "nimmt r.bases als Rueckweg, wenn die [scope+]-Zeile aus dem Puffer gefallen ist"
       ],
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx"
+      "datei": "webtool/frontend/src/hooks/JobProvider.tsx"
     },
     {
       "id": "M6 die Parser-Durchreichung faellt weg (entferntJe bleibt immer undefined)",

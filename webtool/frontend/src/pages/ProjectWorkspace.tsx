@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Bot, ScanText, X, FileAudio, Loader2, Plus } from 'lucide-react'
@@ -55,34 +55,41 @@ export function ProjectWorkspace() {
   // im Bereich „Material hinzufügen". Die Vorgabe kommt aus projekt.json (Backend-Default:
   // Schweizerdeutsch); die Auswahl hier ist ein Override fuer die neu hinzugefuegten Dateien
   // und schreibt NICHT ins Projekt zurueck (dafuer der Dialog im ⋯-Menü).
-  const [einstellungen, setEinstellungen] = useState<ProjectEinstellungen | null>(null)
-  const [sprache, setSprache] = useState('')
-  const [dialogOffen, setDialogOffen] = useState(false)
-  const [vorbelegt, setVorbelegt] = useState<File[]>([])
+  const [projektState, setProjektState] = useState(() => ({
+    project, sitzung: {}, einstellungen: null as ProjectEinstellungen | null, sprache: '',
+    dialogOffen: false, vorbelegt: [] as File[],
+  }))
+  if (projektState.project !== project) {
+    setProjektState({ project, sitzung: {}, einstellungen: null, sprache: '', dialogOffen: false, vorbelegt: [] })
+  }
+  const passt = projektState.project === project
+  const einstellungen = passt ? projektState.einstellungen : null
+  const sprache = passt ? projektState.sprache : ''
+  const { sitzung } = projektState
+  const aktiveSitzung = useRef<object | null>(sitzung)
+  useLayoutEffect(() => {
+    aktiveSitzung.current = sitzung
+    return () => { aktiveSitzung.current = null }
+  }, [sitzung])
+  const dialogOffen = passt && projektState.dialogOffen
+  const vorbelegt = passt ? projektState.vorbelegt : []
+  const setDialogOffen = (offen: boolean) => setProjektState(s =>
+    s.sitzung === sitzung ? { ...s, dialogOffen: offen } : s)
+  const setVorbelegt = (dateien: File[]) => setProjektState(s =>
+    s.sitzung === sitzung ? { ...s, vorbelegt: dateien } : s)
   const [zieht, setZieht] = useState(false)
   useEffect(() => {
     if (!project) return
     let aktiv = true
-    setEinstellungen(null)         // Projektwechsel: Badge/Select verschwinden bis neu geladen
-    // …und die Sprache MIT. React Router baut dieses Element bei einem Parameterwechsel nicht
-    // neu auf, der State ueberlebt also den Projektwechsel: die Ablageflaeche ist die ganze
-    // Zeit scharf, und ein Drop zwischen Wechsel und Antwort schickte sonst die Sprache des
-    // VORIGEN Projekts als Datei-Override mit — eine falsche Sprache kostet eine komplette
-    // Neu-Transkription. '' heisst „nicht gesetzt", der Projektstandard von B gilt.
-    //
-    // **Seit #234 ist das hier Redundanz, kein Wall mehr** — nachgerechnet: solange die
-    // Antwort aussteht, ist `einstellungen` null, damit `sprachChoices` leer, damit
-    // `zeigeSprachwahl` falsch, und `sprachWert` kuerzt schon am ersten Konjunkt auf `''` ab.
-    // Der Reset bleibt trotzdem stehen (ein State, der einem fremden Projekt gehoert, soll
-    // nicht liegenbleiben) — aber wer den Schutz sucht, findet ihn bei `sprachWert`, und
-    // sobald B geantwortet hat, traegt ihn `setSprache(d.sprache)` unten. Beide Fenster haben
-    // je einen eigenen Test.
-    setSprache('')
     getProjektEinstellungen(project)
-      .then(d => { if (aktiv) { setEinstellungen(d); setSprache(d.sprache) } })
-      .catch(e => { if (aktiv) meldeLadefehler(e) })
+      .then(d => {
+        if (aktiv && aktiveSitzung.current === sitzung) {
+          setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s)
+        }
+      })
+      .catch(e => { if (aktiv && aktiveSitzung.current === sitzung) meldeLadefehler(e) })
     return () => { aktiv = false }
-  }, [project])
+  }, [project, sitzung])
 
   // F4-Handoff: sprachChoices erst durchreichen, wenn einstellungen+sprache da sind — sonst
   // wuerde der Select mit value="" gerendert (Radix warnt bei leerem Wert).
@@ -95,16 +102,16 @@ export function ProjectWorkspace() {
   const sprachLabel = einstellungen
     ? (einstellungen.sprach_choices.find(c => c.id === einstellungen.sprache)?.label ?? einstellungen.sprache)
     : ''
-  // projektRef hält den aktuellen Projekt-Namen fuer reloadEinstellungen — die Antwort
-  // von Projekt A darf nicht landen, nachdem auf Projekt B gewechselt wurde (dasselbe
-  // Muster wie der `aktiv`-Riegel oben, nur fuer den Speichern-Reload-Pfad).
-  const projectRef = useRef(project)
-  projectRef.current = project
+  // Der Speichern-Reload gehoert zu derselben Projektsitzung wie der erste GET.
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      .then(d => { if (projectRef.current === project) { setEinstellungen(d); setSprache(d.sprache) } })
-      .catch(e => { if (projectRef.current === project) meldeLadefehler(e) })
+      .then(d => {
+        if (aktiveSitzung.current === sitzung) {
+          setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s)
+        }
+      })
+      .catch(e => { if (aktiveSitzung.current === sitzung) meldeLadefehler(e) })
   }
 
   // Ein Drop NEBEN die Ablageflaeche darf den Browser nicht die Datei oeffnen lassen: er

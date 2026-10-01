@@ -140,3 +140,15 @@ describe('TextEditor Verwurf-Hinweis (#118)', () => {
     expect(onVerworfen).not.toHaveBeenCalled()
   })
 })
+
+// AIRLOCK-OHNE-PLANWERKZEUG: Plan T031 im Chat am 2026-09-30 freigegeben.
+it('meldet Verwurf beim Ausgangswertwechsel an den aktuellen Callback genau einmal', () => {
+  const alt = vi.fn(), aktuell = vi.fn()
+  const { rerender, unmount } = render(<TextEditor initial="alt" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={alt} />)
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Eingabe' } })
+  rerender(<TextEditor initial="neu" onCommit={vi.fn()} onCancel={vi.fn()} onVerworfen={aktuell} />)
+  expect(alt).not.toHaveBeenCalled()
+  expect(aktuell).toHaveBeenCalledTimes(1)
+  unmount()
+  expect(aktuell).toHaveBeenCalledTimes(1)
+})

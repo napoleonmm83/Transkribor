@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
-import { ProjektDatenProvider, useProjekte, useDateien } from './useProjektDaten'
-import { JobProvider, useActiveJob } from './useActiveJob'
+import { useProjekte, useDateien } from './useProjektDaten'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
+import { useActiveJob } from './useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 import * as api from '@/lib/api'
 
 vi.mock('@/lib/api')

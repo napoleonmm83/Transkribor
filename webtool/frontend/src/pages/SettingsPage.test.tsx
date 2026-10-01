@@ -54,6 +54,18 @@ const zeige = (s: Partial<Settings> = {}, hw: Hardware = { device: 'cuda', name:
 }
 
 describe('SettingsPage', () => {
+  it.each([
+    [true, '', 'Verbindung steht'],
+    [false, '', 'Fehlgeschlagen'],
+    [true, 'Server bereit', 'Server bereit'],
+    [false, 'Kein Zugang', 'Kein Zugang'],
+  ])('meldet Verbindungstest ok=%s mit Servertext oder Fallback', async (ok, detail, text) => {
+    vi.mocked(api.testSettings).mockResolvedValue({ ok, detail })
+    zeige()
+    fireEvent.click(await screen.findByRole('button', { name: 'Verbindung testen' }))
+    await waitFor(() => expect(ok ? toast.success : toast.error).toHaveBeenCalledWith(text))
+    expect(ok ? toast.error : toast.success).not.toHaveBeenCalled()
+  })
   it('sperrt Nemotron-Auswahl und Download ohne geeignete GPU und nennt den Grund', async () => {
     zeige({ nemotron: { ...BASIS.nemotron, geeignet: false,
       hardware_grund: 'Nemotron 3 benötigt eine NVIDIA-GPU mit CUDA.' } })

@@ -5,7 +5,8 @@
     "webtool/frontend/src/components/Toolbar.test.tsx",
     "webtool/frontend/src/components/AppShell.tsx",
     "webtool/frontend/src/components/AppShell.test.tsx",
-    "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+    "webtool/frontend/src/hooks/useEditorBruecke.ts",
+    "webtool/frontend/src/hooks/EditorBrueckeProvider.tsx",
     "webtool/frontend/src/pages/EditorView.tsx",
     "webtool/frontend/src/pages/EditorView.test.tsx"
   ],
@@ -84,7 +85,7 @@
     },
     {
       "id": "R6 die Regel selbst haelt nie mehr auf — beide Wege aus dem Editor fragen nicht mehr",
-      "datei": "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+      "datei": "webtool/frontend/src/hooks/useEditorBruecke.ts",
       "von": "  if (!offen || offen.stand !== 'fehler') return true",
       "nach": "  if (!offen || offen.stand !== 'niemals') return true",
       "rot": [

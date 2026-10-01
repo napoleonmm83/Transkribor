@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MaterialDialog } from './MaterialDialog'
@@ -42,6 +43,25 @@ beforeEach(() => {
 })
 
 describe('MaterialDialog', () => {
+  it('meldet vorbelegte Dubletten im StrictMode genau einmal nach dem Commit', () => {
+    render(<StrictMode><MaterialDialog {...basis}
+      vorbelegteDateien={[datei('a.mp3'), datei('a.mp3')]} /></StrictMode>)
+    expect(screen.getByText('a.mp3')).toBeInTheDocument()
+    expect(toastMock.info).toHaveBeenCalledTimes(1)
+    expect(toastMock.info).toHaveBeenCalledWith(expect.stringContaining('schon in der Liste'))
+  })
+
+  it('fuellt spaete Sprachdefaults ohne Nutzerwahl zu ueberschreiben', () => {
+    const preload = [datei('a.mp3')]
+    const { rerender } = render(<MaterialDialog {...basis} projektSprache="" vorbelegteDateien={preload} />)
+    fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))
+    rerender(<MaterialDialog {...basis} projektSprache="en" vorbelegteDateien={preload} />)
+    expect(screen.getByRole('combobox', { name: /Sprache/ })).toHaveValue('en')
+    fireEvent.change(screen.getByRole('combobox', { name: /Sprache/ }), { target: { value: 'ch' } })
+    rerender(<MaterialDialog {...basis} projektSprache="auto" vorbelegteDateien={preload} />)
+    expect(screen.getByRole('combobox', { name: /Sprache/ })).toHaveValue('ch')
+  })
+
   it('schickt je Datei ihre EIGENE Sprache und Sprecherzahl', async () => {
     render(<MaterialDialog {...basis} vorbelegteDateien={[datei('a.mp3'), datei('b.mp3')]} />)
     fireEvent.click(screen.getByRole('button', { name: /Weiter/ }))

@@ -3,7 +3,8 @@
   "pfade": [
     "webtool/frontend/src/components/AppShell.tsx",
     "webtool/frontend/src/components/AppShell.test.tsx",
-    "webtool/frontend/src/hooks/useEditorBruecke.tsx",
+    "webtool/frontend/src/hooks/useEditorBruecke.ts",
+    "webtool/frontend/src/hooks/EditorBrueckeProvider.tsx",
     "webtool/frontend/src/pages/EditorView.tsx",
     "webtool/frontend/src/pages/EditorView.test.tsx"
   ],

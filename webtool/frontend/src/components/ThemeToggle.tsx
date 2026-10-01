@@ -1,5 +1,5 @@
 import { Moon, Sun } from 'lucide-react'
-import { useTheme } from '@/components/ThemeProvider'
+import { useTheme } from '@/hooks/useTheme'
 
 /**
  * Der Umschalter zwischen hell und dunkel. Er steht in der Fusszeile und damit auf JEDER

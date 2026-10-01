@@ -1,6 +1,7 @@
+import { FLAGS } from '@/lib/segmentFlags'
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { CircleHelp, MessageSquare, MessageSquarePlus, Play, ScanSearch, TriangleAlert } from 'lucide-react'
+import { MessageSquare, MessageSquarePlus, Play, ScanSearch } from 'lucide-react'
 import type { Segment } from '@/lib/types'
 import { isCorrected, tokenizeUncertain } from '@/lib/uncertainty'
 import { gestrichen } from '@/lib/streichen'
@@ -12,17 +13,6 @@ import { TextEditor, EINGABE_VERWORFEN } from './TextEditor'
 const NOTIZ_HINWEIS = 'Notiz bearbeiten (leeren streicht sie)'
 
 function fmt(t: number) { const s = Math.max(0, t | 0); return `${(s / 60) | 0}:${String(s % 60).padStart(2, '0')}` }
-
-/** Die Segment-Flags. Als Emoji (⚠ 🔇) rendern sie je nach System in einer fremden
- *  Schrift, erben die Textfarbe nicht und heissen fuer einen Screenreader gar nichts.
- *  `erklaerung` steht hier statt in der Legende: ein Symbolname allein ("Halluzination")
- *  sagt niemandem, was er mit dem Segment tun soll. */
-export const FLAGS = [
-  { key: 'hallucination', icon: TriangleAlert, titel: 'Halluzination',
-    erklaerung: 'Auffällig repetitiver Text — Whisper hat sich womöglich verhakt. Gegen die Aufnahme prüfen.' },
-  { key: 'low_conf', icon: CircleHelp, titel: 'Geringe Konfidenz',
-    erklaerung: 'Whisper war im ganzen Segment unsicher, nicht nur bei einzelnen Wörtern.' },
-] as const
 
 export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false, aktiverTreffer = false }: {
   seg: Segment; active: boolean; onPlay: () => void;

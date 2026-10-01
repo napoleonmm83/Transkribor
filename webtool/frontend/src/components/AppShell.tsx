@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useLocation, useMatch, useNavigate } from 'react-router-dom'
-import { ProjektDatenProvider, useProjekte, useDateien } from '@/hooks/useProjektDaten'
+import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
 import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { useAiReady } from '@/hooks/useAiReady'
-import { EditorBrueckeProvider, useEditorBruecke, darfWechseln } from '@/hooks/useEditorBruecke'
+import { useEditorBruecke, darfWechseln } from '@/hooks/useEditorBruecke'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
 import { useDokumentTitel } from '@/hooks/useDokumentTitel'
 import { useJob } from '@/hooks/useJob'
 import { useOsFortschritt } from '@/hooks/useOsFortschritt'
@@ -13,7 +15,8 @@ import { uploadAudio, startTranscribe, startCorrect } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
-import { TitleBar, hatTitelzeile } from './TitleBar'
+import { TitleBar } from './TitleBar'
+import { hatTitelzeile } from '@/lib/titelleiste'
 
 /** Getrennt von AppShell, weil sie die Hooks des Providers braucht — die stehen einem
  *  Bauteil erst zur Verfuegung, wenn es INNERHALB des Providers gerendert wird. */

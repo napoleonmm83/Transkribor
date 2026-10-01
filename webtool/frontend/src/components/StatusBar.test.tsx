@@ -1,11 +1,14 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render as renderBase, screen, waitFor, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { EditorBrueckeProvider, useEditorMelden } from '@/hooks/useEditorBruecke'
+import { useEditorMelden } from '@/hooks/useEditorBruecke'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
 import type { SpeicherStand } from '@/hooks/useDoc'
 import { StatusBar } from './StatusBar'
-import { JobProvider, useActiveJob } from '@/hooks/useActiveJob'
+import { useActiveJob } from '@/hooks/useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 import { ThemeProvider } from './ThemeProvider'
 import * as api from '@/lib/api'
 import type { UpdateZustand } from '@/lib/types'
@@ -20,7 +23,9 @@ function zeigen() {
  *  anzunehmen. Dieselbe Bruecke wie in `useJobAusgang.test.tsx`. */
 function Sonde() {
   const { adopt } = useActiveJob()
-  ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  useLayoutEffect(() => {
+    ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  }, [adopt])
   return null
 }
 

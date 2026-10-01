@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { getProjektEinstellungen, saveProjektEinstellungen } from '@/lib/api'
 import { autoHinweis } from '@/lib/autoHinweis'
@@ -24,19 +24,33 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
   const open = gesteuert ? offen : eigen
   const setOpen = (o: boolean) => { if (gesteuert) onOpenChange?.(o); else setEigen(o) }
 
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      {open && <ProjektEinstellungenInhalt key={project} project={project} setOpen={setOpen} onGeaendert={onGeaendert} />}
+    </Dialog>
+  )
+}
+
+function ProjektEinstellungenInhalt({ project, setOpen, onGeaendert }: {
+  project: string
+  setOpen: (open: boolean) => void
+  onGeaendert?: () => void
+}) {
+
   const [data, setData] = useState<ProjectEinstellungen | null>(null)
   const [sprache, setSprache] = useState('')
   const [korrektur, setKorrektur] = useState('')
   const [mehrsprachig, setMehrsprachig] = useState(false)
-  const [laedt, setLaedt] = useState(false)
+  const [laedt, setLaedt] = useState(true)
   const [speichert, setSpeichert] = useState(false)
+  const generation = useRef({ active: false })
 
-  // Beim Öffnen laden (offen true→). Abhängig von `open`, nicht von `project`:
-  // ein eigener Trigger lädt erst beim Aufklappen, nicht beim Mount.
+  // Der Inhalt wird je Öffnung und Projekt neu gemountet; ein fehlgeschlagener
+  // Abruf kann deshalb kein Formular der vorherigen Öffnung stehen lassen.
   useEffect(() => {
-    if (!open) return
+    const stand = { active: true }
+    generation.current = stand
     let aktiv = true
-    setLaedt(true)
     getProjektEinstellungen(project)
       .then(d => {
         if (!aktiv) return
@@ -47,24 +61,25 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
-    return () => { aktiv = false }
-  }, [open, project])
+    return () => { aktiv = false; stand.active = false }
+  }, [project])
 
   const speichern = async () => {
+    if (!data || speichert) return
+    const stand = generation.current
     setSpeichert(true)
     try {
       await saveProjektEinstellungen(project, { sprache, korrektur, mehrsprachig })
       onGeaendert?.()
-      setOpen(false)
+      if (stand.active) setOpen(false)
     } catch (e) {
-      toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
+      if (stand.active) toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
     } finally {
-      setSpeichert(false)
+      if (stand.active) setSpeichert(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Projekt-Einstellungen</DialogTitle>
@@ -127,6 +142,5 @@ export function ProjektEinstellungenDialog({ project, offen, onOpenChange, onGea
           <Button onClick={speichern} disabled={!data || speichert}>Speichern</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   )
 }

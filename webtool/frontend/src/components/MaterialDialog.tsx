@@ -36,8 +36,7 @@ export type Sendeergebnis = { job: StartJob; art: 'transcribe' | 'fetch' }
  *  Der Zustand liegt hier und nicht in den Zeilen — das ist die Bedingung, unter der ein
  *  Schrittwechsel nichts verliert (Spec 6.3).
  */
-export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoices,
-                                 projektSprache, sprecherMax, onSchliessen, onFertig }: {
+type MaterialDialogProps = {
   project: string
   offen: boolean
   vorbelegteDateien?: File[]
@@ -46,7 +45,14 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   sprecherMax: number
   onSchliessen: () => void
   onFertig: (ergebnisse: Sendeergebnis[]) => void
-}) {
+}
+
+export function MaterialDialog(props: MaterialDialogProps) {
+  return <MaterialDialogInhalt key={props.project} {...props} />
+}
+
+function MaterialDialogInhalt({ project, offen, vorbelegteDateien, sprachChoices,
+  projektSprache, sprecherMax, onSchliessen, onFertig }: MaterialDialogProps) {
   const [schritt, setSchritt] = useState(1)
   const [zeilen, setZeilen] = useState<Aufnahme[]>([])
   const [urlText, setUrlText] = useState('')
@@ -65,42 +71,35 @@ export function MaterialDialog({ project, offen, vorbelegteDateien, sprachChoice
   // idiomatische Mittel dafuer.
   const [liste, setListe] = useState<HTMLUListElement | null>(null)
 
-  // Der Projektwechsel verwirft ALLES — auch den Schritt und den Abspieler. React Router
-  // baut dieses Element beim Parameterwechsel nicht neu auf; ohne Reset landeten Projekt As
-  // Dateien samt getippter Zahl in Projekt B, still und mit Erfolgsmeldung.
-  // `laufNr.current++` gehoert HIERHER und nicht nur ins Abbrechen: sonst schreibt der
-  // laufende Upload aus Projekt A sein Ergebnis in den Dialog von Projekt B.
-  useEffect(() => {
-    laufNr.current++
-    setSchritt(1); setZeilen([]); setUrlText(''); setKlingt(null); setLaeuft(false)
-  }, [project])
+  // Ein Projektkey beendet die Sitzung; Schliessen im selben Projekt bewahrt sie.
+  // Der alte Upload meldet seinen Ausgang weiterhin seinem urspruenglichen Workspace,
+  // darf aber nach einem Projektwechsel weder den neuen Dialog schliessen noch fuellen.
+  useEffect(() => () => { laufNr.current++ }, [])
 
-  // Vorbelegte Dateien kommen aus dem Drop-Overlay der Arbeitsflaeche. `ergaenzen` statt
-  // `setZeilen`: ein zweiter Wurf auf denselben offenen Dialog haengt an, statt die schon
-  // getippten Zahlen zu loeschen.
+  const [vorbelegung, setVorbelegung] = useState<{ dateien?: File[]; doppelt: number }>({ doppelt: 0 })
+  const neuerDrop = vorbelegung.dateien !== vorbelegteDateien
+  let neueZeilen = zeilen
+  if (neuerDrop) {
+    if (vorbelegteDateien?.length) {
+      neueZeilen = ergaenzen(zeilen, vorbelegteDateien.map(zeileAus))
+      setSchritt(s => Math.min(s, 2))
+    }
+    setVorbelegung({ dateien: vorbelegteDateien,
+      doppelt: zeilen.length + (vorbelegteDateien?.length ?? 0) - neueZeilen.length })
+  }
+  // Nachgeladene Vorgaben fuellen ausschliesslich fehlende Werte, niemals Nutzerwahl.
+  if (projektSprache && neueZeilen.some(z => !z.sprache)) {
+    neueZeilen = neueZeilen.map(z => z.sprache ? z : { ...z, sprache: projektSprache })
+  }
+  if (neueZeilen !== zeilen) setZeilen(neueZeilen)
+  const gemeldet = useRef(vorbelegung)
+  // Toast erst nach dem Commit; State-Updater und verworfene Render bleiben rein.
   useEffect(() => {
-    if (!vorbelegteDateien?.length) return
-    setZeilen(alt => {
-      const neu = ergaenzen(alt, vorbelegteDateien.map(zeileAus))
-      // Stillschweigend weggefallene Dubletten sind ein toter Klick: der Nutzer legt zwei
-      // gleichnamige Dateien ab und sieht eine Zeile.
-      const weg = alt.length + vorbelegteDateien.length - neu.length
-      if (weg > 0) toast.info(`${weg} Aufnahme${weg > 1 ? 'n' : ''} war${weg > 1 ? 'en' : ''} schon in der Liste.`)
-      return neu
-    })
-    // Ein Drop darf nicht in der Zusammenfassung landen: wurde der Dialog auf Schritt 3
-    // verlassen, saehe der Nutzer Sprache und Sprecherzahl der neuen Aufnahmen NIE.
-    setSchritt(s => Math.min(s, 2))
-  }, [vorbelegteDateien])
-
-  // Zeilen, die VOR der Antwort des Einstellungs-GET entstanden sind, tragen `sprache: ''`
-  // und zeigen einen Waehler ohne Optionen. Kommt die Antwort nach, ziehen sie nach.
-  useEffect(() => {
-    if (!projektSprache) return
-    setZeilen(alt => alt.some(z => !z.sprache)
-      ? alt.map(z => z.sprache ? z : { ...z, sprache: projektSprache })
-      : alt)
-  }, [projektSprache])
+    if (gemeldet.current === vorbelegung) return
+    gemeldet.current = vorbelegung
+    const weg = vorbelegung.doppelt
+    if (weg > 0) toast.info(`${weg} Aufnahme${weg > 1 ? 'n' : ''} war${weg > 1 ? 'en' : ''} schon in der Liste.`)
+  }, [vorbelegung])
 
   function zeileAus(d: File): Aufnahme {
     return { schluessel: d.name, anzeige: d.name, sprecherText: '',

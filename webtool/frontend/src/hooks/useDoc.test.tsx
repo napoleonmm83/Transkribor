@@ -1394,3 +1394,48 @@ describe('useDoc: Konflikt BEIM VERLASSEN (#160)', () => {
     expect(meldungen.some(m => m.includes('Speichern beim Verlassen fehlgeschlagen'))).toBe(false)
   })
 })
+
+it('nach erfolgreichem Save startet meine Fassung behalten einen neuen Autosave ohne Vorbehalt', async () => {
+  vi.useFakeTimers()
+  const frage = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  try {
+    vi.mocked(api.getDoc).mockResolvedValue({ ...doc, dateistand: 'A' })
+    vi.mocked(api.saveDoc)
+      .mockResolvedValueOnce({ dateistand: 'gespeichert' })
+      .mockRejectedValueOnce(new api.HttpFehler('inzwischen geaendert', 409))
+      .mockResolvedValue({ dateistand: 'meine' })
+    const { result } = renderHook(() => useDoc('P', 'b'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+    await act(async () => { result.current.updateSegment(0, { text: 'erste Fassung' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(1)
+    expect(result.current.dirty).toBe(false)
+    await act(async () => { result.current.updateSegment(0, { text: 'meine Fassung' }) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(frage).toHaveBeenCalledTimes(1)
+    expect(api.saveDoc).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(api.saveDoc).mock.calls[1][2].dateistand).toBe('gespeichert')
+    // Keine neue Eingabe: die Entscheidung selbst muss den dritten Lauf starten.
+    await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+    expect(api.saveDoc).toHaveBeenCalledTimes(3)
+    const dritte = vi.mocked(api.saveDoc).mock.calls[2][2]
+    expect(dritte.segments[0].text).toBe('meine Fassung')
+    expect('dateistand' in dritte).toBe(false)
+    expect(result.current.dirty).toBe(false)
+  } finally { frage.mockRestore() }
+})
+
+it('ueberschreiben allein schreibt einen bereits sauberen Stand nicht erneut', async () => {
+  vi.useFakeTimers()
+  vi.mocked(api.getDoc).mockResolvedValue({ ...doc, dateistand: 'A' })
+  vi.mocked(api.saveDoc).mockResolvedValue({ dateistand: 'gespeichert' })
+  const { result } = renderHook(() => useDoc('P', 'b'))
+  await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+  await act(async () => { result.current.updateSegment(0, { text: 'gesicherte Fassung' }) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+  expect(api.saveDoc).toHaveBeenCalledTimes(1)
+  expect(result.current.dirty).toBe(false)
+  await act(async () => { result.current.ueberschreiben('P', 'b') })
+  await act(async () => { await vi.advanceTimersByTimeAsync(800) })
+  expect(api.saveDoc).toHaveBeenCalledTimes(1)
+})
