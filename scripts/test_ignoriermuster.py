@@ -72,6 +72,41 @@ def test_wegwerfordner_sind_ignoriert(ordner):
     )
 
 
+# Codex-Laeufe (parallel zu Claude) legen je Lauf NEU benannte Wegwerfordner an
+# (`.tmp-pytest-t219g/`, `.tmp-release-node-shared/` …) — eine Namensliste waere nach
+# dem naechsten Lauf veraltet. Deshalb hier die eine bewusste Ausnahme von der
+# Namensregel oben: das Muster `/.tmp-*` (Entscheidung Marcus 2026-10-01). Gemessen:
+# 32 801 unversionierte Dateien, 30 809 davon in drei solchen Ordnern.
+CODEX_REST = [
+    ".tmp-irgendein-kuenftiger-lauf/tief/drin/datei.txt",
+    ".tmp-notiz-aus-codex.md",
+    ".npm-cache/_cacache/index-v5/datei",
+    ".worktrees/irgendein-zweig/datei.txt",
+    "scratchpad/datei.txt",
+    "cg-codex-marcu/datei.txt",
+]
+
+
+@pytest.mark.parametrize("pfad", CODEX_REST)
+def test_codex_wegwerfreste_sind_ignoriert(pfad):
+    """Codex-Reste bleiben liegen (Codex braucht sie evtl.), aber ausserhalb von git."""
+    assert _ignoriert(pfad), (
+        f"{pfad} ist nicht ignoriert — der Kalt-Review-Riegel fasst dann wieder "
+        f"jede Datei darin einzeln an (am 2026-10-01 achtmal ins 300-s-Limit)."
+    )
+
+
+@pytest.mark.parametrize("pfad", [
+    "webtool/.tmp-x/datei.txt",       # Wurzelverankerung des Musters
+    "tmp-ohne-punkt/datei.txt",       # das Muster verlangt `.tmp-`
+    ".tmpohnestrich/datei.txt",       # ... mit Bindestrich
+    "webtool/scratchpad/datei.txt",   # nur der Wurzel-Scratchpad
+])
+def test_codex_muster_greifen_nicht_zu_weit(pfad):
+    """Gegenprobe zu den Codex-Mustern: nichts darueber hinaus verschwindet still."""
+    assert not _ignoriert(pfad), f"{pfad} ist ignoriert — ein Codex-Muster greift zu weit"
+
+
 @pytest.mark.parametrize("pfad", ["README.md", "webtool/correct.py", "scripts/mutation.py"])
 def test_echter_code_ist_nicht_ignoriert(pfad):
     """Gegenprobe: die Muster duerfen nicht ueber ihr Ziel hinausschiessen.
