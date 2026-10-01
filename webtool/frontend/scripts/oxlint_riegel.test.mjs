@@ -1,16 +1,21 @@
+// Vorher node:test (.node-test.mjs): das kannten weder das Charakterisierungs-Gate
+// noch mutation.py (#659). vitest sammelt scripts/*.test.mjs ohnehin ein.
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import test from 'node:test'
+import { test } from 'vitest'
 import { compare, normalizeReport, readBaseline, run } from './oxlint_riegel.mjs'
 
-const script = fileURLToPath(new URL('./oxlint_riegel.mjs', import.meta.url))
+// Pfade wie in pruefe-coarse.test.mjs: unter jsdom ist `URL` die jsdom-Fassung und
+// `new URL(rel, import.meta.url)` liefert kein file:-Schema mehr.
+const hier = dirname(fileURLToPath(import.meta.url))
+const script = join(hier, 'oxlint_riegel.mjs')
 function fixture(t, source = 'const wert = 1\n') {
   const root = mkdtempSync(join(tmpdir(), 'oxlint-riegel-'))
-  t.after(() => rmSync(root, { recursive: true, force: true }))
+  t.onTestFinished(() => rmSync(root, { recursive: true, force: true }))
   mkdirSync(join(root, 'src'))
   writeFileSync(join(root, 'src', 'probe.ts'), source)
   return root
@@ -182,7 +187,7 @@ test('behoben zaehlt nur, wenn oxlint die noch vorhandene Datei auch prueft', t 
 // Mit dem ECHTEN oxlint: die Attrappe oben behauptet, dass oxlint eine ausdruecklich
 // uebergebene, ignorierte Datei mit number_of_files 0 beantwortet. Dreht ein oxlint-Update
 // das, bliebe die Wache sonst tot bei gruener Suite.
-const echtesOxlint = fileURLToPath(new URL('../node_modules/oxlint/bin/oxlint', import.meta.url))
+const echtesOxlint = join(hier, '..', 'node_modules', 'oxlint', 'bin', 'oxlint')
 function echtFixture(t, extra) {
   const root = fixture(t)
   writeFileSync(join(root, 'src', 'ok.ts'), 'export const ok = 1\n')
