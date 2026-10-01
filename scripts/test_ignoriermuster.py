@@ -137,6 +137,10 @@ def test_wurzelverankerung_ist_gewollt_und_gemessen():
     )
 
 
+# Die mypy-Tests pruefen mit `re.search`, nicht `re.match`: so wendet mypy `exclude`
+# an (mypy/modulefinder.py, gemessen am 2026-10-01). `re.match` verankert selbst am
+# Anfang — ein entfernter `^` im Muster bliebe damit gruen, waehrend mypy dann
+# jedes `.../eval/` oder `webtool/cg-codex-x/` mit ausschloesse.
 def _mypy_ausschluss() -> str:
     with open(WURZEL / "pyproject.toml", "rb") as f:
         # str() ist nicht Kosmetik: tomllib liefert Any, und ein Rueckgabetyp,
@@ -152,7 +156,7 @@ def test_eval_ist_vom_mypy_lauf_ausgeschlossen():
     schweigt. Das ist die teure Richtung: ein Lauf, der nichts angesehen hat,
     sieht aus wie ein Befund.
     """
-    assert re.match(_mypy_ausschluss(), "eval/dialekt-2026-09-14/baseline-correct.py")
+    assert re.search(_mypy_ausschluss(),"eval/dialekt-2026-09-14/baseline-correct.py")
 
 
 @pytest.mark.parametrize(
@@ -165,7 +169,7 @@ def test_mypy_ausschluss_trifft_nur_den_ordner(pfad):
     beim Anfuegen eines weiteren Namens —, verschwaende `evaluation.py`
     lautlos aus dem Lauf, und niemand saehe es an einer Fehlermeldung.
     """
-    assert not re.match(_mypy_ausschluss(), pfad), (
+    assert not re.search(_mypy_ausschluss(),pfad), (
         f"{pfad} wird von mypy ausgeschlossen — der Ausschluss trifft mehr als "
         f"den Ordner eval/"
     )
@@ -177,12 +181,16 @@ def test_codex_sandboxprofil_ist_vom_mypy_lauf_ausgeschlossen():
     Dieselbe Klasse wie eval/ (T-174): nur der Entwicklerrechner hat den Ordner,
     die CI urteilt gruen, lokal misst der Riegel nichts.
     """
-    assert re.match(_mypy_ausschluss(), "cg-codex-marcu/irgendwas.py")
+    assert re.search(_mypy_ausschluss(),"cg-codex-marcu/irgendwas.py")
 
 
-@pytest.mark.parametrize("pfad", ["cgcodex.py", "cg-codex.py", "webtool/cg-codex-x/y.py"])
+@pytest.mark.parametrize("pfad", [
+    "webtool/cg-codex-x/y.py",   # Wurzelanker (greift nur mit re.search, s.o.)
+    "cg-irgendwas/x.py",         # kein Sammelmuster `cg-*`
+    "cg-codex/x.py",             # der Bindestrich nach `codex` gehoert dazu
+])
 def test_mypy_codex_ausschluss_trifft_nur_den_wurzelordner(pfad):
-    assert not re.match(_mypy_ausschluss(), pfad), f"{pfad} wird von mypy ausgeschlossen"
+    assert not re.search(_mypy_ausschluss(),pfad), f"{pfad} wird von mypy ausgeschlossen"
 
 
 def test_gepruefte_menge_enthaelt_eval_nicht():
