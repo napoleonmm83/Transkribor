@@ -1,5 +1,6 @@
 // T-006: Eingefrorener Altbestand; neue Befunde und unvollstaendige Laeufe blockieren.
 // Baseline bewusst nur auf ausdruecklichen Aufruf schreiben, niemals im CI-Vergleich.
+// INTENTIONAL-UNTESTED: falscher Alarm des Charakterisierungs-Gates — gepinnt durch scripts/oxlint_riegel.node-test.mjs (importiert run/compare/readBaseline/normalizeReport), das Gate kennt die Endung .node-test.mjs nicht.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -74,9 +75,12 @@ export function normalizeReport(report, root) {
   return [...entries.values()].sort((a, b) => identity(a).localeCompare(identity(b), 'en'))
 }
 
+/** Liefert `{ entries, files }`. `files` ist die Dateizahl des Laufs, aus dem die
+ *  Baseline stammt: die Untergrenze, unter die ein Lauf nicht fallen darf (siehe `run`). */
 export function readBaseline(path) {
   const data = JSON.parse(readFileSync(path, 'utf8'))
-  if (data.version !== 1 || !Array.isArray(data.entries)) throw new Error('Baseline-Format unbekannt')
+  if (data.version !== 1 || !Array.isArray(data.entries) ||
+      !Number.isSafeInteger(data.files) || data.files <= 0) throw new Error('Baseline-Format unbekannt')
   const seen = new Set()
   for (const entry of data.entries) {
     validateEntry(entry)
@@ -84,7 +88,7 @@ export function readBaseline(path) {
     if (seen.has(key)) throw new Error('Doppelter Baseline-Eintrag')
     seen.add(key)
   }
-  return data.entries
+  return { entries: data.entries, files: data.files }
 }
 
 export function compare(current, baseline) {
@@ -116,14 +120,22 @@ function lint(root, { timeout = 30_000, toolPath = join(root, 'node_modules', 'o
 /** Manuelles Einfrieren. Der normale Riegel liest die Baseline ausschliesslich. */
 export function writeBaseline(root, options) {
   const { entries, files } = lint(root, options)
-  writeFileSync(join(root, baselineName), JSON.stringify({ version: 1, entries }, null, 2) + '\n')
+  writeFileSync(join(root, baselineName), JSON.stringify({ version: 1, files, entries }, null, 2) + '\n')
   return { files, count: entries.reduce((sum, entry) => sum + entry.count, 0) }
 }
 
 export function run(root, options) {
   try {
-    const baseline = readBaseline(join(root, baselineName))
+    const { entries: baseline, files: baselineFiles } = readBaseline(join(root, baselineName))
     const { entries, files } = lint(root, options)
+    // Weniger Dateien als beim Einfrieren: eine Ignore-Regel oder ein Pfadumzug hat
+    // einen Teil des Baums aus dem Lauf genommen. Der Rest waere formal sauber, und der
+    // Altbestand der fehlenden Dateien hiesse "behoben" (gemessen: 16 statt 185 Dateien,
+    // rc 0). Wurde wirklich geloescht, ist `--schreiben` die Antwort.
+    if (files < baselineFiles) {
+      throw new Error(`nur ${files} Dateien geprueft, die Baseline stammt aus ${baselineFiles} — ` +
+        'gewollt? Dann Baseline mit --schreiben neu einfrieren')
+    }
     const { added, removed } = compare(entries, baseline)
     const count = values => values.reduce((sum, entry) => sum + entry.count, 0)
     const details = added.map(entry => `  ${entry.count}x ${entry.file}: ${entry.rule} — ${entry.message}`)

@@ -1,4 +1,3 @@
-// AIRLOCK-OHNE-PLANWERKZEUG: update_plan fehlt; Plan T-006 im Chat vorgelegt und am 2026-09-30 vom Nutzer freigegeben.
 import assert from 'node:assert/strict'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -22,8 +21,8 @@ function report(overrides = {}) {
     labels: [{ span: { offset: 6, length: 4 } }],
   }], ...overrides }
 }
-function baseline(root, entries) {
-  writeFileSync(join(root, '.oxlint-baseline.json'), JSON.stringify({ version: 1, entries }))
+function baseline(root, entries, files = 1) {
+  writeFileSync(join(root, '.oxlint-baseline.json'), JSON.stringify({ version: 1, files, entries }))
 }
 function tool(root, body) {
   const path = join(root, 'node_modules', 'oxlint', 'bin', 'oxlint')
@@ -106,10 +105,11 @@ test('ungueltige Baseline und doppelte Eintraege blockieren', t => {
   const root = fixture(t)
   const entries = normalizeReport(report(), root)
   baseline(root, entries)
-  assert.deepEqual(readBaseline(join(root, '.oxlint-baseline.json')), entries)
-  for (const data of [{ version: 2, entries }, { version: 1 },
-    { version: 1, entries: [...entries, ...entries] },
-    { version: 1, entries: [{ ...entries[0], count: 0 }] }]) {
+  assert.deepEqual(readBaseline(join(root, '.oxlint-baseline.json')), { entries, files: 1 })
+  for (const data of [{ version: 2, files: 1, entries }, { version: 1, files: 1 },
+    { version: 1, entries }, { version: 1, files: 0, entries }, { version: 1, files: '1', entries },
+    { version: 1, files: 1, entries: [...entries, ...entries] },
+    { version: 1, files: 1, entries: [{ ...entries[0], count: 0 }] }]) {
     writeFileSync(join(root, '.oxlint-baseline.json'), JSON.stringify(data))
     assert.throws(() => readBaseline(join(root, '.oxlint-baseline.json')))
   }
@@ -129,6 +129,28 @@ test('Kindprozess: Warnung wird verglichen, Baseline bleibt unveraendert', t => 
   const result = run(root)
   assert.equal(result.code, 0)
   assert.match(result.message, /behoben/)
+})
+test('weniger Dateien als beim Einfrieren blockiert, statt Altbestand als behoben zu melden', t => {
+  // Eine Ignore-Regel nimmt den Baum mit Befund aus dem Lauf: formal sauber, aber
+  // der Altbestand hiesse "behoben" (gemessen am echten oxlint: 16 statt 185 Dateien, rc 0).
+  const root = fixture(t)
+  baseline(root, normalizeReport(report(), root), 3)
+  tool(root, `console.log(${JSON.stringify(JSON.stringify(report({ number_of_files: 2, diagnostics: [] })))})`)
+  const result = run(root)
+  assert.equal(result.code, 2)
+  assert.match(result.message, /nur 2 Dateien geprueft, die Baseline stammt aus 3/)
+  // Gleich viele oder mehr Dateien sind ein normaler Lauf.
+  for (const number_of_files of [3, 4]) {
+    tool(root, `console.log(${JSON.stringify(JSON.stringify(report({ number_of_files })))})`)
+    assert.equal(run(root).code, 0)
+  }
+})
+test('Baseline traegt die Dateizahl des Einfrierlaufs', t => {
+  const root = fixture(t)
+  tool(root, `console.log(${JSON.stringify(JSON.stringify(report({ number_of_files: 7 })))})`)
+  const result = spawnSync(process.execPath, [script, '--schreiben'], { cwd: root, encoding: 'utf8' })
+  assert.equal(result.status, 0)
+  assert.equal(readBaseline(join(root, '.oxlint-baseline.json')).files, 7)
 })
 test('fehlendes Tool, kaputtes JSON, leerer Lauf und abnormaler Exit blockieren', t => {
   const root = fixture(t)
