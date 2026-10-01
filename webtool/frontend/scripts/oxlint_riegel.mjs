@@ -131,6 +131,13 @@ function lintetDatei(root, file, { timeout = 30_000, toolPath = defaultTool(root
   return report.number_of_files > 0
 }
 
+/** `--no-index`, weil git getrackte Dateien sonst nie als ignoriert meldet. rc 0 heisst
+ *  ignoriert; alles andere (1, kein Repo, kein git) heisst hier "nicht ignoriert" — der
+ *  Einzellauf daneben bleibt die eigentliche Pruefung. */
+function gitIgnoriert(root, file) {
+  return spawnSync('git', ['check-ignore', '-q', '--no-index', file], { cwd: root }).status === 0
+}
+
 /** Manuelles Einfrieren. Der normale Riegel liest die Baseline ausschliesslich.
  *  `--schreiben` ist die vorgeschriebene Antwort auf eine geloeschte Datei; es darf
  *  dabei keinen NEUEN Befund still in den Altbestand schieben. Neue Befunde brechen
@@ -168,8 +175,13 @@ export function run(root, options) {
     // ignorierte aus (gemessen: HoerBalken.tsx ignoriert + src/neu.ts dazu ergab
     // "185 Dateien; 1 behoben", rc 0). "Behoben" gilt deshalb nur, wenn oxlint die
     // Datei, die noch da ist, auch wirklich prueft.
+    // Der Einzellauf allein reicht nicht: ausdruecklich uebergeben lintet oxlint auch
+    // eine per .gitignore ausgeschlossene Datei, der Volllauf laesst sie aus (gemessen,
+    // auch fuer getrackte Dateien). Deshalb zusaetzlich `git check-ignore`. Grenze: eine
+    // Datei, die in einen ignorierten Ordner VERSCHOBEN wird, ist am alten Pfad weg und
+    // ihr Altbestand gilt als behoben.
     for (const file of new Set(removed.map(entry => entry.file))) {
-      if (existsSync(join(root, file)) && !lintetDatei(root, file, options)) {
+      if (existsSync(join(root, file)) && (gitIgnoriert(root, file) || !lintetDatei(root, file, options))) {
         throw new Error(`${file} wird nicht mehr geprueft, ihr Altbestand hiesse sonst behoben — ` +
           'gewollt? Dann Baseline mit --schreiben neu einfrieren')
       }

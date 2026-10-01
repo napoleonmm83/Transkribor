@@ -179,6 +179,40 @@ test('behoben zaehlt nur, wenn oxlint die noch vorhandene Datei auch prueft', t 
   tool(root, werkzeug(0))
   assert.equal(run(root).code, 0)
 })
+// Mit dem ECHTEN oxlint: die Attrappe oben behauptet, dass oxlint eine ausdruecklich
+// uebergebene, ignorierte Datei mit number_of_files 0 beantwortet. Dreht ein oxlint-Update
+// das, bliebe die Wache sonst tot bei gruener Suite.
+const echtesOxlint = fileURLToPath(new URL('../node_modules/oxlint/bin/oxlint', import.meta.url))
+function echtFixture(t, extra) {
+  const root = fixture(t)
+  writeFileSync(join(root, 'src', 'ok.ts'), 'export const ok = 1\n')
+  extra(root)
+  // Ein Altbefund in src/probe.ts, den der Volllauf nicht mehr sieht.
+  baseline(root, normalizeReport(report(), root), 1)
+  return root
+}
+test('echtes oxlint: ignorePatterns nimmt dem Altbestand das "behoben"', t => {
+  const root = echtFixture(t, r => writeFileSync(join(r, '.oxlintrc.json'), JSON.stringify({ ignorePatterns: ['src/probe.ts'] })))
+  const result = run(root, { toolPath: echtesOxlint })
+  assert.equal(result.code, 2)
+  assert.match(result.message, /src\/probe\.ts wird nicht mehr geprueft/)
+})
+test('echtes oxlint und git: .gitignore auf einer getrackten Datei wird erkannt', t => {
+  const root = echtFixture(t, r => {
+    writeFileSync(join(r, '.gitignore'), 'src/probe.ts\n')
+    const git = args => assert.equal(spawnSync('git', args, { cwd: r }).status, 0)
+    git(['init', '-q']); git(['add', '-f', 'src/probe.ts', 'src/ok.ts', '.gitignore'])
+  })
+  const result = run(root, { toolPath: echtesOxlint })
+  assert.equal(result.code, 2)
+  assert.match(result.message, /src\/probe\.ts wird nicht mehr geprueft/)
+})
+test('echtes oxlint: ohne Ignore-Regel bleibt die Datei geprueft (Positivkontrolle)', t => {
+  const root = echtFixture(t, () => {})
+  const result = run(root, { toolPath: echtesOxlint })
+  assert.doesNotMatch(result.message, /nicht mehr geprueft/)
+  assert.notEqual(result.code, 2)
+})
 test('--schreiben friert neue Befunde nur mit --mit-neuen ein', t => {
   // --schreiben ist die vorgeschriebene Antwort auf eine geloeschte Datei; ohne diese
   // Sperre verschwaende dabei jeder neue Befund des PRs stumm im Altbestand.
