@@ -100,6 +100,11 @@ eval/
 # veraltet. Eng gehalten: verankert auf die Wurzel und nur mit Bindestrich; ohne
 # Schraegstrich am Ende trifft es Ordner UND einzelne `.tmp-*`-Notizdateien.
 # Derselbe Preis wie oben: der Kalt-Review-Riegel ist in diesen Pfaden blind.
+# Zwei weitere Folgen, benannt: ripgrep/das Grep-Werkzeug vom Repo-Stamm aus
+# findet in .worktrees/ nichts mehr (innerhalb eines Worktrees unveraendert), und
+# `git clean -X` LOESCHT diese Codex-Reste jetzt — wer sie behalten will, nimmt
+# es nicht. mypy liest diese Datei nicht: cg-codex-* steht deshalb zusaetzlich im
+# mypy-`exclude` (pyproject.toml).
 # scripts/test_ignoriermuster.py prueft Treffer UND Gegenproben.
 /.tmp-*
 /.npm-cache/

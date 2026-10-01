@@ -135,7 +135,13 @@ no_site_packages = true
 # Gegenprobe zur gepruefeten Menge: `git ls-files '*.py' | grep -v webtool/frontend`
 # = 77, und `eval` ist darin nicht enthalten — der Ausschluss nimmt dem Lauf
 # also nichts weg, was er pruefen sollte.
-exclude = "^(\\.venv|node_modules|webtool/frontend|dist|eval)/"
+#
+# `cg-codex-[^/]*` kam am 2026-10-01 dazu, wieder dieselbe Klasse: das Sandbox-Profil
+# paralleler Codex-Laeufe (`cg-codex-marcu/`) ist fuer den Nutzer unlesbar, und
+# `mypy .` stirbt an `os.listdir` mit PermissionError — rc 2, kein einziges Urteil.
+# mypy liest die .gitignore nicht und ueberspringt nur Punkt-Ordner. Gegenprobe:
+# mit dem Ausschluss 85 Dateien geprueft, Befunde = Baseline-Lage.
+exclude = "^(\\.venv|node_modules|webtool/frontend|dist|eval|cg-codex-[^/]*)/"
 
 [tool.pytest.ini_options]
 # `build` steht in pytests eingebauter norecursedirs-Liste und wird ohne
