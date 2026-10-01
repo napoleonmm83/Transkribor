@@ -1,0 +1,58 @@
+{
+  "test": "python -m pytest scripts/test_ignoriermuster.py -q",
+  "pfade": [
+    ".gitignore",
+    "scripts/test_ignoriermuster.py"
+  ],
+  "mutationen": [
+    {
+      "id": "I1 das Codex-Muster faellt weg — 30 000 Wegwerfdateien zaehlen wieder",
+      "datei": ".gitignore",
+      "von": "/.tmp-*\n/.npm-cache/",
+      "nach": "/.npm-cache/",
+      "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    },
+    {
+      "id": "I2 das Codex-Muster verliert die Wurzelverankerung — gleichnamige Projektordner verschwaenden",
+      "datei": ".gitignore",
+      "von": "/.tmp-*\n/.npm-cache/",
+      "nach": ".tmp-*\n/.npm-cache/",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I3 das Codex-Muster verliert den Bindestrich — trifft jedes .tmp*",
+      "datei": ".gitignore",
+      "von": "/.tmp-*\n/.npm-cache/",
+      "nach": "/.tmp*\n/.npm-cache/",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I4 .npm-cache faellt weg",
+      "datei": ".gitignore",
+      "von": "/.npm-cache/\n",
+      "nach": "",
+      "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    },
+    {
+      "id": "I5 .worktrees faellt weg",
+      "datei": ".gitignore",
+      "von": "/.worktrees/\n",
+      "nach": "",
+      "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    },
+    {
+      "id": "I6 der Scratchpad faellt weg",
+      "datei": ".gitignore",
+      "von": "/scratchpad/\n",
+      "nach": "",
+      "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    },
+    {
+      "id": "I7 das Codex-Sandbox-Profil faellt weg",
+      "datei": ".gitignore",
+      "von": "/cg-codex-*/\n",
+      "nach": "",
+      "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    }
+  ]
+}
