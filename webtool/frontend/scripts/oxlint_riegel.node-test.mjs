@@ -157,6 +157,36 @@ test('weniger Dateien als beim Einfrieren blockiert, statt Altbestand als behobe
     assert.equal(run(root).code, 0)
   }
 })
+test('behoben zaehlt nur, wenn oxlint die noch vorhandene Datei auch prueft', t => {
+  // Eine neue Datei gleicht eine ignorierte in der Dateizahl aus (gemessen am echten
+  // oxlint: "185 Dateien; 1 behoben", rc 0). Ausdruecklich uebergeben meldet oxlint
+  // fuer eine ignorierte Datei number_of_files 0.
+  const root = fixture(t)
+  baseline(root, normalizeReport(report(), root), 1)
+  const voll = JSON.stringify(report({ diagnostics: [] }))
+  const datei = n => JSON.stringify({ number_of_files: n, diagnostics: [] })
+  const werkzeug = n => `const einzeln = process.argv.length > 3
+    console.log(einzeln ? 'No files found to lint.\\n' + ${JSON.stringify(datei(n))} : ${JSON.stringify(voll)})
+    process.exit(einzeln && ${n} === 0 ? 1 : 0)`
+  tool(root, werkzeug(0))
+  const result = run(root)
+  assert.equal(result.code, 2)
+  assert.match(result.message, /src\/probe\.ts wird nicht mehr geprueft/)
+  tool(root, werkzeug(1))
+  assert.equal(run(root).code, 0)
+  // Wirklich geloescht: kein Einzellauf noetig, "behoben" bleibt.
+  rmSync(join(root, 'src', 'probe.ts'))
+  tool(root, werkzeug(0))
+  assert.equal(run(root).code, 0)
+})
+test('--schreiben nennt, was gegenueber der alten Baseline neu eingefroren wird', t => {
+  const root = fixture(t)
+  baseline(root, [])
+  tool(root, `console.log(${JSON.stringify(JSON.stringify(report()))})`)
+  const result = spawnSync(process.execPath, [script, '--schreiben'], { cwd: root, encoding: 'utf8' })
+  assert.equal(result.status, 0)
+  assert.match(result.stdout, /davon 1 neu eingefroren/)
+})
 test('Baseline traegt die Dateizahl des Einfrierlaufs', t => {
   const root = fixture(t)
   tool(root, `console.log(${JSON.stringify(JSON.stringify(report({ number_of_files: 7 })))})`)

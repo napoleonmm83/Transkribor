@@ -106,7 +106,12 @@ export function ProjectWorkspace() {
   const reloadEinstellungen = () => {
     if (!project) return
     getProjektEinstellungen(project)
-      // Der Updater prueft die Sitzung selbst; eine zweite Wache davor war gemessen wirkungslos.
+      // Der Updater prueft die Sitzung selbst. Eine zweite Wache davor (aktiveSitzung.current)
+      // war redundant — hergeleitet, nicht gemessen: die Ref folgt `sitzung` synchron im
+      // useLayoutEffect, kein Microtask kommt dazwischen. Gemessen ist nur, dass ihre
+      // Mutation alle Tests gruen liess (das unterscheidet redundant nicht von ungetestet).
+      // Der Mount-Effekt oben traegt dieselbe Doppelstruktur noch; dort zusaetzlich ein
+      // aktiv-Flag fuer den Abbau, deshalb unangetastet.
       .then(d => setProjektState(s => s.sitzung === sitzung ? { ...s, einstellungen: d, sprache: d.sprache } : s))
       .catch(e => { if (aktiveSitzung.current === sitzung) meldeLadefehler(e) })
   }

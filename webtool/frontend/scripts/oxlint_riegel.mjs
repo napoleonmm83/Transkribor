@@ -1,7 +1,7 @@
 // T-006: Eingefrorener Altbestand; neue Befunde und unvollstaendige Laeufe blockieren.
 // Baseline bewusst nur auf ausdruecklichen Aufruf schreiben, niemals im CI-Vergleich.
 // INTENTIONAL-UNTESTED: falscher Alarm des Charakterisierungs-Gates — gepinnt durch scripts/oxlint_riegel.node-test.mjs (importiert run/compare/readBaseline/normalizeReport), das Gate kennt die Endung .node-test.mjs nicht.
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
@@ -98,7 +98,8 @@ export function compare(current, baseline) {
   return { added: difference(now, old), removed: difference(old, now) }
 }
 
-function lint(root, { timeout = 30_000, toolPath = join(root, 'node_modules', 'oxlint', 'bin', 'oxlint') } = {}) {
+const defaultTool = root => join(root, 'node_modules', 'oxlint', 'bin', 'oxlint')
+function lint(root, { timeout = 30_000, toolPath = defaultTool(root) } = {}) {
   // Direkter Node-Einstieg statt npm-Banner oder shell-abhängiger .cmd-Aufloesung.
   const result = spawnSync(process.execPath, [toolPath, '--format=json'], {
     cwd: root, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024,
@@ -114,11 +115,34 @@ function lint(root, { timeout = 30_000, toolPath = join(root, 'node_modules', 'o
   return { entries, files: report.number_of_files }
 }
 
+/** Prueft oxlint diese eine Datei ueberhaupt? Eine ignorierte Datei, ausdruecklich
+ *  uebergeben, ergibt `number_of_files: 0` (gemessen an oxlint 1.82: rc 1 und
+ *  "No files found to lint." vor dem JSON). */
+function lintetDatei(root, file, { timeout = 30_000, toolPath = defaultTool(root) } = {}) {
+  const result = spawnSync(process.execPath, [toolPath, '--format=json', file], {
+    cwd: root, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024,
+  })
+  if (result.error || result.signal || ![0, 1].includes(result.status)) {
+    throw new Error(`Linter nicht erfolgreich bei ${file}: ${result.error?.message ?? result.signal ?? result.status}`)
+  }
+  const start = result.stdout.indexOf('{')
+  const report = start === -1 ? null : JSON.parse(result.stdout.slice(start))
+  if (!report || !Number.isSafeInteger(report.number_of_files)) throw new Error(`Keine Dateizahl fuer ${file}`)
+  return report.number_of_files > 0
+}
+
 /** Manuelles Einfrieren. Der normale Riegel liest die Baseline ausschliesslich. */
 export function writeBaseline(root, options) {
   const { entries, files } = lint(root, options)
+  const sum = values => values.reduce((total, entry) => total + entry.count, 0)
+  // Was gegenueber der alten Baseline NEU eingefroren wird, gehoert in die Meldung:
+  // sonst verschwindet ein neuer Befund eines PRs stumm im Altbestand.
+  let frozen = null
+  try {
+    frozen = sum(compare(entries, readBaseline(join(root, baselineName)).entries).added)
+  } catch { /* keine oder unlesbare alte Baseline: nichts zu vergleichen */ }
   writeFileSync(join(root, baselineName), JSON.stringify({ version: 1, files, entries }, null, 2) + '\n')
-  return { files, count: entries.reduce((sum, entry) => sum + entry.count, 0) }
+  return { files, count: sum(entries), frozen }
 }
 
 export function run(root, options) {
@@ -134,6 +158,16 @@ export function run(root, options) {
         'gewollt? Dann Baseline mit --schreiben neu einfrieren')
     }
     const { added, removed } = compare(entries, baseline)
+    // Die Untergrenze oben vergleicht nur eine ZAHL: eine neue Datei gleicht eine
+    // ignorierte aus (gemessen: HoerBalken.tsx ignoriert + src/neu.ts dazu ergab
+    // "185 Dateien; 1 behoben", rc 0). "Behoben" gilt deshalb nur, wenn oxlint die
+    // Datei, die noch da ist, auch wirklich prueft.
+    for (const file of new Set(removed.map(entry => entry.file))) {
+      if (existsSync(join(root, file)) && !lintetDatei(root, file, options)) {
+        throw new Error(`${file} wird nicht mehr geprueft, ihr Altbestand hiesse sonst behoben — ` +
+          'gewollt? Dann Baseline mit --schreiben neu einfrieren')
+      }
+    }
     const count = values => values.reduce((sum, entry) => sum + entry.count, 0)
     const details = added.map(entry => `  ${entry.count}x ${entry.file}: ${entry.rule} — ${entry.message}`)
     return { code: added.length ? 1 : 0,
@@ -148,8 +182,9 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   const args = process.argv.slice(2)
   if (args.length === 1 && args[0] === '--schreiben') {
     try {
-      const { files, count } = writeBaseline(process.cwd())
-      console.log(`oxlint-riegel: Baseline geschrieben (${files} Dateien; ${count} Befunde)`)
+      const { files, count, frozen } = writeBaseline(process.cwd())
+      const neu = frozen === null ? 'keine alte Baseline' : `davon ${frozen} neu eingefroren`
+      console.log(`oxlint-riegel: Baseline geschrieben (${files} Dateien; ${count} Befunde; ${neu})`)
     } catch (error) {
       console.error(`oxlint-riegel: ${error.message}`)
       process.exitCode = 2
