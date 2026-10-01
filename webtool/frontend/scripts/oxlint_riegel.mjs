@@ -1,6 +1,6 @@
 // T-006: Eingefrorener Altbestand; neue Befunde und unvollstaendige Laeufe blockieren.
 // Baseline bewusst nur auf ausdruecklichen Aufruf schreiben, niemals im CI-Vergleich.
-// INTENTIONAL-UNTESTED: falscher Alarm des Charakterisierungs-Gates — gepinnt durch scripts/oxlint_riegel.node-test.mjs (importiert run/compare/readBaseline/normalizeReport), das Gate kennt die Endung .node-test.mjs nicht.
+// Selbsttests: scripts/oxlint_riegel.test.mjs (vitest), Mutationsplan scripts/mutationen/oxlint-riegel.json.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
