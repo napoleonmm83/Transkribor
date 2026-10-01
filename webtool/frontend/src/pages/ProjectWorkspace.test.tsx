@@ -721,6 +721,72 @@ describe('ProjectWorkspace (Stub)', () => {
       expect.stringContaining('weg')))
   })
 
+  /* `reloadEinstellungen` laeuft nach dem Speichern im Projekt-Dialog. Wechselt waehrend der
+     Anfrage das Projekt, gehoert die Antwort einer abgebauten Sitzung: weder ihr Fehler darf als
+     Toast erscheinen noch ihr Erfolg Bs Einstellungen ersetzen. Der GET haengt absichtlich. */
+  const nachladenUeberWechsel = async (abschluss: 'ablehnen' | 'aufloesen') => {
+    toastMock.error.mockClear()
+    vi.mocked(api.listProjects).mockResolvedValue([
+      { name: 'A', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] },
+      { name: 'B', dateien: 0, fertig: 0, geaendert: 0, active_jobs: [] }])
+    vi.mocked(api.getProjectFiles).mockResolvedValue({ name: 'A', files: [] })
+    const wahl = [{ id: 'en', label: 'Englisch', hint: '', dialekt: false },
+      { id: 'fr', label: 'Franzoesisch', hint: '', dialekt: false }]
+    const basis = { korrektur: 'auto', mehrsprachig: false, sprecher_max: 20,
+      sprach_choices: wahl, tiefen: [{ id: 'auto', label: 'Auto' }] }
+    type Einst = Awaited<ReturnType<typeof api.getProjektEinstellungen>>
+    let spaet!: { aufloesen: (d: Einst) => void; ablehnen: (e: Error) => void }
+    vi.mocked(api.getProjektEinstellungen)
+      .mockResolvedValueOnce({ ...basis, sprache: 'en' })           // Arbeitsflaeche A
+      .mockResolvedValueOnce({ ...basis, sprache: 'en' })           // Dialog beim Oeffnen
+      .mockImplementationOnce(() => new Promise((aufloesen, ablehnen) => { spaet = { aufloesen, ablehnen } }))
+      .mockResolvedValue({ ...basis, sprache: 'fr' })               // Arbeitsflaeche B
+    vi.mocked(api.saveProjektEinstellungen).mockResolvedValue(
+      { sprache: 'fr', korrektur: 'auto', mehrsprachig: false })
+    const ZuB = () => {
+      const nav = useNavigate()
+      return <button onClick={() => nav('/p/B')}>zu B</button>
+    }
+    render(
+      <MemoryRouter initialEntries={['/p/A']}>
+        <JobProvider>
+          <ProjektDatenProvider>
+            <EditorBrueckeProvider>
+              <Routes>
+                <Route path="/p/:project" element={<><ZuB /><ProjectWorkspace /></>} />
+              </Routes>
+            </EditorBrueckeProvider>
+          </ProjektDatenProvider>
+        </JobProvider>
+      </MemoryRouter>,
+    )
+    await screen.findByText('Englisch')                              // Badge von A
+    fireEvent.pointerDown(await screen.findByRole('button', { name: /Aktionen für/ }),
+      { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Sprache & Korrektur/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(await within(dialog).findByRole('combobox', { name: 'Sprache' }))
+    fireEvent.click(await screen.findByText(/Franzoesisch/))
+    fireEvent.click(within(dialog).getByRole('button', { name: /^Speichern/ }))
+    await waitFor(() => expect(api.getProjektEinstellungen).toHaveBeenCalledTimes(3))   // Nachladen haengt
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'zu B' })) })
+    await waitFor(() => expect(api.getProjektEinstellungen).toHaveBeenCalledTimes(4))
+    await screen.findAllByText('Franzoesisch')                       // Badge von B steht
+    if (abschluss === 'ablehnen') await act(async () => { spaet.ablehnen(new Error('weg')) })
+    else await act(async () => { spaet.aufloesen({ ...basis, sprache: 'en' }) })
+  }
+
+  it('meldet den Nachlade-Fehler von A nicht, wenn inzwischen B offen ist', async () => {
+    await nachladenUeberWechsel('ablehnen')
+    expect(toastMock.error).not.toHaveBeenCalled()
+  })
+
+  it('ersetzt Bs Einstellungen nicht durch die verspaetete Nachlade-Antwort von A', async () => {
+    await nachladenUeberWechsel('aufloesen')
+    expect(screen.queryByText('Englisch')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Franzoesisch').length).toBeGreaterThan(0)
+  })
+
   it('traegt die Sprache eines Projekts nicht ins naechste', async () => {
     /* React Router baut dieses Element bei einem Parameterwechsel NICHT neu auf — der State
        ueberlebt den Projektwechsel. Die Ablageflaeche ist dabei durchgehend scharf: ein Drop
