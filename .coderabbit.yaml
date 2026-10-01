@@ -217,13 +217,14 @@ reviews:
 
   tools:
     ruff: { enabled: true }          # laeuft ohnehin; hier explizit, damit es sichtbar ist
-    eslint: { enabled: true }
+    eslint: { enabled: false }       # im Frontend gilt Oxlint
+    oxc: { enabled: true }          # CodeRabbit-Adapter fuer Oxlint
     markdownlint: { enabled: true }
     shellcheck: { enabled: true }
     actionlint: { enabled: true }    # .github/workflows/
     gitleaks: { enabled: true }      # Keys gehoeren nie ins Repo (settings.json liegt im Profil)
     semgrep: { enabled: true }
-    biome: { enabled: false }        # kollidiert mit eslint, hier nicht im Einsatz
+    biome: { enabled: false }        # Oxlint ist der gewaehlte Linter, Biome hier nicht im Einsatz
 
 knowledge_base:
   # Abgewehrte Befunde sollen nicht wiederkommen. In PR #265 wurde ein als „Major" gemeldeter
