@@ -179,13 +179,27 @@ test('behoben zaehlt nur, wenn oxlint die noch vorhandene Datei auch prueft', t 
   tool(root, werkzeug(0))
   assert.equal(run(root).code, 0)
 })
-test('--schreiben nennt, was gegenueber der alten Baseline neu eingefroren wird', t => {
+test('--schreiben friert neue Befunde nur mit --mit-neuen ein', t => {
+  // --schreiben ist die vorgeschriebene Antwort auf eine geloeschte Datei; ohne diese
+  // Sperre verschwaende dabei jeder neue Befund des PRs stumm im Altbestand.
   const root = fixture(t)
   baseline(root, [])
+  const path = join(root, '.oxlint-baseline.json')
+  const vorher = readFileSync(path, 'utf8')
   tool(root, `console.log(${JSON.stringify(JSON.stringify(report()))})`)
-  const result = spawnSync(process.execPath, [script, '--schreiben'], { cwd: root, encoding: 'utf8' })
-  assert.equal(result.status, 0)
-  assert.match(result.stdout, /davon 1 neu eingefroren/)
+  const invoke = args => spawnSync(process.execPath, [script, ...args], { cwd: root, encoding: 'utf8' })
+  const verweigert = invoke(['--schreiben'])
+  assert.equal(verweigert.status, 2)
+  assert.match(verweigert.stderr, /1 neue Befunde wuerden eingefroren[\s\S]*src\/probe\.ts: typescript\(probe\)/)
+  assert.equal(readFileSync(path, 'utf8'), vorher)
+  const bewusst = invoke(['--schreiben', '--mit-neuen'])
+  assert.equal(bewusst.status, 0)
+  assert.match(bewusst.stdout, /davon 1 neu eingefroren/)
+  assert.equal(readBaseline(path).entries.length, 1)
+  // Unlesbare alte Baseline: nicht still alles einfrieren.
+  writeFileSync(path, '{kaputt')
+  assert.equal(invoke(['--schreiben']).status, 2)
+  assert.equal(readFileSync(path, 'utf8'), '{kaputt')
 })
 test('Baseline traegt die Dateizahl des Einfrierlaufs', t => {
   const root = fixture(t)
