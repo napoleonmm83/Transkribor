@@ -232,6 +232,11 @@ jobs:
       - run: npm ci --no-audit --fund=false
         working-directory: webtool/frontend
 
+      - run: npm run test:lint
+        working-directory: webtool/frontend
+      - run: npm run lint:ci
+        working-directory: webtool/frontend
+
       - run: npm test
         working-directory: webtool/frontend
 
