@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Wenn die Projekt-Einstellungen beim erneuten Öffnen nicht geladen werden können, lässt sich nicht mehr versehentlich der alte Stand speichern.
+- Wer während des Speicherns von Projekt- oder Datei-Einstellungen zu einem anderen Projekt oder einer anderen Aufnahme wechselt, bekommt deren Dialog nicht mehr von der späten Antwort geschlossen.
 
 ## v0.58.2 — 2026-09-30
 
