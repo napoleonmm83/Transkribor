@@ -2,6 +2,7 @@
   "test": "python -m pytest scripts/test_ignoriermuster.py -q",
   "pfade": [
     ".gitignore",
+    "pyproject.toml",
     "scripts/test_ignoriermuster.py"
   ],
   "mutationen": [
@@ -53,6 +54,41 @@
       "von": "/cg-codex-*/\n",
       "nach": "",
       "rot": ["test_codex_wegwerfreste_sind_ignoriert"]
+    },
+    {
+      "id": "I8 .npm-cache verliert die Wurzelverankerung",
+      "datei": ".gitignore",
+      "von": "/.npm-cache/\n",
+      "nach": ".npm-cache/\n",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I9 .worktrees verliert die Wurzelverankerung",
+      "datei": ".gitignore",
+      "von": "/.worktrees/\n",
+      "nach": ".worktrees/\n",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I10 das Sandbox-Profil wird zum Sammelmuster cg-*",
+      "datei": ".gitignore",
+      "von": "/cg-codex-*/\n",
+      "nach": "/cg-*/\n",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I11 das Sandbox-Profil trifft auch Dateien",
+      "datei": ".gitignore",
+      "von": "/cg-codex-*/\n",
+      "nach": "/cg-codex-*\n",
+      "rot": ["test_codex_muster_greifen_nicht_zu_weit"]
+    },
+    {
+      "id": "I12 mypy schliesst das unlesbare Sandbox-Profil nicht mehr aus — lokal rc 2",
+      "datei": "pyproject.toml",
+      "von": "|eval|cg-codex-[^/]*)/\"",
+      "nach": "|eval)/\"",
+      "rot": ["test_codex_sandboxprofil_ist_vom_mypy_lauf_ausgeschlossen"]
     }
   ]
 }

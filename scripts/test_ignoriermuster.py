@@ -101,6 +101,12 @@ def test_codex_wegwerfreste_sind_ignoriert(pfad):
     "tmp-ohne-punkt/datei.txt",       # das Muster verlangt `.tmp-`
     ".tmpohnestrich/datei.txt",       # ... mit Bindestrich
     "webtool/scratchpad/datei.txt",   # nur der Wurzel-Scratchpad
+    "webtool/.npm-cache/datei",       # Wurzelverankerung der uebrigen Eintraege
+    "webtool/.worktrees/datei.txt",
+    "webtool/cg-codex-marcu/datei.txt",
+    "cg-irgendwas/datei.txt",         # kein Sammelmuster `cg-*`
+    "cg-codex-notiz.md",              # nur Ordner, keine Dateien
+    "irgendein-cache/datei",          # kein Sammelmuster `*cache`
 ])
 def test_codex_muster_greifen_nicht_zu_weit(pfad):
     """Gegenprobe zu den Codex-Mustern: nichts darueber hinaus verschwindet still."""
@@ -163,6 +169,20 @@ def test_mypy_ausschluss_trifft_nur_den_ordner(pfad):
         f"{pfad} wird von mypy ausgeschlossen — der Ausschluss trifft mehr als "
         f"den Ordner eval/"
     )
+
+
+def test_codex_sandboxprofil_ist_vom_mypy_lauf_ausgeschlossen():
+    """`cg-codex-marcu/` ist unlesbar; ohne Ausschluss stirbt `mypy .` mit rc 2.
+
+    Dieselbe Klasse wie eval/ (T-174): nur der Entwicklerrechner hat den Ordner,
+    die CI urteilt gruen, lokal misst der Riegel nichts.
+    """
+    assert re.match(_mypy_ausschluss(), "cg-codex-marcu/irgendwas.py")
+
+
+@pytest.mark.parametrize("pfad", ["cgcodex.py", "cg-codex.py", "webtool/cg-codex-x/y.py"])
+def test_mypy_codex_ausschluss_trifft_nur_den_wurzelordner(pfad):
+    assert not re.match(_mypy_ausschluss(), pfad), f"{pfad} wird von mypy ausgeschlossen"
 
 
 def test_gepruefte_menge_enthaelt_eval_nicht():
