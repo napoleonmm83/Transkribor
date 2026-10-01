@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { Bug } from 'lucide-react'
 import { useFehlerberichte } from '@/hooks/useFehlerberichte'
@@ -47,9 +47,7 @@ export function FehlerberichteFrage() {
   // Mal auf, und ein Nein dort schaltet Berichte aus, die an waren. Wer einmal `gefragt`
   // GESEHEN hat, gilt für diese Sitzung als beantwortet; der nächste Start entscheidet neu
   // (Fund des Nebenwirkungs-Reviews am eigenen Fix).
-  useEffect(() => {
-    if (fb?.zustand?.gefragt) setBeantwortet(true)
-  }, [fb?.zustand?.gefragt])
+  if (fb?.zustand?.gefragt && !beantwortet) setBeantwortet(true)
 
   // `fb === null`: Browser oder aeltere App-Huelle. `zustand === null`: der Hauptprozess hat
   // noch nicht geantwortet — solange wird nicht gefragt, sonst blitzt der Dialog beim Start auf.

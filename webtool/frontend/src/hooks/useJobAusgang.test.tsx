@@ -1,6 +1,8 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, act } from '@testing-library/react'
-import { JobProvider, useActiveJob } from './useActiveJob'
+import { useActiveJob } from './useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 import { useJobAusgang } from './useJobAusgang'
 import * as api from '@/lib/api'
 
@@ -12,7 +14,9 @@ vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 function Probe() {
   useJobAusgang()
   const { adopt } = useActiveJob()
-  ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  useLayoutEffect(() => {
+    ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+  }, [adopt])
   return null
 }
 

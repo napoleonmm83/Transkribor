@@ -13,10 +13,21 @@ type Props = {
 }
 
 export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Props) {
+  // Auch ein Wechsel des Vorschau-Anbieters startet wie bisher eine neue Vorschau.
+  const [quelle, setQuelle] = useState({ vorschau, kennung: 0 })
+  if (quelle.vorschau !== vorschau) setQuelle({ vorschau, kennung: quelle.kennung + 1 })
+  return (
+    <Dialog open={offen} onOpenChange={an => { if (!an) schliessen() }}>
+      {offen && <FehlerberichtInhalt key={quelle.kennung} schliessen={schliessen} vorschau={vorschau} senden={senden} />}
+    </Dialog>
+  )
+}
+
+function FehlerberichtInhalt({ schliessen, vorschau, senden }: Omit<Props, 'offen'>) {
   const [bericht, setBericht] = useState<BerichtVorschau | null>(null)
   const [auswahl, setAuswahl] = useState<number[]>([])
   const [kommentar, setKommentar] = useState('')
-  const [laedt, setLaedt] = useState(false)
+  const [laedt, setLaedt] = useState(true)
   const [sendet, setSendet] = useState(false)
   const [fehler, setFehler] = useState('')
   const [gesendet, setGesendet] = useState(false)
@@ -29,10 +40,8 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
   const lauf = useRef(0)
 
   useEffect(() => {
-    if (!offen) return
     let aktiv = true
-    lauf.current++
-    setBericht(null); setFehler(''); setGesendet(false); setKommentar(''); setSendet(false); setLaedt(true)
+    const nummer = ++lauf.current
     Promise.resolve(vorschau()).then(b => {
       if (!aktiv) return
       if (!b) throw new Error('Die Vorschau ist nicht verfuegbar.')
@@ -40,8 +49,8 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
       setAuswahl(b.zeilen.map((_, i) => i))
     }).catch((e: Error) => { if (aktiv) setFehler(e.message) })
       .finally(() => { if (aktiv) setLaedt(false) })
-    return () => { aktiv = false }
-  }, [offen, vorschau])
+    return () => { aktiv = false; lauf.current = nummer + 1 }
+  }, [vorschau])
 
   async function abschicken() {
     if (!bericht || sendet) return
@@ -61,7 +70,6 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
   }
 
   return (
-    <Dialog open={offen} onOpenChange={an => { if (!an) schliessen() }}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Fehlerbericht an Bugsink</DialogTitle>
@@ -97,6 +105,5 @@ export function FehlerberichtDialog({ offen, schliessen, vorschau, senden }: Pro
           </Button>}
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   )
 }

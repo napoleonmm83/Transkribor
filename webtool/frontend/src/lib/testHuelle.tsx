@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
-import { JobProvider } from '@/hooks/useActiveJob'
-import { ProjektDatenProvider } from '@/hooks/useProjektDaten'
-import { EditorBrueckeProvider } from '@/hooks/useEditorBruecke'
+import { JobProvider } from '@/hooks/JobProvider'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
 
 /**
  * Die Provider-Schichten der echten App fuer Tests einzelner Bauteile.

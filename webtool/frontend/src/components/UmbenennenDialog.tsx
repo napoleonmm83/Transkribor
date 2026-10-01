@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,7 @@ import {
  * setzt den Namen ins Feld, geschickt wird er trotzdem erst mit „Umbenennen“ — der Vorschlag
  * ist eine Abkuerzung, keine Entscheidung.
  */
-export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wert, vorschlaege, onSpeichern }: {
+type Props = {
   offen: boolean
   onOpenChange: (o: boolean) => void
   titel: string
@@ -25,26 +25,43 @@ export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wer
    *  ungespeicherten Aenderungen nach — wer dort abbricht, hat NICHT umbenannt, und ein
    *  Dialog, der sich trotzdem schliesst, behauptet das Gegenteil. */
   onSpeichern: (name: string) => Promise<boolean | void>
-}) {
+}
+
+export function UmbenennenDialog({ offen, onOpenChange, ...props }: Props) {
+  return (
+    <Dialog open={offen} onOpenChange={onOpenChange}>
+      {offen && <UmbenennenInhalt key={props.wert} {...props} onOpenChange={onOpenChange} />}
+    </Dialog>
+  )
+}
+
+function UmbenennenInhalt({ onOpenChange, titel, beschreibung, wert, vorschlaege, onSpeichern }: Omit<Props, 'offen'>) {
   const [name, setName] = useState(wert)
   const [laeuft, setLaeuft] = useState(false)
   // Kontrolliert und beim Oeffnen aktiv zurueckgesetzt: sonst haelt das Feld den Namen der
   // zuletzt umbenannten Datei fest (dieselbe Falle wie beim Modellfeld der Einstellungen).
-  useEffect(() => { if (offen) { setName(wert); setLaeuft(false) } }, [offen, wert])
+  const generation = useRef({ active: false })
+  useEffect(() => {
+    const stand = { active: true }
+    generation.current = stand
+    return () => { stand.active = false }
+  }, [])
 
   const speichern = async () => {
     const n = name.trim()
     if (!n || n === wert) { onOpenChange(false); return }
     setLaeuft(true)
+    const stand = generation.current
     try {
-      if (await onSpeichern(n) === false) { setLaeuft(false); return }
+      const umbenannt = await onSpeichern(n)
+      if (!stand.active) return
+      if (umbenannt === false) { setLaeuft(false); return }
       onOpenChange(false)
     }
-    catch (e) { toast.error(`Umbenennen fehlgeschlagen: ${(e as Error).message}`); setLaeuft(false) }
+    catch (e) { if (stand.active) { toast.error(`Umbenennen fehlgeschlagen: ${(e as Error).message}`); setLaeuft(false) } }
   }
 
   return (
-    <Dialog open={offen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{titel}</DialogTitle>
@@ -67,18 +84,5 @@ export function UmbenennenDialog({ offen, onOpenChange, titel, beschreibung, wer
           <Button onClick={speichern} disabled={laeuft || !name.trim()}>Umbenennen</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   )
-}
-
-/** Die Sprechernamen eines Dokuments in der Reihenfolge ihres ersten Auftretens.
- *  Ohne Filter: welcher Name als Dateiname taugt, weiss nur der Mensch davor — eine
- *  Heuristik („nimm den, der nicht Interviewer heisst“) liegt beim ersten Sonderfall falsch. */
-export function sprecherNamen(doc: { segments?: { speaker?: string }[] } | null): string[] {
-  const gesehen: string[] = []
-  for (const s of doc?.segments ?? []) {
-    const n = (s.speaker || '').trim()
-    if (n && !gesehen.includes(n)) gesehen.push(n)
-  }
-  return gesehen
 }

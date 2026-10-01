@@ -1,7 +1,9 @@
+import { useLayoutEffect } from 'react'
 import { StrictMode, useEffect } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
-import { JobProvider, mergePhases, useActiveJob, type Job } from './useActiveJob'
+import { mergePhases, useActiveJob, type Job } from './useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 import { parseJobPhases } from '@/lib/jobPhases'
 import type { JobPhases, Vorgang } from '@/lib/types'
 import * as api from '@/lib/api'
@@ -13,7 +15,9 @@ vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
 
 function Probe({ beiSettled }: { beiSettled?: (beendet: Job[]) => void } = {}) {
   const { jobs, adopt, verfolge, onSettled } = useActiveJob()
-  ;(globalThis as unknown as { __verfolge: typeof verfolge }).__verfolge = verfolge
+  useLayoutEffect(() => {
+    ;(globalThis as unknown as { __verfolge: typeof verfolge }).__verfolge = verfolge
+  }, [verfolge])
   const phases = mergePhases(jobs.filter(j => j.status === 'running'))
   // GENAU wie ProjectWorkspace.tsx: der Verbraucher registriert sich in einem Effekt.
   useEffect(() => (beiSettled ? onSettled(beiSettled) : undefined), [onSettled, beiSettled])

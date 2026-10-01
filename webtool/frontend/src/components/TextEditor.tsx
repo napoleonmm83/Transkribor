@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { Textarea } from '@/components/ui/textarea'
 
 // ponytail: field-sizing-content (auto-grow) already ships in ui/textarea's base class, no inline style needed.
@@ -30,7 +30,7 @@ export function TextEditor({ initial, onCommit, onCancel, onVerworfen }: {
   // `onVerworfen` als latest-ref: der Cleanup laeuft beim initial-Wechsel bzw. Unmount, nicht
   // bei jedem Render — ohne Ref hinge er an der Prop-Identitaet des ersten Renders.
   const cb = useRef(onVerworfen)
-  cb.current = onVerworfen
+  useLayoutEffect(() => { cb.current = onVerworfen }, [onVerworfen])
 
   const fertig = (t: string) => {
     erledigt.current = true

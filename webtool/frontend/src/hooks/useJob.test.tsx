@@ -1,6 +1,7 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect, vi } from 'vitest'
 import { render, act } from '@testing-library/react'
-import { JobProvider } from './useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 import { useJob } from './useJob'
 import type { StartJob } from '@/lib/types'
 
@@ -20,8 +21,10 @@ vi.mock('sonner', () => ({ toast: toastMock, Toaster: () => null }))
  */
 function Probe({ antwort }: { antwort: StartJob }) {
   const { start } = useJob()
+  useLayoutEffect(() => {
   ;(globalThis as unknown as { __start: () => Promise<void> }).__start =
     () => start(async () => antwort, 'Transkribieren')
+  }, [start, antwort])
   return null
 }
 

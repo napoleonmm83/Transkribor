@@ -40,8 +40,8 @@
     {
       "id": "541-C der Sitzungs-Riegel fehlt — ein spaeterer status-Rundlauf bewaffnet die einmalige Nachfrage neu",
       "datei": "webtool/frontend/src/components/FehlerberichteFrage.tsx",
-      "von": "  useEffect(() => {\n    if (fb?.zustand?.gefragt) setBeantwortet(true)\n  }, [fb?.zustand?.gefragt])",
-      "nach": "  useEffect(() => {}, [])",
+      "von": "  if (fb?.zustand?.gefragt && !beantwortet) setBeantwortet(true)",
+      "nach": "  // MUTATION: Sitzungs-Riegel entfernt",
       "rot": [
         "bewaffnet sich nicht neu, wenn eine spaetere status-Antwort gefragt: null meldet"
       ],

@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Wenn die Projekt-Einstellungen beim erneuten Öffnen nicht geladen werden können, lässt sich nicht mehr versehentlich der alte Stand speichern.
+
 ## v0.58.2 — 2026-09-30
 
 **Behoben**

@@ -3,7 +3,7 @@ import { useWavesurfer } from '@wavesurfer/react'
 import { Pause, Play, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { playWindow, naechsteAktion, zeitText, type Fenster } from '@/lib/playback'
-import { useTheme } from '@/components/ThemeProvider'
+import { useTheme } from '@/hooks/useTheme'
 import type { Segment } from '@/lib/types'
 
 export type WaveHandle = {

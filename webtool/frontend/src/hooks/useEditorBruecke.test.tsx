@@ -1,6 +1,8 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { EditorBrueckeProvider, useEditorBruecke, useEditorMelden, type OffenesDokument } from './useEditorBruecke'
+import { useEditorBruecke, useEditorMelden, type OffenesDokument } from './useEditorBruecke'
+import { EditorBrueckeProvider } from '@/hooks/EditorBrueckeProvider'
 
 const dok: OffenesDokument = {
   project: 'P', base: 'b', dirty: true, stand: 'offen',
@@ -10,7 +12,11 @@ const dok: OffenesDokument = {
 /** Die Leiste-Seite: liest den Ref im Augenblick eines Klicks. Hier gibt sie ihn nach draussen,
  *  damit der Test dasselbe sieht wie die Hülle. */
 let bruecke: { current: OffenesDokument | null } | null = null
-function Leser() { bruecke = useEditorBruecke(); return null }
+function Leser() {
+  const aktuell = useEditorBruecke()
+  useLayoutEffect(() => { bruecke = aktuell }, [aktuell])
+  return null
+}
 function Editor() { useEditorMelden(dok); return null }
 
 function Aufbau({ imEditor }: { imEditor: boolean }) {

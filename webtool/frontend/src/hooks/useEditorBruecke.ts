@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { createContext, useContext, useLayoutEffect } from 'react'
 import type { SpeicherStand } from './useDoc'
 
 /** Was der Editor der Huelle ueber sein offenes Dokument verraet — mehr braucht die Leiste nicht. */
@@ -18,7 +18,7 @@ export type OffenesDokument = {
 }
 type Bruecke = { current: OffenesDokument | null }
 
-const Ctx = createContext<Bruecke | null>(null)
+export const Ctx = createContext<Bruecke | null>(null)
 
 /**
  * Die Leiste navigiert, das Dokument lebt im Editor (`useDoc`) — seit die Projektnavigation in
@@ -31,10 +31,6 @@ const Ctx = createContext<Bruecke | null>(null)
  * die ganze Huelle samt Projektliste neu rendern. Ein zweiter `useDoc`-Aufruf in der Leiste
  * schied ohnehin aus — der laedt dasselbe Dokument ein zweites Mal vom Server.
  */
-export function EditorBrueckeProvider({ children }: { children: ReactNode }) {
-  const ref = useRef<OffenesDokument | null>(null)
-  return <Ctx.Provider value={ref}>{children}</Ctx.Provider>
-}
 
 function useBruecke(): Bruecke {
   const c = useContext(Ctx)

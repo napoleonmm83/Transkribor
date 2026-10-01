@@ -6,6 +6,7 @@
     "webtool/frontend/e2e/farb-mathematik.ts",
     "webtool/frontend/e2e/testApp.ts",
     "webtool/frontend/src/components/ui/button.tsx",
+    "webtool/frontend/src/components/ui/buttonVariants.ts",
     "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/components/PageHeader.tsx",
     "webtool/frontend/src/components/Toolbar.tsx",
@@ -17,7 +18,7 @@
   "mutationen": [
     {
       "id": "K1 die Outline-Kontur faellt unter 3:1 — der #515-Befund kehrt zurueck",
-      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "datei": "webtool/frontend/src/components/ui/buttonVariants.ts",
       "von": "border border-foreground/50 bg-transparent shadow-xs hover:border-foreground/80",
       "nach": "border border-foreground/10 bg-transparent shadow-xs hover:border-foreground/40",
       "rot": [
@@ -28,7 +29,7 @@
     },
     {
       "id": "K2 die Outline-Flaeche wird wieder deckend — 1,00:1 auf dem Leistengrund",
-      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "datei": "webtool/frontend/src/components/ui/buttonVariants.ts",
       "von": "border-foreground/50 bg-transparent shadow-xs",
       "nach": "border-foreground/50 bg-background shadow-xs",
       "rot": [
@@ -48,7 +49,7 @@
     },
     {
       "id": "K4 der Knopf verliert JEDEN Fokus-Indikator — die dauerhafte #515-Kontur darf ihn nicht ersetzen",
-      "datei": "webtool/frontend/src/components/ui/button.tsx",
+      "datei": "webtool/frontend/src/components/ui/buttonVariants.ts",
       "von": "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
       "nach": "",
       "rot": [

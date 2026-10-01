@@ -7,7 +7,8 @@
     "webtool/frontend/src/components/Sidebar.test.tsx",
     "webtool/frontend/src/components/Sidebar.tsx",
     "webtool/frontend/src/hooks/useActiveJob.test.tsx",
-    "webtool/frontend/src/hooks/useActiveJob.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.ts",
+    "webtool/frontend/src/hooks/JobProvider.tsx",
     "webtool/frontend/src/lib/jobPhases.ts",
     "webtool/frontend/src/pages/ProjectWorkspace.test.tsx",
     "webtool/frontend/src/pages/ProjectWorkspace.tsx"
@@ -46,7 +47,7 @@
     },
     {
       "id": "S3 durch behaelt, wer noch in der Korrektur-Schlange steht (#581/#442)",
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts",
       "von": "  for (const b of Object.keys(warten)) durch.delete(b)",
       "nach": "  // mutiert: der Schnitt an warten faellt weg",
       "rot": [
@@ -59,7 +60,7 @@
     },
     {
       "id": "S4 durch behaelt, wer in einem anderen Job laeuft (#581)",
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts",
       "von": "  for (const b of Object.keys(active)) durch.delete(b)",
       "nach": "  // mutiert: der Schnitt an active faellt weg",
       "rot": [
@@ -85,7 +86,7 @@
     },
     {
       "id": "S7 die Sammelzeile faellt weg — durch bleibt fuer immer leer (#581)",
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts",
       "von": "    for (const b of j.phases.gesehen ?? []) if (schonDurch(j.phases, j.kind, b)) durch.add(b)",
       "nach": "    // mutiert: es wird nichts mehr gesammelt",
       "rot": [
@@ -127,7 +128,7 @@
     },
     {
       "id": "S10 eine geloeschte Aufnahme bleibt in durch (#581/#489)",
-      "datei": "webtool/frontend/src/hooks/useActiveJob.tsx",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts",
       "von": "  for (const b of geloescht) durch.delete(b)",
       "nach": "  // mutiert: der Schnitt an entfernt faellt weg",
       "rot": [

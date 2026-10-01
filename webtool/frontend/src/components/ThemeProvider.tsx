@@ -1,7 +1,5 @@
-import { createContext, useContext, useEffect, useState } from 'react'
-
-type Theme = 'light' | 'dark'
-const Ctx = createContext<{ theme: Theme; toggle: () => void }>({ theme: 'dark', toggle: () => {} })
+import { useEffect, useState } from 'react'
+import { Ctx, type Theme } from '@/hooks/useTheme'
 
 function initial(): Theme {
   const saved = localStorage.getItem('theme')
@@ -29,4 +27,3 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme])
   return <Ctx.Provider value={{ theme, toggle: () => setTheme(t => (t === 'dark' ? 'light' : 'dark')) }}>{children}</Ctx.Provider>
 }
-export const useTheme = () => useContext(Ctx)

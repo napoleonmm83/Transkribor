@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { getFileEinstellungen, saveFileEinstellungen } from '@/lib/api'
 // Umbenannt beim Import: der lokale Bezeichner `sprecherWahl` steht unten fuer das ERGEBNIS
@@ -38,7 +38,7 @@ import {
  *  `onValueChange`). Ein doppelter Unterstrich, damit er nie mit einem echten Sprach-Kürzel
  *  kollidiert (`ch`/`de`/`en`/`fr`/`it`/`auto`, siehe `sprachen.py`). */
 const ERBT = '__projekt'
-export function DateiEinstellungenDialog({ project, base, file, offen, onOpenChange, onGespeichert }: {
+type Props = {
   project: string
   base: string
   file: ProjectFile
@@ -50,7 +50,17 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
    *  Aus demselben Grund heisst `neuKorrigieren` nicht mehr `tiefeGeaendert`: die Sprecherzahl
    *  loest denselben Zweig aus (die Diarisierung ist ein Prep-Schritt des `correct`-Laufs). */
   onGespeichert?: (a: { neuTranskribieren: boolean; neuKorrigieren: boolean }) => void
-}) {
+}
+
+export function DateiEinstellungenDialog({ offen, onOpenChange, ...props }: Props) {
+  return (
+    <Dialog open={offen} onOpenChange={onOpenChange}>
+      {offen && <DateiEinstellungenInhalt key={JSON.stringify([props.project, props.base])} {...props} onOpenChange={onOpenChange} />}
+    </Dialog>
+  )
+}
+
+function DateiEinstellungenInhalt({ project, base, file, onOpenChange, onGespeichert }: Omit<Props, 'offen'>) {
   const [data, setData] = useState<DateiEinstellungen | null>(null)
   // Der Datei-Override, NICHT der effektive Wert — `null` heisst „folgt dem Projekt" (#234),
   // genau wie bei `mehrWahl` darunter.
@@ -63,17 +73,17 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
   // beim Leeren auf 0 springen und liesse sich nicht mehr zuruecksetzen. Die Uebersetzung
   // passiert an genau einer Stelle (`sprecherWahl`) — dieselbe Trennung wie bei `ERBT`.
   const [sprecherText, setSprecherText] = useState('')
-  const [laedt, setLaedt] = useState(false)
+  const [laedt, setLaedt] = useState(true)
   const [speichert, setSpeichert] = useState(false)
+  const generation = useRef({ active: false })
 
   useEffect(() => {
-    if (!offen) return
+    const stand = { active: true }
+    generation.current = stand
     let aktiv = true
     // Beim Öffnen zurücksetzen, nicht nur nachladen: sonst stünde nach „Abbrechen" + einem
     // fehlgeschlagenen GET das Formular des VORIGEN Aufrufs bedienbar da — mit `data` aus dem
     // alten Stand, aber ohne Bezug zur jetzt geöffneten Datei.
-    setData(null)
-    setLaedt(true)
     getFileEinstellungen(project, base)
       .then(d => {
         if (!aktiv) return
@@ -94,8 +104,8 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
       })
       .catch(e => { if (aktiv) toast.error(`Einstellungen laden fehlgeschlagen: ${(e as Error).message}`) })
       .finally(() => { if (aktiv) setLaedt(false) })
-    return () => { aktiv = false }
-  }, [offen, project, base])
+    return () => { aktiv = false; stand.active = false }
+  }, [project, base])
 
   // Leer -> `null` („automatisch schaetzen lassen"). Alles andere muss eine ganze Zahl im
   // erlaubten Bereich sein, sonst gilt die Eingabe als ungueltig (`undefined`) und der
@@ -177,6 +187,7 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
 
   const speichernFn = async () => {
     if (!geaendert) return
+    const stand = generation.current
     setSpeichert(true)
     try {
       // `sprache: null` / `mehrsprachig: null` sind hier AUSDRUECKLICH gemeint (Override
@@ -186,16 +197,15 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
       await saveFileEinstellungen(project, base,
         { sprache: sprachWahl, korrektur, mehrsprachig: mehrWahl, sprecher: sprecherWahl ?? null })
       onGespeichert?.({ neuTranskribieren, neuKorrigieren })
-      onOpenChange?.(false)
+      if (stand.active) onOpenChange?.(false)
     } catch (e) {
-      toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
+      if (stand.active) toast.error(`Speichern fehlgeschlagen: ${(e as Error).message}`)
     } finally {
-      setSpeichert(false)
+      if (stand.active) setSpeichert(false)
     }
   }
 
   return (
-    <Dialog open={offen} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Sprache, Sprecher &amp; Korrektur — „{base}“</DialogTitle>
@@ -335,6 +345,5 @@ export function DateiEinstellungenDialog({ project, base, file, offen, onOpenCha
           <Button onClick={speichernFn} disabled={!data || speichert || !geaendert}>{knopf}</Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
   )
 }

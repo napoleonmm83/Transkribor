@@ -1,8 +1,11 @@
+import { useLayoutEffect } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { JobProvider, useActiveJob } from './useActiveJob'
-import { ProjektDatenProvider, useProjekte } from './useProjektDaten'
+import { useActiveJob } from './useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
+import { useProjekte } from './useProjektDaten'
+import { ProjektDatenProvider } from '@/hooks/ProjektDatenProvider'
 import { useOsFortschritt } from './useOsFortschritt'
 import * as api from '@/lib/api'
 
@@ -22,8 +25,10 @@ function Probe() {
   // (useProjects.ts) — ein Test, der darauf wartet, waere hundertmal langsamer als alle
   // anderen hier zusammen.
   const { refresh } = useProjekte()
-  ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
-  ;(globalThis as unknown as { __refresh: typeof refresh }).__refresh = refresh
+  useLayoutEffect(() => {
+    ;(globalThis as unknown as { __adopt: typeof adopt }).__adopt = adopt
+    ;(globalThis as unknown as { __refresh: typeof refresh }).__refresh = refresh
+  }, [adopt, refresh])
   return null
 }
 
@@ -45,6 +50,25 @@ describe('useOsFortschritt', () => {
     ;(window as unknown as { transkribor: unknown }).transkribor = { fortschritt }
   })
   afterEach(() => { delete (window as unknown as { transkribor?: unknown }).transkribor })
+
+  it('sendet unveraenderten Fortschritt trotz weiterer Jobpolls nur einmal', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(api.listProjects).mockResolvedValue([{ name: 'Alpha', dateien: 2, fertig: 1, geaendert: 0 }])
+      vi.mocked(api.getJob).mockResolvedValue({ status: 'running', lines: [] })
+      zeigen()
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      const adopt = (globalThis as unknown as { __adopt: (i: string, p: string, k: string) => void }).__adopt
+      await act(async () => { adopt('j1', 'Alpha', 'correct') })
+      await act(async () => { await vi.advanceTimersByTimeAsync(30) })
+      expect(fortschritt).toHaveBeenLastCalledWith(0.5, undefined)
+      const gesendet = fortschritt.mock.calls.length
+      const polls = vi.mocked(api.getJob).mock.calls.length
+      await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+      expect(vi.mocked(api.getJob).mock.calls.length).toBeGreaterThan(polls)
+      expect(fortschritt).toHaveBeenCalledTimes(gesendet)
+    } finally { vi.useRealTimers() }
+  })
 
   it('meldet einen fertigen Lauf GENAU EINMAL', async () => {
     // Einfachster Fall: ein einzelner Job wird in einem Tick terminal -- onSettled liefert

@@ -516,7 +516,9 @@ export function SettingsPage() {
     if (version !== testVersion.current) return
     setTestet(false)
     setTestErgebnis({ ok: r.ok, text: r.detail || (r.ok ? 'Verbindung steht' : 'Verbindung fehlgeschlagen') })
-    r.ok ? toast.success(r.detail || 'Verbindung steht') : toast.error(r.detail || 'Fehlgeschlagen')
+    // INTENTIONAL-UNTESTED: Gate erkennt TSX-Pin nicht; SettingsPage.test.tsx prüft die vier Toast-Zweige (T031).
+    if (r.ok) toast.success(r.detail || 'Verbindung steht')
+    else toast.error(r.detail || 'Fehlgeschlagen')
   }
 
   // Poll, solange ein yt-dlp-Lauf verfolgt wird (#174) — dieselbe Form wie beim

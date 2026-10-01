@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, act } from '@testing-library/react'
-import { UmbenennenDialog, sprecherNamen } from './UmbenennenDialog'
+import { UmbenennenDialog } from './UmbenennenDialog'
+import { sprecherNamen } from '@/lib/sprecherNamen'
 import type { EditDoc } from '@/lib/types'
 
 describe('sprecherNamen', () => {

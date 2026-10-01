@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDoc } from '@/hooks/useDoc'
 import { useEditorMelden, darfWechseln } from '@/hooks/useEditorBruecke'
@@ -29,9 +29,10 @@ export function EditorView() {
   // edit.json nicht, eine Rueckfrage waere dort irrefuehrend. Gleiche Dirty-Abfrage wie das alte
   // korrekturFertig; reload() beruehrt project/base nicht -> kein #106-Verlassens-Flush, der
   // haengende Autosave laeuft weiter (derselbe Pfad wie bisher). dirtyRef statt dirty in den Deps:
-  // sonst neu abonniert bei jedem Tastendruck; der Ref ist im Render fresh.
+  // sonst neu abonniert bei jedem Tastendruck; der Ref wird synchron im Commit aktualisiert.
   const { onSettled } = useActiveJob()
-  const dirtyRef = useRef(dirty); dirtyRef.current = dirty
+  const dirtyRef = useRef(dirty)
+  useLayoutEffect(() => { dirtyRef.current = dirty }, [dirty])
   useEffect(() => {
     if (!project || !base) return
     const p = project, b = base
@@ -54,8 +55,12 @@ export function EditorView() {
     })
   }, [project, base, reload, onSettled, ueberschreiben])
 
-  const [suchQuery, setSuchQuery] = useState('')
-  const [suchIndex, setSuchIndex] = useState(0)
+  const [suche, setSuche] = useState({ project, base, query: '', index: 0 })
+  const dateiPasst = suche.project === project && suche.base === base
+  if (!dateiPasst) setSuche({ project, base, query: '', index: 0 })
+  const suchQuery = dateiPasst ? suche.query : ''
+  const suchIndex = dateiPasst ? suche.index : 0
+  const setSuchQuery = (query: string) => setSuche({ project, base, query, index: 0 })
   // useSuche durchsucht seit #128 Kontext, Zusammenfassung, Segmente und Anmerkungen — die
   // Trefferliste vereinigt alle Arten in Dokumentreihenfolge (Kopf, Segmente, Anmerkungen).
   const treffer = useSuche(doc, suchQuery)
@@ -77,12 +82,8 @@ export function EditorView() {
     for (const t of treffer.treffer) if (t.kind === 'annotation') s.add(t.index)
     return s
   }, [treffer])
-  // Neuer Suchbegriff -> am ersten Treffer beginnen.
-  useEffect(() => { setSuchIndex(0) }, [suchQuery])
-  // Dateiwechsel -> altes Transkript ist hinfällig.
-  useEffect(() => { setSuchQuery(''); setSuchIndex(0) }, [sel?.base])
-  const suchNext = () => setSuchIndex(i => anzahl ? (i + 1) % anzahl : 0)
-  const suchPrev = () => setSuchIndex(i => anzahl ? (i - 1 + anzahl) % anzahl : 0)
+  const suchNext = () => setSuche(s => ({ ...s, index: anzahl ? (s.index + 1) % anzahl : 0 }))
+  const suchPrev = () => setSuche(s => ({ ...s, index: anzahl ? (s.index - 1 + anzahl) % anzahl : 0 }))
   const waveRef = useRef<WaveHandle>(null)
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {

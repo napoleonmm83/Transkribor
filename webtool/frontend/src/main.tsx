@@ -6,7 +6,7 @@ import App from './App.tsx'
 import { ThemeProvider } from './components/ThemeProvider.tsx'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { JobProvider } from '@/hooks/useActiveJob'
+import { JobProvider } from '@/hooks/JobProvider'
 
 function anzeigen() { createRoot(document.getElementById('root')!).render(
   <StrictMode>

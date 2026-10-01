@@ -198,3 +198,17 @@ describe('useProjectFiles', () => {
     expect(result.current.fehler).toBe(false)
   })
 })
+
+it('eine Antwort aus dem ersten A-Aufenthalt ersetzt nach A-B-A keine neue Liste', async () => {
+  let erste!: (r: {name: string; files: ProjectFile[]}) => void
+  vi.mocked(api.getProjectFiles)
+    .mockImplementationOnce(() => new Promise(r => { erste = r }))
+    .mockResolvedValueOnce({ name: 'B', files: [] })
+    .mockResolvedValueOnce({ name: 'A', files: [{ ...datei, base: 'neu' }] })
+  const { result, rerender } = renderHook(({ p }) => useProjectFiles(p), { initialProps: { p: 'A' } })
+  rerender({ p: 'B' })
+  rerender({ p: 'A' })
+  await waitFor(() => expect(result.current.files[0]?.base).toBe('neu'))
+  await act(async () => { erste({ name: 'A', files: [datei] }) })
+  expect(result.current.files[0]?.base).toBe('neu')
+})

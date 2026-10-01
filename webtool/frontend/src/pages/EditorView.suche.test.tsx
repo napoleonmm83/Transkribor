@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { EditorView } from './EditorView'
 import type { EditDoc } from '@/lib/types'
@@ -28,10 +28,15 @@ vi.mock('@/hooks/useEditorBruecke', () => ({ useEditorMelden: () => {} }))
 vi.mock('@/hooks/useActiveJob', () => ({ useActiveJob: () => ({ onSettled: () => () => {} }) }))
 vi.mock('@/components/PlayerDock', () => ({ PlayerDock: () => null }))
 
+function ProjektWechsel() {
+  const navigate = useNavigate()
+  return <button onClick={() => navigate('/p/Q/b')}>Projekt wechseln</button>
+}
+
 function view() {
   return render(<TooltipProvider>
     <MemoryRouter initialEntries={['/p/P/b']}>
-      <Routes><Route path="/p/:project/:base" element={<EditorView />} /></Routes>
+      <Routes><Route path="/p/:project/:base" element={<><ProjektWechsel /><EditorView /></>} /></Routes>
     </MemoryRouter>
   </TooltipProvider>)
 }
@@ -74,4 +79,24 @@ describe('EditorView Suche', () => {
     }
     expect(document.querySelector('[data-seg-id="2"]')).toHaveClass('ring-yellow-400')
   })
+})
+
+it('setzt eine neue Suchquery auf den ersten Treffer', () => {
+  view()
+  const feld = screen.getByPlaceholderText(/Im Transkript suchen/)
+  fireEvent.change(feld, { target: { value: 's' } })
+  fireEvent.click(screen.getByLabelText(/N.chster Treffer/))
+  expect(screen.getByText('2 / 2')).toBeInTheDocument()
+  fireEvent.change(feld, { target: { value: 'S' } })
+  expect(screen.getByText('1 / 2')).toBeInTheDocument()
+})
+
+it('leert Suche beim Projektwechsel mit gleichem Basisnamen', () => {
+  view()
+  const feld = screen.getByPlaceholderText(/Im Transkript suchen/)
+  fireEvent.change(feld, { target: { value: 's' } })
+  fireEvent.click(screen.getByLabelText(/N.chster Treffer/))
+  fireEvent.click(screen.getByRole('button', { name: 'Projekt wechseln' }))
+  expect(screen.getByPlaceholderText(/Im Transkript suchen/)).toHaveValue('')
+  expect(screen.queryByLabelText(/N.chster Treffer/)).not.toBeInTheDocument()
 })
