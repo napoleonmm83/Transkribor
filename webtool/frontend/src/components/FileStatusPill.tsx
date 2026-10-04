@@ -18,10 +18,10 @@ const STATE = {
   // — dass auch schon FERTIGE Dateien so markiert wurden — ist entfallen: die Druckform
   // `skip (vorhanden)` gibt es seit dem gestaffelten Lauf (10098e4) nicht mehr, weil
   // `transcribe.py` fertige Aufnahmen schon beim Aufbau seiner `pending`-Liste herausfiltert
-  // (`transcribe.py:730`) und fuer sie GAR KEINE Zeile mehr druckt.
+  // (`transcribe.transcribe_project`) und fuer sie GAR KEINE Zeile mehr druckt.
   //
   // Uebrig bleiben genau zwei Quellen fuer 'skipped', und beide sind SCHUTZPFADE: `apply: SKIP`
-  // und `↷ SKIP` (jobPhases.ts:376/377) fuer `human_edited=true`, fuer eine waehrend des Laufs
+  // und `↷ SKIP` (jobPhases.parseJobPhases) fuer `human_edited=true`, fuer eine waehrend des Laufs
   // im Editor angefasste Datei (#278) und fuer eine unlesbare `edit.json` (#190). Das alte Wort
   // verschwieg, dass hier etwas BEWAHRT wurde, und der Vorspul-Pfeil las sich wie „liegen
   // geblieben".
@@ -57,7 +57,7 @@ const GLOBAL_WAIT: Record<GlobalPhase, string> = {
  * `erreicht` ist die UNTERGRENZE aus dem laufenden Job (jobPhases). Sie ist noetig, weil `file`
  * hier die aeltere der zwei Quellen ist: die Dateiliste wird NICHT gepollt (`useProjectFiles`),
  * sondern nur bei Job-Ende und wenn der 4-s-Summenpoll `dateien`/`fertig` wechseln sieht — und
- * ein geschriebenes Roh-`<base>.json` aendert KEINEN der beiden Zaehler (app.py:341-369).
+ * ein geschriebenes Roh-`<base>.json` aendert KEINEN der beiden Zaehler (app.list_projects).
  * Genau im Moment des Endurteils (`state==='done'` faellt hierher durch) behauptete die Zeile
  * deshalb „Nur Audio — noch nicht transkribiert" ueber eine fertige Aufnahme. Im Browser
  * gemessen; Gegenprobe: bei laufendem Job allein neu geladen, stand dasselbe Etikett richtig.

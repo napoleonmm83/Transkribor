@@ -79,7 +79,7 @@ describe('parseJobPhases — correct', () => {
       'A: 300 Segmente → 2 Blöcke',
       '→ Korrigiere A · Block 1/2 …', '⏱ A · Block 1/2: Korrektur 82s, Verify 61s',
       '✓ A · Block 1/2 fertig',
-      // Die ECHTE Form (correct.py:1421), in EINEM Literal. Hier stand bis #564 eine Fassung
+      // Die ECHTE Form (correct.cmd_run), in EINEM Literal. Hier stand bis #564 eine Fassung
       // mit `diarisieren · vorbereiten · glossar · korrigieren`, die es seit #399 (`da647e1`)
       // nicht mehr gibt — und sie war ausserdem auf zwei Literale mit `+` verteilt, womit die
       // Ernte zwei halbe Zeilen sah. Beides behoben; die Zusicherung darunter ist unberuehrt,
@@ -160,7 +160,7 @@ describe('parseJobPhases — correct', () => {
   })
   it('ein RESUME-Lauf legt keinen Eintrag ohne Phase an (#347)', () => {
     // Der Riegel `if (active[base])` in `blockDone`, gemessen am ECHTEN Strom statt an einer
-    // gebauten Sequenz: `correct.py:1062` druckt im Wiederaufnahme-Zweig `↷ … schon vorhanden`
+    // gebauten Sequenz: `correct._correct_file` druckt im Wiederaufnahme-Zweig `↷ … schon vorhanden`
     // und danach `✓ … fertig`, ruft aber `_correct_one` NICHT — es gibt also KEINE
     // `→ Korrigiere`-Zeile, die `active` anlegt. Ohne den Riegel entstuende hier ein Eintrag
     // aus `pct`/`detail` OHNE `phase`: die Pille beschriftete ihn mit `PHASE_LABEL[undefined]`,
@@ -168,8 +168,8 @@ describe('parseJobPhases — correct', () => {
     // fragt — die Vorbereiten-Phase verschwaende also mit.
     //
     // Die erste Fassung dieses Tests haengte eine Blockzeile hinter `apply:`. Das ist
-    // AEQUIVALENT gedacht und im Strom unerreichbar: `cmd_run` sammelt alle Bloecke, bevor
-    // `cmd_apply` laeuft (correct.py:1343). Ein Waechter auf einer Sequenz, die kein Drucker
+    // AEQUIVALENT gedacht und im Strom unerreichbar: `correct.correct_ai_single` laesst
+    // `_correct_file` alle Bloecke EINER Datei sammeln, bevor es `cmd_apply` ruft. Ein Waechter auf einer Sequenz, die kein Drucker
     // erzeugt, deckt den Fall nicht, den er decken soll — gefunden vom kalten Plan-Reviewer.
     const p = parseJobPhases('correct', [
       'prep: 1 Datei(en) getaggt in /t',
@@ -634,7 +634,7 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
 
   it('ein Basisname, der SELBST auf `(N Sprecher)` endet, wird an der Bereichszeile gerettet', () => {
     // Von Subagent (M1) UND CodeRabbit-CLI unabhängig gefunden. Aus der Zeile allein ist der
-    // Fall NICHT entscheidbar — `correct.py:298-300` hängt den Zusatz an, beide Lesarten
+    // Fall NICHT entscheidbar — `correct.cmd_diarize` hängt den Zusatz an, beide Lesarten
     // ergeben dieselben Bytes. Die zweite Quelle ist `[scope]` mit den echten Basisnamen.
     const p = parseJobPhases('correct', [
       '[scope] Runde 2 (3 Sprecher)',
@@ -713,7 +713,7 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
   it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
     // Codex-Befund [high] am Bündel, nachgemessen und bestätigt. Ungelesen war diese Zeile
     // nicht bloss ein hängender Spinner: `cmd_apply` gibt "missing" zurück, `correct_ai_single`
-    // verwirft den Wert (correct.py:1041 `cmd_apply(...)`, :1042 `return True`), und ohne
+    // verwarf den Wert (in `correct.correct_ai_single` nach `cmd_apply(...)`), und ohne
     // perBase-Eintrag findet `ausgang()` kein `misslungen` und keine `bilanz` — der Lauf meldete
     // {art:'erfolg'} über eine edit.json, die nie geschrieben wurde.
     const p = parseJobPhases('correct', [
@@ -1553,7 +1553,7 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     // (2) `apply:` hat geschrieben — die Korrektur ist durch.
     expect(korrekturSchlange(roh(['apply: A -> edit.json']), 'transcribe')).toEqual({})
     // (3) Sie ist gescheitert — es kommt keine Korrektur mehr. BEIDE Wege, denn nur der
-    // zweite ist der Korrektur-Fehlerpfad (`jobPhases.ts:286`): mit dem allgemeinen
+    // zweite ist der Korrektur-Fehlerpfad (`jobPhases.parseJobPhases`): mit dem allgemeinen
     // FEHLER-Zweig allein bliebe der Test gruen, wenn die Erkennung von
     // `Autocorrect-Fehler bei` ausfiele. (CodeRabbit-CLI am PR.)
     expect(korrekturSchlange(roh(['[Demo] FEHLER A: kein Anbieter']), 'transcribe')).toEqual({})

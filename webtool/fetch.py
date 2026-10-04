@@ -545,7 +545,7 @@ def main(argv=None):
         nachzuziehen waere. Nebenbei laese sich das Protokoll dann widerspruechlich:
         „yt-dlp aktualisiert" direkt ueber einem `extraktor-verdacht=False`.
 
-        Das Praefix `[fetch] ` ist Pflicht: `jobPhases.ts:54` schluckt damit die Zeile,
+        Das Praefix `[fetch] ` ist Pflicht: `jobPhases.parseJobPhases` schluckt damit die Zeile,
         sonst laese seine Datei-Regex `^\\[.+?\\] FEHLER (.+?): ` sie als Fehlschlag mit
         der URL als Basisnamen.
         """

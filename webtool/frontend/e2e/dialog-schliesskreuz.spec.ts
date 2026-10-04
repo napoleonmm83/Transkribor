@@ -112,7 +112,7 @@ test('Basis-Dialog (Datei-Einstellungen): ✕ bleibt im gerollten Dialog und ist
   // das aufgeklappte Projekt der Leiste IST das aus der URL).
   await page.goto(`/p/${PROJEKT}`)
   await page.getByRole('button', { name: 'Aktionen für „A_erste“' }).click()
-  // Der Menüpunkt heisst „Sprache, Sprecher & Korrektur“ (DateiMenue.tsx:193).
+  // Der Menüpunkt heisst „Sprache, Sprecher & Korrektur“ (DateiMenue).
   await page.getByRole('menuitem', { name: 'Sprache, Sprecher & Korrektur' }).click()
   await kreuzHaelt(page, true)
 })

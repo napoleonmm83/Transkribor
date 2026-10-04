@@ -1045,7 +1045,7 @@ def test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME():
     `transcribe.py` praefixt JEDE gewoehnliche Zeile mit `[{Projektname}] `. Heisst das
     Projekt „active", ist jede davon zeilengleich mit der Marke, und beide Mengen wachsen
     mit der Zahl der ZEILEN statt der Aufnahmen. Die Zeilenformen unten sind die echten
-    (`transcribe.py:555/807/808/827/979`), nicht erfundene.
+    (`transcribe.transcribe_project`), nicht erfundene.
 
     EHRLICHE GRENZE: die Zeilen sind hier von Hand gebaut, `buche_aktive` wird direkt
     gerufen. Aendert jemand eine Druckform in `transcribe.py`, wird dieser Test davon NICHT
@@ -1078,7 +1078,7 @@ def test_ein_projekt_namens_active_bucht_je_ZEILE_statt_je_AUFNAHME():
                    f"[active] -> transkribiere {b} …",           # [{name}] -> transkribiere …
                    f"[active] fertig {b}: 18s, 42 Segmente, Audio 3:12, 1.0x",
                    f"[done] {b}"]
-    # `transcribe.py:979` druckt den VOLLEN Ausgabepfad (`-> {out_dir}`), nicht das blosse
+    # `transcribe.transcribe_project` druckt den VOLLEN Ausgabepfad (`-> {out_dir}`), nicht das blosse
     # Wort — Bot-Befund an diesem PR. Zaehlerisch derselbe eine Eintrag, aber die Behauptung
     # „das sind die echten Formen" stimmt erst so.
     zeilen.append(r"[active] -> C:\Wegwerf\projekte\active\transkripte")
@@ -1151,7 +1151,7 @@ print('[Demo] fertig Spaet: 1s, 2 Segmente, 1.0x', flush=True)
     # (2) Der Rueckweg traegt: das Urteil ohne Anmeldezeile bekommt seine Zulassung.
     assert "Spaet" in r["gesehen"]
     # (3) UNGESTUTZT. `safe_name` laesst Randleerzeichen durch, und die Endurteil-Regexe im
-    #     Frontend fangen den Namen roh (`jobPhases.ts:348`). Gestutzt gebucht, verwirft
+    #     Frontend fangen den Namen roh (`jobPhases.parseJobPhases`). Gestutzt gebucht, verwirft
     #     `terminal()` das Urteil einer Datei " Rand" -- der Rueckweg waere fuer genau diese
     #     Namensklasse wirkungslos, und zwar still.
     assert " Rand" in r["gesehen"], r["gesehen"]
@@ -1808,12 +1808,12 @@ def test_vorgemerkter_nachlauf_laeuft_auch_nach_einem_GESCHEITERTEN_lauf():
 
     `jobs.request` merkt genau einen Nachlauf vor, wenn der Slot belegt ist — das ist der
     Weg, auf dem ein Upload WAEHREND eines laufenden Laufs trotzdem verarbeitet wird
-    (`app.py:1410`). `_run` gatete beides, `next_runs` UND `then`, auf `status == "done"`.
+    (`app.upload_audio` ueber `app._start_transcribe`). `_run` gatete beides, `next_runs` UND `then`, auf `status == "done"`.
     Damit ging der Nachlauf verloren, sobald der laufende Job rot endete: die eben
     hochgeladene Aufnahme wurde NIE transkribiert, ohne eine einzige Zeile darueber.
 
     Die beiden Rueckrufe haben verschiedene Vertraege, und genau das war die Verwechslung:
-    `then` heisst „bei Erfolg weiter in der Kette" (fetch -> transcribe, `app.py:1123`) und
+    `then` heisst „bei Erfolg weiter in der Kette" (fetch -> transcribe, `app._fetch_starten_unter_projektlebenszyklus`) und
     bleibt auf `done` — eine Transkription ueber Dateien, die gar nicht geladen wurden, waere
     sinnlos. `next_runs` heisst „jemand anders braucht einen Lauf, du warst besetzt", und
     dafuer ist der Ausgang DIESES Laufs ohne Bedeutung; nach einem Fehlschlag ist der zweite
@@ -1912,7 +1912,7 @@ def test_abbruch_startet_KEINEN_nachlauf():
 def test_then_feuert_NICHT_nach_einem_gescheiterten_lauf():
     """Die andere Haelfte der Aufspaltung: `then` bleibt auf `done`.
 
-    Sein einziger Produktivnutzer ist `app.py:1123` (fetch -> transcribe). Scheitert der
+    Sein einziger Produktivnutzer ist `app._fetch_starten_unter_projektlebenszyklus` (fetch -> transcribe). Scheitert der
     Download, gibt es nichts zu transkribieren — ein `then` auf `error` startete einen Lauf
     ueber Dateien, die nie ankamen. Ohne diesen Test waere die Aufspaltung nur zur Haelfte
     bewacht, und die Mutation `then_callbacks = list(r.get("then", []))` (also ungegatet)
@@ -2006,7 +2006,7 @@ def test_abbruch_eines_FREMDEN_projekts_verwirft_den_eigenen_nachlauf_nicht():
     """Der Abbruch-Riegel darf nur greifen, wenn der Abbruch DIESE Arbeit gemeint hat.
 
     `start()` gibt fuer `GPU_KINDS` den laufenden Whisper-Job eines BELIEBIGEN Projekts als
-    Blocker zurueck (`jobs.py:82-86`, Einzel-GPU). `request` haengt seinen Nachlauf damit an
+    Blocker zurueck (`jobs._start_kanonisch`, Einzel-GPU). `request` haengt seinen Nachlauf damit an
     einen FREMDEN jid — Projekt P wartet auf den Lauf von Projekt Q. Der Riegel aus dem
     Abbruch-Fix las genau diesen fremden Status: brach der Nutzer Q ab, galt auch P als
     abgebrochen, obwohl er ueber P nichts gesagt hat. Seine eben hochgeladene Aufnahme wurde

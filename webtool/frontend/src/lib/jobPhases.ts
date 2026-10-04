@@ -404,20 +404,20 @@ export function parseJobPhases(kind: string, lines: string[],
     // "Runde 2 (3 Sprecher)" heisst, wird OHNE gesetzte Sprecherzahl zu "Runde 2" gekuerzt.
     // Vorher war dieser Fall richtig — getragen, weil der Name absurd und der Normalfall haeufig ist.
     // Aufgeloest wird die Zweideutigkeit an der BEREICHSZEILE, nicht an der Zeile selbst.
-    // Aus der Zeile allein geht es nicht: `correct.py:298-300` haengt den Zusatz nur an, also
+    // Aus der Zeile allein geht es nicht: `correct.cmd_diarize` haengt den Zusatz nur an, also
     // entsteht `→ Diarisiere Runde 2 (3 Sprecher) …` Byte fuer Byte gleich aus base="Runde 2"
     // mit Zahl 3 UND aus base="Runde 2 (3 Sprecher)" ohne Zahl. Der naheliegende Vorschlag
     // (Name und Zahl in getrennte Felder ziehen) scheitert genau daran — die Zahl steht nicht
     // getrennt IN der Zeile, sie ist von ihr nicht unterscheidbar.
-    // `[scope]` fuehrt die ECHTEN Basisnamen (`correct.py:1072`, tab-getrennt) und steht vor
+    // `[scope]` fuehrt die ECHTEN Basisnamen (`correct.cmd_run`, tab-getrennt) und steht vor
     // jeder Diarisiere-Zeile. Steht der VOLLE Text darin, ist er der Name; sonst gilt die
     // gekuerzte Form. Ohne Bereichszeile (`scope === undefined`) bleibt alles wie bisher —
     // dieselbe Rueckfallrichtung wie in `terminal()`.
     // Der Zweig heilt damit auch die Paarung mit `[done] {base}`: das druckt den ROHEN Namen,
     // traf den gekuerzten Schluessel also nicht und liess den Spinner stehen.
-    // NICHT genommen, obwohl naeher dran: `correct.py:299` druckt eine Zeile vorher
+    // NICHT genommen, obwohl naeher dran: `correct.cmd_diarize` druckt eine Zeile vorher
     // `[active] {base}` mit dem rohen Namen, also eine eindeutige Quelle ganz ohne `[scope]`.
-    // Sie wird aber auch in der KORREKTURphase gedruckt (`correct.py:1017`) — ihre Bedeutung
+    // Sie wird aber auch in der KORREKTURphase gedruckt (`correct.correct_ai_single`) — ihre Bedeutung
     // wechselt ueber den Lauf, und sie zu lesen hiesse, Zustand zwischen Zeilen mitzufuehren
     // und auf ihre Reihenfolge zu wetten. `scope` ist eine Menge und braucht beides nicht.
     // Ungemessen; wer sie doch nehmen will, misst zuerst.

@@ -401,7 +401,7 @@ export function ProjectWorkspace() {
           // Die WARTEMELDUNG ist je Art verschieden, und das ist der eine Punkt, an dem der
           // Wortlaut NICHT der von vorher ist. Der alte Satz galt beiden Arten und war fuer
           // den URL-Import falsch: `fetch_urls` ruft `jobs.start`, und das wirft bei belegtem
-          // Slot das Kommando samt URLs WEG (`jobs.py:280`) — es kommt nichts „danach dran",
+          // Slot das Kommando samt URLs WEG (`jobs._start_kanonisch`) — es kommt nichts „danach dran",
           // der Dialog schiebt die Links stattdessen zum Neuversuch zurueck in die Liste
           // (`MaterialDialog.tsx`, `if (!res.started) gescheitert.push(...links)`). Beim
           // Upload dagegen stimmt er: dort legt `jobs.request` eine echte Vormerkung an.

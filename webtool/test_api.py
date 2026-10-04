@@ -5248,7 +5248,7 @@ def test_ruecklauf_ueberschreibt_eine_neu_entstandene_datei_nicht(client, monkey
 
     Ein Autosave (alle 800 ms) kann in das Fenster zwischen Reservierung und Fehlschlag eine
     frische `edit.json` schreiben — und zwar TROTZ der Sperre, die `retranscribe_file` seit
-    Runde 6 haelt (`app.py:861`): der Autosave schreibt nicht gegen ein Lock, sondern gegen den
+    Runde 6 haelt (`app.retranscribe_file`): der Autosave schreibt nicht gegen ein Lock, sondern gegen den
     PFAD. Bis Runde 7 stand hier „`retranscribe_file` nimmt keine `sperre.datei`"; das war seit
     Runde 6 falsch und widersprach `test_neu_transkribieren_ohne_sperre_gibt_503` zwei
     Bildschirme weiter unten. Auf POSIX

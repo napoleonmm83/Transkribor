@@ -80,12 +80,13 @@ def _diagnose_sonden(pipe, diagnose):
     ihre Argumente unveraendert durch und geben das Original zurueck.
 
     Warum ueberhaupt ein Monkeypatch: beide Groessen wirft pyannote selbst weg.
-    `clustering.py:609` bindet `q, sp = cluster_vbx(...)` LOKAL, und :669 gibt nur
+    `pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.VBxClustering.__call__`
+    bindet `q, sp = cluster_vbx(...)` LOKAL und gibt nur
     `(hard_clusters, soft_clusters, centroids)` zurueck — `sp` ist nicht dabei; auch
-    `speaker_diarization.py:640` verwirft, was uebrig bleibt. Es gibt keinen Auslesepfad.
+    `pyannote.audio 4.0.7: pyannote.audio.pipelines.speaker_diarization.SpeakerDiarization.apply` verwirft, was uebrig bleibt. Es gibt keinen Auslesepfad.
 
     **Zwei Sonden, zwei verschiedene Griffe — das ist keine Inkonsequenz:**
-    - `cluster_vbx` ist ein MODULGLOBALER Name, den `clustering.py:34` zur Importzeit bindet
+    - `cluster_vbx` ist ein MODULGLOBALER Name, den `pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.cluster_vbx` zur Importzeit bindet
       (`from ...utils.vbx import cluster_vbx`). Wer `utils.vbx` patcht, patcht ins Leere. Der
       Griff ist prozessweit, deshalb steht der Rueckbau im `finally` — dieselbe Lehre wie beim
       `_Sprachschwelle`-Proxy in `transcribe.py`, wo ein haengengebliebener Patch die naechste
@@ -109,7 +110,7 @@ def _diagnose_sonden(pipe, diagnose):
     durchreichen.
 
     `pi` KANN fehlen, ohne dass etwas kaputt ist: `VBxClustering.__call__` steigt bei weniger
-    als zwei Trainings-Embeddings vorzeitig aus (`clustering.py:588`) und ruft `cluster_vbx`
+    als zwei Trainings-Embeddings vorzeitig aus (`pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.VBxClustering.__call__`) und ruft `cluster_vbx`
     dann nie.
     """
     if diagnose is None:                       # Default-Weg: KEIN Patch, byte-identisch
@@ -171,7 +172,7 @@ def _Sonden(pipe, diagnose: dict):
             # ins Sidecar, wenn `raus[1]` scheitert (gemessen: `{"pi": …, "slots": 12}`).
             # Der Kommentar versprach bisher nur die eine Richtung.
             # Kein positionaler Rueckfall auf `a[0]`: der echte Aufruf ist Keyword
-            # (`clustering.py:585`), der Zweig hatte NULL Abdeckung (Mutationsprobe: 107 Tests
+            # (`pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.VBxClustering.__call__`), der Zweig hatte NULL Abdeckung (Mutationsprobe: 107 Tests
             # blieben gruen) — und ein Zweig, der auch ohne seine Logik gruen bleibt, ist
             # Dekoration.
             slots = int((kw["segmentations"].data.sum(axis=1) > 0).sum())
@@ -217,7 +218,7 @@ def _load_waveform(audio_path: str) -> dict:
     `torchcodec.ffmpeg_major_version` ist None, `AudioDecoder(...)` wirft `RuntimeError:
     Could not load libtorchcodec` — obwohl Homebrew-ffmpeg 8.1.2 installiert ist (die
     gewachsene venv derselben Maschine mit 0.15.0 fand es noch). pyannotes eigene Wache
-    (`pyannote/audio/core/io.py:42-54`) faengt nur einen fehlschlagenden IMPORT; der gelingt,
+    (`pyannote.audio 4.0.7: pyannote.audio.core.io.TORCHCODEC_AVAILABLE`) faengt nur einen fehlschlagenden IMPORT; der gelingt,
     erst der Decoder scheitert — `TORCHCODEC_AVAILABLE` bleibt True, keine Warnung, leeres
     stderr. Linux ist ungeprueft, dieselbe Ursache liegt nahe. Der Test
     `test_load_waveform_liefert_die_wellenform_in_memory` haelt fest, dass die Wellenform
@@ -249,17 +250,17 @@ def diarize_file(audio_path: str, min_speakers: int = 2, num_speakers: int | Non
     Embedding-Filters). `None` heisst "keine Diagnose" und setzt keinen Patch.
 
     „Embedding-Filter", nicht „`min_active_ratio`-Filter": `filter_embeddings` verwirft
-    ausserdem NaN-Einbettungen (`clustering.py:120-124`). `slots - durchgelassen` vermischt
+    ausserdem NaN-Einbettungen (`pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.BaseClustering.filter_embeddings`). `slots - durchgelassen` vermischt
     also zwei Ursachen, und der engere Name behauptete eine Trennschaerfe, die es nicht gibt.
 
     **Fehlt `pi`, sagt `durchgelassen`, warum:** unter 2 steigt `VBxClustering.__call__`
-    vorzeitig aus (`clustering.py:588`) und ruft `cluster_vbx` nie — die Diagnose ist dann
+    vorzeitig aus (`pyannote.audio 4.0.7: pyannote.audio.pipelines.clustering.VBxClustering.__call__`) und ruft `cluster_vbx` nie — die Diagnose ist dann
     vollstaendig, nur ohne Spektrum. Ab 2 hat der Griff versagt. Ohne diese Unterscheidung
     sind beide Faelle von aussen gleich, und der Block behauptete „gemessen" fuer einen, in
     dem nichts gemessen wurde.
 
     **Warum entweder-oder statt beides:** NICHT, weil pyannote das zurueckweisen wuerde — das
-    stand hier und ist nachgemessen falsch. `pipelines/utils/diarization.py:58` macht
+    stand hier und ist nachgemessen falsch. `pyannote.audio 4.0.7: pyannote.audio.pipelines.utils.diarization.set_num_speakers` macht
     `min_speakers = num_speakers or min_speakers or 1`, ueberschreibt die Untergrenze also
     kommentarlos („override {min|max}_num_speakers by num_speakers when available"), und
     pyannotes eigener Docstring sagt „Has no effect when `num_speakers` is provided". Beides

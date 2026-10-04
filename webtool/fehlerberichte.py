@@ -337,7 +337,7 @@ def _kontext(env) -> dict:
     """Die Maskier-Kontexte: home, daten (das Verzeichnis der Schalterdatei — im gepackten
     Lauf userData), projekte und die Namensliste zum Sendezeitpunkt."""
     schalter = env.get("TRANSKRIBOR_FEHLERBERICHTE", "")
-    # Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.py:23,
+    # Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.PROJEKTE,
     # paths.projekte_root()) — die Maske muss dieselbe Wurzel scannen, sonst reisen Namen
     # aus genau dem Lauf unmaskiert, den sie schuetzen soll (CodeRabbit-CLI, Major).
     projekte = env.get("TRANSKRIBOR_PROJEKTE") or paths.projekte_root()

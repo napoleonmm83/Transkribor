@@ -255,7 +255,7 @@ def test_before_send_plichtprobe_namen_erreichen_das_ereignis_nicht(meldeweg):
 
 
 def test_before_send_maske_fallt_auf_die_repo_wurzel_zurueck(meldeweg, monkeypatch, tmp_path):
-    """Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.py:23,
+    """Ohne TRANSKRIBOR_PROJEKTE laeuft die Arbeit gegen <repo>/projekte (transcribe.PROJEKTE,
     paths.projekte_root()) — die Maske muss dieselbe Wurzel scannen, sonst reisen Namen aus
     genau dem Lauf unmaskiert, den sie schuetzen soll. Der Dev-Lauf ohne die Variable ist der
     erreichbare Fall, und die Messanleitung in der README setzt sie ebenfalls nicht

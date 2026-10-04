@@ -66,8 +66,8 @@ function ProjektKarte({ p, refresh }: { p: Project; refresh: () => void }) {
           any-pointer-coarse: ohne Zeigegeraet gibt es keinen Hover — der Knopf war hier
           also unsichtbar (#428). NICHT unerreichbar, und der Unterschied ist im Review
           gemessen worden: Umbenennen und Loeschen gibt es ausserdem in der geoeffneten
-          Projektseite (`ProjectWorkspace.tsx:234`, dauerhaft sichtbar) und ab `md` in der
-          Seitenleiste (`Sidebar.tsx:157`, per Klick). Der Fix behebt, dass der Knopf da
+          Projektseite (`ProjectWorkspace`, dauerhaft sichtbar) und ab `md` in der
+          Seitenleiste (`Sidebar`, per Klick). Der Fix behebt, dass der Knopf da
           fehlte, wo man ihn sucht — nicht, dass die Funktion fehlte.
 
           `any-pointer`, nicht `pointer` und nicht `hover: none`, und der Grund ist
