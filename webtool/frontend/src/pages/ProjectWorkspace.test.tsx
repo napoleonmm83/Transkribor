@@ -654,8 +654,9 @@ describe('ProjectWorkspace (Stub)', () => {
        Nummer, `wartet = !!job.vorgang` liess alle Tests gruen (gegnerischer Pruefer, Befund 1,
        Mutation W1).
 
-       Der Fall ist der URL-Import: `fetch_urls` ruft `jobs.start`, nicht `jobs.request`
-       (`app.py:1853`) — seine Antwort traegt NIE ein `vorgang`. An der Nummer festgemacht
+       Der Fall ist der blockierte URL-Import: `fetch_urls` ruft `jobs.start`, nicht `jobs.request`
+       (`app._fetch_starten_unter_projektlebenszyklus`) — dessen Antwort bei `started: false`
+       traegt kein `vorgang`. An der Nummer festgemacht
        schwiege er ganz, obwohl der Nutzer gewartet hat.
 
        Und er bekommt einen EIGENEN Text: `jobs.start` wirft bei belegtem Slot das Kommando

@@ -105,7 +105,7 @@ test.beforeEach(async ({ page }) => {
 /** Positivkontrolle je Route (Review F5): eine LEERE oder abgestuerzte Seite bestuende
  *  eine reine scrollWidth-Messung vacuous — erst die sichtbare Hauptueberschrift
  *  beweist, dass ueberhaupt gemessen wurde, was die Route zeigt. */
-// Die Startseite traegt laut HomeGallery.tsx:172 den Titel „Übersicht“.
+// Die Startseite traegt laut HomeGallery den Titel „Übersicht“.
 const ROUTEN_KOPF: Record<string, RegExp> = {
   '/': /übersicht/i,
   '/version': /version und updates/i,
@@ -132,7 +132,7 @@ for (const [name, route, titel] of ROUTEN) {
     // mutieren; eine feste Frist macht die Mutationsprobe vom Zeitverhalten des Laeufers
     // abhaengig statt vom Code (CodeRabbit-Bot, major).
     // Die Fusszeile rendert `rechenwerk` NUR, wenn er nicht leer ist
-    // (StatusBar.tsx:124) — die Zeile ist damit selbst der Beleg, dass die Antwort da ist.
+    // (StatusBar) — die Zeile ist damit selbst der Beleg, dass die Antwort da ist.
     await expect(page.getByText('cuda · NVIDIA GeForce RTX 5080'),
       `${name}: Fusszeile muss die Hardware-Antwort tragen, sonst fehlt die Flaeche von R5`).toBeVisible()
     if (route === '/version') {

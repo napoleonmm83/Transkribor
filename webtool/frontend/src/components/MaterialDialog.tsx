@@ -115,7 +115,7 @@ function MaterialDialogInhalt({ project, offen, vorbelegteDateien, sprachChoices
   // Datei, spaeter erneut hinzugefuegt, steht in Schritt 2 wieder als „klingend“ da: der
   // Hoerbalken oeffnet sich unaufgefordert und dekodiert die ganze Datei. ABGESPIELT wird
   // dabei nichts — `Waveform` ruft `play()` ausschliesslich aus `steuerung.toggle`, also aus
-  // einem Klick (gelesen: `Waveform.tsx:100-113`). Eine fruehere Fassung dieses Kommentars
+  // einem Klick (gelesen: `Waveform`). Eine fruehere Fassung dieses Kommentars
   // behauptete eine Wiedergabe; das war gemessen falsch.
   //
   // Die URL geht ebenfalls mit — und das ist der Weg, den erst dieser Knopf aufgemacht hat.

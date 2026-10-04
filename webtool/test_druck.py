@@ -147,7 +147,7 @@ def test_teilzeile_eines_arbeitsthreads_bleibt_liegen():
 
 def test_buffer_ueberholt_die_teilzeile_nicht():
     """`yt_dlp.utils.write_string` schreibt ueber `out.buffer` — an der Huelle vorbei. `YoutubeDL`
-    laeuft in-process (`fetch.py:449/456`), gebaut NACH der Umhuellung in `fetch.main`. Ohne
+    laeuft in-process (`fetch.main`), gebaut NACH der Umhuellung in `fetch.main`. Ohne
     Leeren vor der Herausgabe ueberholte die direkt geschriebene Zeile unsere Teilzeile."""
     s = Sammler()
     h = druck.zeilenweise(s)

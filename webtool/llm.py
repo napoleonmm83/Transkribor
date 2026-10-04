@@ -133,7 +133,7 @@ def use_api(cfg: dict | None = None) -> bool:
 # 340 s bedeutet 226 Spawn-Vorgaenge — 62 s Prozessarbeit fuer eine Auskunft, die sich in
 # dieser Zeit praktisch nie aendert. Der Cache sitzt BEWUSST hier und nicht in auth.status:
 # available() beantwortet die FAEHIGKEIT ("kann korrigiert werden"), auth.status den
-# LIVE-Zustand (Anmeldeblock, Testknopf, und der Login misst an auth.py:219 seinen eigenen
+# LIVE-Zustand (Anmeldeblock, Testknopf, und der Login misst an auth._fahre seinen eigenen
 # Erfolg — kein einziger dieser Wege darf je einen gecachten Wert sehen, also cachen wir sie
 # gar nicht erst). Schluessel ist der Anbieter; ein Wechsel greift damit ohne Neustart.
 # Zugriffe sind GIL-atomar genug: das Schlimmste unter Nebenlaeufigkeit ist ein doppelter

@@ -62,7 +62,7 @@ const WURZEL = path.resolve(HIER, '..', '..')
 // Die drei Laufskripte PLUS die drei Module, die nachweislich in einen Job-Strom schreiben:
 // `ytdlp_update.py` erreicht den fetch-Job ueber `fetch.py` (`ytdlp_update.automatisch`),
 // `sperre.py` den correct-Job ueber `cmd_apply` (`sperre.datei`), und `whispercpp.py` den
-// transcribe-Job auf Apple Silicon — `transcribe.py:425` ruft `whispercpp.transkribiere(…)`
+// transcribe-Job auf Apple Silicon — `transcribe._transkribiere_datei` ruft `whispercpp.transkribiere(…)`
 // OHNE `onLine`, womit dessen `sag` auf sein Default `print` faellt. Vorher standen hier nur
 // die drei Laufskripte, waehrend der Waechter unten „jede gedruckte Form" behauptete (#409).
 //
@@ -268,7 +268,7 @@ const INVENTAR: Record<string, Eintrag> = {
     notiz: 'seit 10098e4 die einzige skip-Form; transcribe.py zaehlt sie in failed_bases -> failed',
   },
   // Die beiden Prozentformen von whisper.cpp (macOS) — DIE Druckform des tqdm-Zweigs.
-  // `whispercpp.py:154` traegt dazu den Kommentar „Format wie jobPhases.ts es liest", die
+  // `whispercpp.modell_datei` traegt dazu den Kommentar „Format wie jobPhases.ts es liest", die
   // Kopplung ist dort also beabsichtigt und stand hier bis #409 trotzdem nicht drin. Auf
   // Windows/Linux fuellt Whispers tqdm-Balken (stderr, in jobs.py nach stdout gemergt)
   // dieselbe Regex — DER hat kein print() bei uns, aber ein Zweig braucht nur EINE lebende
@@ -1188,18 +1188,18 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
 //
 // Der Anlass waren zwei erfundene Zeilen in Fixtures. Die naheliegende Abwehr — "jede
 // Fixture-Zeile muss zu einer Erzeuger-Form passen" — haette KEINE davon gefangen:
-// `prep: 1 Datei(en) getaggt in /x` IST eine gueltige Form (correct.py:233). Falsch war
+// `prep: 1 Datei(en) getaggt in /x` IST eine gueltige Form (correct.cmd_prep). Falsch war
 // allein, dass der GESTAFFELTE Lauf sie nie druckt — er ruft `prep_single`
-// (transcribe.py:901, schweigt bei Erfolg), waehrend die Form aus `cmd_prep` stammt, und das
-// ruft nur der CLI-Unterbefehl (correct.py:1443). Dieselbe Sorte Fehler beim zweiten Fall:
+// (transcribe.transcribe_project, schweigt bei Erfolg), waehrend die Form aus `cmd_prep` stammt, und das
+// ruft nur der CLI-Unterbefehl (correct.main). Dieselbe Sorte Fehler beim zweiten Fall:
 // `[autocorrect] KI-Phase uebersprungen — {}` traegt einen freien Platzhalter, ein
 // erfundener Grund passt also immer hinein.
 //
 // DREI Wege, diese Pfad-Eigenschaft maschinell zu pruefen — alle gemessen tot:
 //   (1) `kind` am INVENTAR-Eintrag: nur 15 von 112 Eintraegen tragen es, und der Default
 //       'correct' ist fuer die `[autocorrect]`-Formen nachweislich falsch — die druckt
-//       transcribe.py:583/647. Ein Waechter darauf schluege an einer RICHTIGEN Fixture an.
-//   (2) Quelldatei -> Job-Art: `→ Korrigiere` kommt aus correct.py:1009 und steht trotzdem
+//       transcribe.transcribe_project. Ein Waechter darauf schluege an einer RICHTIGEN Fixture an.
+//   (2) Quelldatei -> Job-Art: `→ Korrigiere` kommt aus correct._correct_one und steht trotzdem
 //       in transcribe-Laeufen, weil der gestaffelte Weg in correct.py hineinruft.
 //   (3) Aufrufgraph: waere richtig und ist kein Testmittel.
 // Diese Haelfte bleibt also ungedeckt, und der Weg dorthin ist der Messstand — eine Fixture,
@@ -1268,12 +1268,12 @@ const FREMDZEILE = /^\s*\d{1,3}%\|/
  *
  *  (1) KUERZUNG — der Test schreibt nur so viel Zeile, wie seine Zusicherung braucht, der
  *      Parser reagiert ohnehin auf das Praefix (`apply: A -> edit.json`, `→ Glossar …`:
- *      correct.py:839 druckt `→ Glossar (gemeinsame Namen/Begriffe) …`).
+ *      correct._glossary druckt `→ Glossar (gemeinsame Namen/Begriffe) …`).
  *  (2) ERNTEGRENZE (seit #566) — die Zeile HAT einen Erzeuger, aber ein `${…}` verdeckt genau
  *      das Stueck, an dem die Form sie erkennen wuerde.
  *  (3) FORM AUSSER DIENST — der Erzeuger existiert und traefe die Zeile per Praefix, seine
  *      Form steht aber in OHNE_FESTES_STUECK und prueft deshalb gar nichts. Die groesste
- *      Gruppe hier: `A: 300 Segmente → …` (correct.py:1063 druckt zwei fuehrende Leerzeichen,
+ *      Gruppe hier: `A: 300 Segmente → …` (correct._correct_file druckt zwei fuehrende Leerzeichen,
  *      der Test schreibt keine) und die POSITIVKONTROLLE (derselbe Erzeuger, drei Leerzeichen,
  *      weil der Basisname dort selbst mit einem beginnt).
  *  (4) ECHTE ABWEICHUNG — im ganzen Python-Baum kein Erzeuger, auch kein Praefix-Treffer einer
@@ -1286,18 +1286,18 @@ const FREMDZEILE = /^\s*\d{1,3}%\|/
  *  ob sie in OHNE_FESTES_STUECK steht.
  *
  *  Seit #567 sind ZWEI Eintraege der Sorte (4) weg, weil ihre Fixturen repariert wurden:
- *  `prep: 1 Datei(en) vorbereitet` traegt jetzt `getaggt in {tdir}` (correct.py:233),
- *  `[fetch] geladen: {}` jetzt `[fetch] fertig {base}` (fetch.py:471 — die Zeile JE Download;
- *  :589 ist die Bilanz und war nie gemeint). Beide Tests blieben gruen: der eine prueft
+ *  `prep: 1 Datei(en) vorbereitet` traegt jetzt `getaggt in {tdir}` (correct.cmd_prep),
+ *  `[fetch] geladen: {}` jetzt `[fetch] fertig {base}` (fetch.main — die Zeile JE Download;
+ *  die Endbilanz in `fetch.main` war nie gemeint). Beide Tests blieben gruen: der eine prueft
  *  `global === 'prep'` am Praefix, der andere, dass der Grund auf die FEHLER-Zeile zeigt und
  *  nicht auf die Erfolge danach — und `[fetch] fertig {}` IST die echte Erfolgszeile.
  *  Was die Fixture damit NICHT wird: ein echter Strom. `prep: … getaggt in` druckt nur
- *  `cmd_prep` (correct.py:1443), der gestaffelte Lauf ruft `prep_single` und schweigt — die
+ *  `cmd_prep` (correct.main), der gestaffelte Lauf ruft `prep_single` und schweigt — die
  *  ZUSAMMENSETZUNG einer Fixture prueft diese Wache nicht und behauptet es auch nirgends
  *  (siehe die drei toten Wege oben). Repariert ist die FORM, nicht die Dramaturgie. */
 /** Die Zeile, an der die Wache beweist, dass sie ueberhaupt etwas ABLEHNT.
  *
- *  Sie hat einen Erzeuger, und das ist der Punkt: `correct.py:1063` druckt `f"  {base}: …"`,
+ *  Sie hat einen Erzeuger, und das ist der Punkt: `correct._correct_file` druckt `f"  {base}: …"`,
  *  der Test in `jobPhases.test.ts` faehrt den Basisnamen `' Interview'` MIT fuehrendem
  *  Leerzeichen — zwei plus eins macht drei. Ihre Form `'  {}: {} Segmente → …'` traefe sie
  *  per Praefix mueheLOS; sie steht nur deshalb in der Baseline, weil genau diese Form in
@@ -1338,7 +1338,7 @@ const FIXTURE_BASELINE = new Set<string>([
   // `apply: SKIP ${b} ${grund}`, und im Platzhalter `grund` steckt ALLES, woran die Form die
   // Zeile erkennen wuerde: nicht nur die runde Klammer, die alle drei echten Formen hinter
   // dem Basisnamen tragen, sondern auch der feste Text DAHINTER (`human_edited=true`,
-  // `nicht lesbar: `, `waehrend des Laufs handbearbeitet; ` — correct.py:417/425/466). Selbst
+  // `nicht lesbar: `, `waehrend des Laufs handbearbeitet; ` — correct.cmd_apply). Selbst
   // mit sichtbarer Klammer paesste die Zeile also auf keine der drei.
   // Reparabel WAERE sie: die Schleife in `jobPhases.test.ts` liesse sich zu drei echten
   // Zeilen ausrollen. Das ist eine Entscheidung ueber die BAUFORM des Nachbartests, nicht
@@ -1361,7 +1361,7 @@ const FIXTURE_BASELINE = new Set<string>([
   // ── Ab hier: erst mit #564 SICHTBAR geworden. Die Zeilen sind nicht neu, die Ernte war
   //    blind fuer ihre Bauform (const-Arrays, Helferaufrufe, `push`). ──
 
-  // Sorte (3), Form ausser Dienst: Erzeuger ist correct.py:1063, seine Form
+  // Sorte (3), Form ausser Dienst: Erzeuger ist correct._correct_file, seine Form
   // `'  {}: {} Segmente → …'` steht in OHNE_FESTES_STUECK und prueft damit nichts. Die Tests
   // schreiben die Zeile ohne die zwei fuehrenden Leerzeichen bzw. gekuerzt.
   'B: 4 Segmente → 2 Blöcke à max. 150',
@@ -1370,7 +1370,7 @@ const FIXTURE_BASELINE = new Set<string>([
 
   // (Hier standen kurz die zwei Haelften der Phasenbilanz, mit der Begruendung „aus zwei
   //  Literalen zusammengesetzt, zusammengesetzt wuerde sie passen". Die zweite Haelfte war
-  //  FALSCH — gemessen: `correct.py:1421` druckt `glossar · pipeline · gesamt`, die Fixture
+  //  FALSCH — gemessen: `correct.cmd_run` druckt `glossar · pipeline · gesamt`, die Fixture
   //  trug `diarisieren · vorbereiten · glossar · korrigieren`, eine Form, die es seit #399
   //  (`da647e1`) nicht mehr gibt. Also Sorte (4), nicht (2), und damit reparierbar wie in
   //  #567: die Fixture traegt jetzt die echte Form in EINEM Literal. Gefunden vom
@@ -1427,7 +1427,8 @@ function traegtEinFestesStueck(form: string): boolean {
  *
  *  Herkunft, nachgesehen statt vermutet: die ersten beiden sind tqdm-Balken aus
  *  `whispercpp.py` (die Zeile beginnt mit dem Prozentwert), von den uebrigen vier kommen
- *  ZWEI aus `correct.py` (:556, :1063) und ZWEI aus `transcribe.py` (:444, :1062) — hier
+ *  ZWEI aus `correct._correct_file` und `correct._run_claude` und ZWEI aus
+ *  `transcribe._transkribiere_datei` und `transcribe.main` — hier
  *  stand „die eingerueckte Familie aus correct.py", und wer die Liste danach pflegt, sucht
  *  in der falschen Datei. */
 const OHNE_FESTES_STUECK: string[] = [
@@ -1588,7 +1589,7 @@ export function ohneKommentare(quelle: string): string {
  *  Sie liegen ALLE in dieser Datei, und das ist kein Zufall: sie ist die einzige, die
  *  Fixturen UND die Maschinerie der Wache enthaelt. In den fuenf anderen Dateien ist jedes
  *  Array und jeder push, den der Selektor durchlaesst, eine Fixture — gemessen, und die
- *  einzige `push`-Stelle dort (`useOsFortschritt.test.tsx:14`, `meldungen.push(titel)`)
+ *  einzige `push`-Stelle dort (`useOsFortschritt.test.tsx (melden-Mock)`, `meldungen.push(titel)`)
  *  faellt am Selektor heraus, weil ihr Argument keine Zeichenkette ist.
  *
  *  OPT-OUT und nicht Opt-in, und die Richtung entscheidet: ein vergessener Eintrag hier macht

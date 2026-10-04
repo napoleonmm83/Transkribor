@@ -99,7 +99,7 @@ CodeRabbit-Bot gefunden, das zweite Mal an meiner eigenen Korrektur des ersten.)
   Gemessen (Kalt-Review, Frist 3 s): ein Wirt mit zwei `pytest.main()`-Sitzungen und
   anschliessendem `sleep` endet mit rc 99 und dem Stapelabzug seines eigenen `sleep`.
   Der konkrete Konsument in diesem Repo ist **mutmut** (`[tool.mutmut]` in
-  `pyproject.toml`; `mutmut/__main__.py:445` ruft `pytest.main()` im Elternprozess, der
+  `pyproject.toml`; `mutmut 3.7.0: mutmut.__main__.PytestRunner.execute_pytest` ruft `pytest.main()` im Elternprozess, der
   die ganze Serie lebt). **Wer pytest in-process einbettet, setzt
   `TRANSKRIBOR_TESTDECKEL=0`** — das ist der Zweck dieses Schalters, nicht bloss eine
   Testhilfe. Verworfen wurde, die Bewaffnung an einer Erkennung des Wirts festzumachen

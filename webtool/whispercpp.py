@@ -365,7 +365,7 @@ def transkribiere(audio: str, modell: str, sprache: str, onLine=None) -> dict:
     faster-whisper-Pfad waren es 8,82 gegen 10,04 s), `transcribe.luecken` meldet in keiner
     Variante etwas, und der Gesamtverlust betraegt 5,01 s statt eines ganzen 30-s-Fensters.
     Der Verlust ist hier verteiltes Abschneiden. Ausgerechnet C0761 ist dabei die EINE Datei
-    aus PR #82, die auch dort keinen Fenstersprung zeigte (transcribe.py:189, Abdeckung
+    aus PR #82, die auch dort keinen Fenstersprung zeigte (transcribe._opts, Abdeckung
     45 s -> 45 s bei 140 -> 158 Woertern). Der Seek-Weg existiert in whisper.cpp
     (`single_timestamp_ending` in src/whisper.cpp rueckt um das ganze Fenster weiter),
     gemessen ist er auf diesem Pfad weiterhin nicht.

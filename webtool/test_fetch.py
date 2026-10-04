@@ -910,7 +910,7 @@ def test_sprecher_aus_env_haelt_sich_an_die_bereichsgrenzen():
 
 def test_wiederholung_nach_der_selbstheilung_traegt_die_zahl_AUCH_ein(projekt, monkeypatch):
     """#173-Pfad: der erste Versuch scheitert, yt-dlp wird aktualisiert, der zweite gelingt.
-    `_lade` wird an ZWEI Stellen gerufen (fetch.py:465 und :481); ohne die Zahl am ZWEITEN
+    `_lade` wird in `fetch.main` im ersten Versuch und nach der Selbstheilung gerufen; ohne die Zahl am ZWEITEN
     verliert genau der Download seine Sprecherzahl, der erst nach der Heilung klappt — der
     Normalfall, wenn YouTube etwas umgestellt hat."""
     from webtool import projekt as projekt_mod, ytdlp_update

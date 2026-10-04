@@ -58,12 +58,12 @@ export function ausgang(j: { status: string; phases: JobPhases }): Ausgang {
 
   // Der URL-Import laedt seine Dateien erst herunter, hat also keine Basisnamen und damit nie
   // einen `perBase`-Eintrag — der Zweig darueber greift bei ihm nie. Ohne die Bilanz meldete
-  // ein Import, bei dem 2 von 5 Videos tot sind, glatten ERFOLG: `fetch.py:576` wirft nur,
+  // ein Import, bei dem 2 von 5 Videos tot sind, glatten ERFOLG: `fetch.main` wirft nur,
   // wenn GAR nichts geladen wurde.
   //
   // Die Reihenfolge (erst `perBase`, dann Bilanz) verliert nichts: BEIDES zugleich gibt es
-  // nicht. Der fetch-JOB faehrt immer `--download-only` (app.py:1005) und druckt
-  // ausschliesslich `[fetch] `-Zeilen — die verwirft `jobPhases.ts:54` saemtlich, es entsteht
+  // nicht. Der fetch-JOB faehrt immer `--download-only` (app.fetch_urls) und druckt
+  // ausschliesslich `[fetch] `-Zeilen — die verwirft `jobPhases.parseJobPhases` saemtlich, es entsteht
   // dort also nie ein `perBase`-Eintrag; die anschliessende Transkription ist ein EIGENER Job
   // (ueber `then=`) und druckt keine `[fetch]`-Zeile. Wer das aendert, prueft diese Stelle mit:
   // dann faellt die Bilanz still unter den Tisch.
