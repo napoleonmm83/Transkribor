@@ -115,8 +115,14 @@ function senden(kanal, nutzlast) {
 /** Abgewiesene Ziele werden je Stunde gedeckelt protokolliert; eine URL wird auf 200 Zeichen gekuerzt. */
 const ABWEISUNGEN_MAX = 20
 const ABWEISUNGEN_FENSTER_MS = 60 * 60 * 1000
+const ABWEISUNGSARTEN = [
+  'Externer Link', 'Navigation', 'Weiterleitung', 'Berechtigung',
+  'Berechtigungspruefung', 'Eingebettete Ansicht',
+]
 let abweisungen = 0
 let fensterStart = 0
+let reservierteAbweisungsarten = new Set(ABWEISUNGSARTEN)
+let unterdrueckungGemeldet = false
 /** Fremde URLs werden auf ihre Herkunft gekuerzt, bevor sie ins Protokoll gehen. */
 function nurHerkunft(url) {
   try {
@@ -134,20 +140,24 @@ function abweisungProtokollieren(url, was = 'Externer Link', grund) {
   // „erstes Fenster endet eine Stunde nach dem START", nicht „nach der ersten Abweisung" —
   // folgenlos, weil `abweisungen` beim Start ohnehin 0 ist.
   const jetzt = performance.now()
-  if (jetzt - fensterStart >= ABWEISUNGEN_FENSTER_MS) { fensterStart = jetzt; abweisungen = 0 }
-  abweisungen += 1
-  if (abweisungen <= ABWEISUNGEN_MAX) {
+  if (jetzt - fensterStart >= ABWEISUNGEN_FENSTER_MS) {
+    fensterStart = jetzt
+    abweisungen = 0
+    reservierteAbweisungsarten = new Set(ABWEISUNGSARTEN)
+    unterdrueckungGemeldet = false
+  }
+  // #520: Eine Flut darf die Erstmeldung einer anderen Art nicht verschlucken.
+  // Die Reserve liegt INNERHALB des Gesamtdeckels, sonst wuechse der Schreibweg.
+  if (reservierteAbweisungsarten.has(was) ||
+      abweisungen < ABWEISUNGEN_MAX - reservierteAbweisungsarten.size) {
+    reservierteAbweisungsarten.delete(was)
+    abweisungen += 1
     protokoll.schreiben(was + ' abgewiesen (' + grund + '): ' + String(url).slice(0, 200))
-  } else if (abweisungen === ABWEISUNGEN_MAX + 1) {
-    // **Nicht mehr „Links" (#446) und nicht mehr leer (#506).** Seit die Berechtigungs- und
-    // webview-Wachen ueber denselben Zaehler melden, sind es nicht zwangslaeufig Links; und
-    // weil `bericht.letzteZeilen` genau EINE Zeile dieser Gruppe in den Bugsink-Bericht laesst, ist
-    // im Flutfall GENAU DIESE Zeile die einzige Auskunft ueber Abweisungen, die der Nutzer
-    // mitschickt. Ohne den Zusatz nennt sie weder Art noch Ziel noch Grund — gemessen am
-    // echten `bericht.js`: acht echte Zeilen, 20 Abweisungen, eine Schlusszeile, und was
-    // ankommt, ist die Schlusszeile. Sie traegt deshalb den Vorgang mit, der als erster
-    // unterdrueckt wurde; derselbe 200-Zeichen-Deckel wie oben.
-    protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert (Deckel: ${ABWEISUNGEN_MAX} je Stunde; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
+  } else if (!unterdrueckungGemeldet) {
+    unterdrueckungGemeldet = true
+    // Der Fehlerbericht behaelt nur die juengste Abweisungszeile (#506).
+    // Auch diese muss deshalb Art, Grund und gekapptes Ziel tragen.
+    protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert, ausser reservierten Erstmeldungen (Deckel: ${ABWEISUNGEN_MAX} je Stunde; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
   }
 }
 
