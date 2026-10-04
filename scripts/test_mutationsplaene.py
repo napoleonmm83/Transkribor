@@ -92,6 +92,12 @@ def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
         if not mutation._npm_testlaeufer(teile, wurzel):
             return f"npm-Skript {skript!r} startet keinen unterstuetzten Testlaeufer"
         return None
+    if mutation._node_testlaeufer(teile, wurzel, wurzel):
+        for teil in teile[2:]:
+            if not teil.startswith("-") and not any(c in teil for c in "*?[") \
+                    and not (wurzel / teil).exists():
+                return f"Testpfad {teil} existiert nicht"
+        return None
     if ci is None:
         return f"Testkommando {teile[0]!r} ist lokal nicht aufloesbar; `nur_ci` begruenden"
     return None
@@ -230,6 +236,44 @@ def test_npm_skript_am_rand_der_befehlsform(tmp_path):
     assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
     (paket / "package.json").write_text("[]", encoding="utf-8")
     assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
+
+
+def test_node_testkommandos_sind_lokal_startbar(tmp_path):
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "testlauf.mjs").write_text("", encoding="utf-8")
+    (tmp_path / "probe.test.mjs").write_text("", encoding="utf-8")
+    for kommando in ("node --test probe.test.mjs", "node scripts/testlauf.mjs probe.test.mjs",
+                     "node --test --test-reporter=tap pro*.test.mjs"):
+        assert _testkommando_fehler({"test": kommando}, tmp_path) is None
+    for kommando in ("node probe.mjs", "node fremd/testlauf.mjs probe.test.mjs",
+                     "node --test probe.test.mjs && echo 1 passed",
+                     "node --test --watch probe.test.mjs",
+                     "node --test fehlt.test.mjs"):
+        assert _testkommando_fehler({"test": kommando}, tmp_path)
+    (scripts / "testlauf.mjs").unlink()
+    assert _testkommando_fehler({"test": "node scripts/testlauf.mjs probe.test.mjs"}, tmp_path)
+
+
+def test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest(tmp_path):
+    paket = tmp_path / "frontend"
+    paket.mkdir()
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    (scripts / "testlauf.mjs").write_text("", encoding="utf-8")
+    manifest = paket / "package.json"
+    for befehl in ("node ../scripts/testlauf.mjs probe.test.mjs", "node --test probe.test.mjs"):
+        manifest.write_text(json.dumps({"scripts": {"test": befehl}}), encoding="utf-8")
+        assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path) is None
+    for befehl in ("node scripts/testlauf.mjs probe.test.mjs", "node probe.mjs",
+                   "node ../scripts/testlauf.mjs probe.test.mjs && echo 1 passed"):
+        manifest.write_text(json.dumps({"scripts": {"test": befehl}}), encoding="utf-8")
+        assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
+
+
+def test_echter_electron_testlauf_ist_startbar():
+    """electron/*.test.js laufen auf node:test - der Grund fuer #659."""
+    assert _testkommando_fehler({"test": "node scripts/testlauf.mjs electron/konfig.test.js"}, WURZEL) is None
 
 
 def test_jeder_anker_passt_genau_einmal():

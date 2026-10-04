@@ -13,6 +13,8 @@ der cmd.exe-Text ist woertlich das, was `shell=True` auf Windows zurueckgab.
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,6 +24,42 @@ import pytest
 # nicht der Unordnung. Dieselbe Form wie in test_mypy_riegel.py.
 sys.path.insert(0, str(Path(__file__).parent))
 import mutation  # noqa: E402, I001
+
+
+def test_node_pass_bilanz_allein_gilt_als_testlauf():
+    for bilanz in ("# pass 2\n", "ℹ pass 2\n", "# fail 1\n", "ℹ fail 1\n"):
+        assert mutation._lief_mindestens_ein_test(bilanz)
+
+
+def test_node_vorlauf_nimmt_direkten_testlauf(tmp_path, monkeypatch):
+    rc, ziel = _lauf_main(tmp_path, monkeypatch, _PLAN_OK, ["# tests 1\n# pass 1\n"],
+                         nur_vorlauf=True, testkommando="node --test probe.test.js")
+    assert rc == 0
+    assert ziel.read_bytes() == b"WERT = 1\r\nandere = 2\r\n"
+
+
+def test_node_vorlauf_verwirft_null_tests(tmp_path, monkeypatch, capsys):
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                       ["# tests 0\n# pass 0\n# fail 0\n"], nur_vorlauf=True,
+                       testkommando="node --test probe.test.js")
+    assert rc == 2
+    assert "NULL Tests" in capsys.readouterr().out
+
+
+def test_node_vorlauf_mit_echtem_kindprozess(tmp_path, capsys):
+    if shutil.which("node") is None:
+        pytest.skip("node ist nicht installiert")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)  # noqa: S603, S607
+    (tmp_path / "ziel.py").write_text("WERT = 1\n", encoding="utf-8")
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps(_PLAN_OK), encoding="utf-8")
+    probe = tmp_path / "probe.test.mjs"
+    probe.write_text("import test from 'node:test'; test('probe', () => {})\n", encoding="utf-8")
+    args = ["--repo", str(tmp_path), "--plan", str(plan), "--nur-vorlauf"]
+    assert mutation.main([*args, "--test", "node --test --test-reporter=tap probe.test.mjs"]) == 0
+    assert "VORLAUF BESTANDEN" in capsys.readouterr().out
+    assert mutation.main([*args, "--test", "node --test --test-reporter=tap fehlt-659-*.mjs"]) == 2
+    assert "NULL Tests" in capsys.readouterr().out
 
 
 # --- Der Riegel gegen das eigene Schweigen --------------------------------

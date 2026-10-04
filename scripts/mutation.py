@@ -448,6 +448,20 @@ def _direkte_kommando_teile(kommando: str) -> list[str] | None:
     return teile
 
 
+def _node_testlaeufer(teile: list[str], wurzel: pathlib.Path,
+                     laufordner: pathlib.Path) -> bool:
+    """Direkter Node-Testlauf oder unser Wrapper, relativ zum echten Laufordner."""
+    if len(teile) < 2 or teile[0] != "node":
+        return False
+    # --watch endet nie, und _lauf hat keinen Deckel (Review #659, gemessen: rc 124 nach 15 s).
+    if any(t.startswith("--watch") for t in teile):
+        return False
+    if teile[1] == "--test":
+        return True
+    wrapper = (wurzel / "scripts" / "testlauf.mjs").resolve()
+    return (laufordner / teile[1]).resolve() == wrapper and wrapper.is_file()
+
+
 def _npm_testlaeufer(teile: list[str], wurzel: pathlib.Path) -> bool:
     """Das benannte npm-Skript muss selbst einen Testlaeufer starten."""
     if len(teile) < 4 or teile[:2] != ["npm", "--prefix"]:
@@ -466,7 +480,8 @@ def _npm_testlaeufer(teile: list[str], wurzel: pathlib.Path) -> bool:
     befehl = scripts.get(skript) if isinstance(scripts, dict) else None
     lauf = _direkte_kommando_teile(befehl) if isinstance(befehl, str) else None
     return bool(lauf and (lauf[:2] == ["vitest", "run"]
-                          or lauf[:2] == ["playwright", "test"]))
+                          or lauf[:2] == ["playwright", "test"]
+                          or _node_testlaeufer(lauf, wurzel, paket.parent)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -539,8 +554,10 @@ def main(argv: list[str] | None = None) -> int:
         teile = _direkte_kommando_teile(test)
         pytest_lauf = teile is not None and teile[:3] == ["python", "-m", "pytest"]
         npm_lauf = teile is not None and _npm_testlaeufer(teile, pathlib.Path(a.repo))
-        if not (pytest_lauf or npm_lauf):
-            print("ABBRUCH: --nur-vorlauf braucht ein direktes Pytest- oder npm-Testkommando.")
+        node_lauf = teile is not None and _node_testlaeufer(
+            teile, pathlib.Path(a.repo), pathlib.Path(a.repo))
+        if not (pytest_lauf or npm_lauf or node_lauf):
+            print("ABBRUCH: --nur-vorlauf braucht ein direktes Pytest-, Node- oder npm-Testkommando.")
             return 2
     if not isinstance(plan_env, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in plan_env.items()):
