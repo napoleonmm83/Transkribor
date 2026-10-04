@@ -30,7 +30,6 @@ webtool/app.py:B904
 webtool/app.py:E741
 webtool/app.py:E741
 webtool/app.py:I001
-webtool/app.py:UP015
 webtool/auth.py:S603
 webtool/auth.py:S603
 webtool/conftest.py:S101
@@ -39,7 +38,6 @@ webtool/correct.py:E702
 webtool/correct.py:E702
 webtool/correct.py:E702
 webtool/correct.py:E702
-webtool/correct.py:I001
 webtool/correct.py:I001
 webtool/correct.py:I001
 webtool/correct.py:I001
@@ -59,8 +57,6 @@ webtool/projekt.py:I001
 webtool/settings.py:I001
 webtool/test_api.py:E401
 webtool/test_api.py:E401
-webtool/test_api.py:E702
-webtool/test_api.py:E702
 webtool/test_api.py:E702
 webtool/test_api.py:E702
 webtool/test_api.py:I001
@@ -83,7 +79,6 @@ webtool/test_correct.py:E702
 webtool/test_correct.py:E702
 webtool/test_correct.py:E702
 webtool/test_correct.py:E731
-webtool/test_correct.py:I001
 webtool/test_correct.py:I001
 webtool/test_correct.py:I001
 webtool/test_correct.py:I001
