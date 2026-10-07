@@ -46,7 +46,7 @@ Seit Nr. 530 und Nr. 519 zu sind, steht Nr. 520 allein.
 | 664 `@sentry/electron` v8 (Major) | grün, CLEAN | – |
 | 652 `huggingface-hub` v2 | grün, CLEAN | Das Grün belegt wenig: `webtool/test_hf_tls.py` ersetzt `huggingface_hub` per `sys.modules` durch einen Stub |
 | 637 `@vitejs/plugin-react` 6.1.2 | grün, CLEAN | – |
-| 658 `av` v19 | rot | der Wächtertest `test_grundsetup_begrenzt_pyav_auf_decoder_kompatible_fassungen` verlangt `av<19` und hängt damit an Nr. 666 |
+| 658 `av` v19 | rot | der Wächtertest `test_grundsetup_begrenzt_pyav_auf_decoder_kompatible_fassungen` lässt `av` 18.1.0 zu und 19.0.0 nicht (Pin `av>=11,<19`); er hängt damit an Nr. 666 |
 | 640 `wavesurfer.js` v8 (Major) | rot | nur Infrastruktur: Mutationsproben 3/4 mit „runner has received a shutdown signal“ (exit 143); alle Serien davor bestanden |
 | 621 all-minor-patch | rot | mypy 2.4.0 meldet zwei neue Befunde: `scripts/coderabbit_riegel.py` (`no-any-return`) und `webtool/auth.py` (`arg-type`) |
 
@@ -87,11 +87,13 @@ für das ganze Repo gilt und jeder Push eine Einheit kostet.
    oder `mutation.py` lernt die Form. Mitfahrer an `scripts/mutation.py` und
    `scripts/mutationen_lauf.py` mit derselben Prüfung: T-044, T-058, T-079, T-080, T-082, T-084, T-208.
 3. **Nr. 553**, Zweig `fix/issue-553-jest-dom-types`. Der Zweig wählt eine eigene Typdatei, weil
-   jest-dom 7.0.1 keinen Fix hat. Den Weg bestätigt Marcus beim Start.
+   es nach der installierten jest-dom 7.0.1 keine neuere Fassung gibt (`npm view`). Den Weg bestätigt
+   Marcus beim Start.
 4. **Nr. 469**, Zweig `docs/issue-469-symbol-references` (36 Dateien). Er überschneidet sich mit
    keinem anderen fertigen Zweig, wohl aber mit Bündel 4 (`transcribe.py`). Deshalb wird er **vor
    Bündel 4** gemergt; die Verweise werden vor dem Merge gegen `master` nachgeprüft.
-5. Zweig `chore/t030-ruff-baseline` (entfernt fünf erledigte Baseline-Einträge), Mitfahrer T-203.
+5. Zweig `chore/t030-ruff-baseline` (entfernt fünf Baseline-Einträge, laut Commit-Text erledigte; ein
+   ruff-Lauf steht aus), Mitfahrer T-203.
 
 ### Bündel 2 — Electron-Paketlauf (nach Schritt 1.2)
 
@@ -104,6 +106,10 @@ für das ganze Repo gilt und jeder Push eine Einheit kostet.
   ankommt, ist ungemessen.
 - **electron 44.3.0 → 44.6.0** aus PR 621: `master` steht schon auf `^44`, es ist nur ein
   Minor-Sprung. Er läuft trotzdem im selben gepackten Lauf mit, weil dieser Lauf ohnehin stattfindet.
+- **Baustand des Laufs:** `master` pinnt im `package-lock.json` electron 44.3.0 und `@sentry/electron`
+  7.18.0. Ein Paket aus dem Zweig zu Nr. 520 allein würde also die **alten** Fassungen messen. Deshalb
+  wird aus einem lokalen Integrationsstand gebaut: Zweig 520, PR 664 und PR 621 zusammengeführt.
+  Gemergt wird danach jeder für sich.
 
 ### Bündel 3 — Renovate-Runde
 
@@ -193,7 +199,8 @@ Wirkung-Zeile: 2 S, 6 K, 2 R, 40 V. Die übrigen 83:
 | an globale Werkzeuge übergeben (`fremd`) | 20 |
 | ohne Wirkung vertagt | 16 |
 
-Zwei Doppel-IDs und vier Punkte ohne Nummer wurden neu nummeriert. Die Reservierungsablage
+Neu nummeriert wurden, als T-540 bis T-546, alle drei doppelt vergebenen IDs (T-071, T-094 und T-200)
+sowie die vier Punkte ohne Nummer. Die Reservierungsablage
 `.code-guardian-todo-ids` ist gesperrt, dieselbe Sandbox-Rechtelage wie bei den `.tmp-*`-Ordnern, und
 gehört deshalb zu C.
 
@@ -203,13 +210,15 @@ gesammelt vorgelegt, nicht einzeln je Bündel. Ein Sicherheitspunkt kommt zuerst
 **C — Aufräumen** (lokal; jede Löschung erst ansehen, dann freigeben lassen):
 
 - Sicherungszweig und Stash
-- Arbeitsbäume, deren Arbeit schon gemergt ist; einer davon trägt noch 77 uncommittete Dateien
+- Arbeitsbäume, deren Arbeit schon gemergt ist:
+  - einer trägt noch 77 geänderte Dateien
+  - zwei sind ausgeräumt und zeigen je rund 445 gelöschte Einträge
 - 166 gesperrte `.tmp-*`-Ordner; dafür liegt ein Admin-Skript bereit. Ebenfalls gesperrt und dort
   nachzutragen: `.code-guardian-todo-ids`
 - drei unversionierte Plandokumente
 - fünf Zweige, deren Commits in keinem PR waren:
-  - zwei Dialekt-Savepoints vom 14. und 17.09.; die Arbeit ist auf `master` angekommen, der Rest-Diff
-    wird einmal angesehen
+  - zwei Dialekt-Savepoints vom 17.09. Das Messwerkzeug `tools/speech_eval.py` ist auf `master`
+    getrackt und hat dort drei spätere Fix-Commits; der Rest-Diff wird einmal angesehen
   - zwei kleine Test-Nachschübe, die schon auf origin liegen
   - ein Plan vom 23.08.
 
@@ -218,7 +227,7 @@ T-136 und T-148 (Riegel in `release.yml`).
 
 ## Reihenfolge
 
-0. B, A, PR 640 neu starten. Dafür ist kein Code nötig.
+0. B und PR 640 neu starten. Dafür ist kein Code nötig. A ist erledigt.
 1. Bündel 1: PR 663 → 659 → 553 → 469 → t030.
 2. Bündel 2, danach PR 621, dann Release v0.58.3.
 3. Bündel 4a im Hintergrund (nach Schritt 1.4), parallel dazu Bündel 5.
@@ -268,8 +277,12 @@ Gemessen am 07.10.2026; zu jedem Kommando steht das Ergebnis.
   - dieselbe awk-Zählung → `offen=50 mit_Wirkung=50`
   - `todo-status.py` läuft durch, SUMMARY `offen=50 … wirkung_s=2 wirkung_k=6 wirkung_r=2 wirkung_v=40
     ohne_wirkung=0`
-  - die Befunde des Werkzeugs sinken von 44 auf 31; die restlichen betreffen alte, geschlossene Punkte
-  - Zeilenenden byteweise gezählt: die 55 reinen LF-Zeilen sind unverändert, alle neuen Zeilen haben CRLF
+  - die Befunde des Werkzeugs sinken von 44 auf 30; die restlichen betreffen alte, geschlossene Punkte,
+    und keiner davon ist mehr eine Doppel-ID
+  - Zeilenenden byteweise gezählt: das Bereinigungsskript ließ die 55 reinen LF-Zeilen unverändert.
+    Die späteren Ein-Zeilen-Korrekturen mit dem Edit-Werkzeug haben dann die ganze Datei auf CRLF
+    vereinheitlicht. Das ist harmlos, weil die Datei gitignoriert ist und ihre Leser jedes
+    Zeilenende verstehen.
   - `todo-status.py --naechste-id` → `PermissionError` auf `.code-guardian-todo-ids`
 - Studien-Manifest:
   - `sha256sum manifest.json` → `84cbf1d2…`
@@ -285,8 +298,9 @@ Gemessen am 07.10.2026; zu jedem Kommando steht das Ergebnis.
   betreffen.
 - Die Qualität der fertigen Zweige ist unbekannt. Gelesen wurde nur der Diffstat; Tests und Reviews
   laufen erst in Bündel 1.
-- Dass die Rest-Diffs der Dialekt-Savepoints nichts Neues enthalten, ist nicht geprüft; das Ansehen
-  ist Teil von C.
+- Dass die Dialekt-Arbeit auf `master` angekommen ist, ist nur an `tools/speech_eval.py` und dessen
+  späteren Fix-Commits festgemacht. Ob die Rest-Diffs der Savepoints etwas Neues enthalten, ist nicht
+  geprüft; das Ansehen ist Teil von C.
 - Die Zuordnung der Index-Punkte (überholt, Paketbefund, global, Mitfahrer, vertagt) stammt aus zwei
   lesenden Durchgängen von Subagenten. Kommando und Ergebnis je abgehaktem Punkt stammen aus ihren
   Berichten und stehen als Beleg-Zeile im Index. In dieser Sitzung wurden sie nicht einzeln nachgefahren.
