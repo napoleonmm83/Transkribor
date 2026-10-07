@@ -71,7 +71,10 @@ Kontrollsumme: 3 + 1 + 1 + 4 + 1 + 2 + 2 + 7 = **21**.
 
 Fertige Arbeit verliert mit jedem Merge auf `master` an Wert, deshalb kommt dieses Bündel zuerst.
 Jeder Zweig bekommt einen eigenen PR. Die PRs laufen nacheinander, weil das CodeRabbit-Kontingent
-für das ganze Repo gilt und jeder Push eine Einheit kostet.
+für das ganze Repo gilt und jeder neue PR beim Öffnen einen CLI-Lauf in der CI startet
+(`.github/workflows/coderabbit.yml`, Auslöser `opened` und `ready_for_review`). Pushes auf einen
+offenen PR lösen diesen Lauf nicht aus. Der Bot prüft sie zwar nach (`auto_incremental_review` in
+`.coderabbit.yaml`), ob ihn das Kontingent kostet, ist aber nicht gemessen.
 
 1. **PR 663** mergen, nachdem die drei Review-Kanäle gelesen sind. Damit ist der Oxlint-Teil von
    Nr. 659 erledigt; der PR-Text sagt selbst, dass die Electron-Tests offen bleiben.
@@ -175,7 +178,8 @@ Zwei Teile sind schon vorab entscheidbar:
 - **Linux-Hälfte von Nr. 36** abtrennen. Laut Entscheidung vom 22.08. wird keine Linux-Hardware
   beschafft.
 - **Nr. 504** schließen oder eingrenzen. Die Nachmessung vom 02.09. ergab mit torchcodec 0.16
-  0 objc-Zeilen.
+  0 objc-Zeilen. Der Wert ist aus dem Issue übernommen; es ist eine Mac-Messung, die hier nicht
+  wiederholbar ist.
 
 ## Arbeit außerhalb der Issues
 
@@ -266,8 +270,24 @@ Gemessen am 07.10.2026; zu jedem Kommando steht das Ergebnis.
 - `mutation._direkte_kommando_teile(<test:electron aus package.json>)` → `None`. Kontrolle
   `"vitest run"` → `['vitest', 'run']`; Kontrolle `node scripts/testlauf.mjs electron/main.test.js`
   → wird zerlegt.
+- Zweige ohne PR: `git cherry master <zweig> | grep -c '^+'` und
+  `gh pr list --state all --head <zweig> --json number --jq length`:
+  - `wip/dialekt-savepoint` → 2 Commits, 0 PRs
+  - `rebase/dialekt-auf-master` → 1 Commit, 0 PRs
+  - `test/525-textnachschub` → 1 Commit, 0 PRs
+  - `test/waechter-478-487-nachschub` → 1 Commit, 0 PRs
+  - `docs/plan-b2b1` → 1 Commit, 0 PRs
 - `git describe --tags --abbrev=0 master` → v0.58.2 vom 2026-09-30; `git rev-list --count v0.58.2..master`
-  → 14
+  → 14. Behoben-Zeilen unter „Unveröffentlicht“:
+  `awk '/^## Unver/{f=1;next} /^## /{f=0} f' RELEASE-NOTIZEN.md | grep -c '^- '` → 2
+- Aufräumen:
+  - `git -C .worktrees/t031-oxlint-altbestand status --porcelain | wc -l` → 77
+  - dieselbe Abfrage mit `grep -c '^ D'` in den beiden Temp-Arbeitsbäumen 613-616 und pr624-ci → 446 bzw. 445
+  - `find . -maxdepth 1 -name '.tmp-*' | wc -l` → 166
+  - `git status --porcelain -- docs/superpowers/plans/ | grep -c '^??'` → 3
+- Nr. 504: `gh issue view 504 --json comments` → Kommentar vom 2026-09-02 mit einer Tabelle der
+  objc-Zeilen je torchcodec-Fassung, gemessen mit `python3 -c "import av, pyannote.audio" 2>&1 | grep -c "objc\["`
+  auf dem Mac. Übernommen, nicht wiederholt.
 - Aufgabenindex vor der Bereinigung:
   - awk-Zählung über die offenen Kopfzeilen → `offen=133 mit_Wirkung=0`
   - `todo-status.py --prioritaet` → `UnicodeDecodeError` (Byte 0xb7, Position 340522)
