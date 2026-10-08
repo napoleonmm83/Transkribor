@@ -1,0 +1,59 @@
+{
+  "test": "npm --prefix webtool/frontend test -- scripts/oxlint_riegel.test.mjs",
+  "pfade": [
+    "webtool/frontend/scripts/oxlint_riegel.mjs",
+    "webtool/frontend/scripts/oxlint_riegel.test.mjs",
+    "webtool/frontend/.oxlint-baseline.json"
+  ],
+  "mutationen": [
+    {
+      "id": "O1 weniger Dateien als beim Einfrieren gilt als normaler Lauf — Altbestand hiesse behoben",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "    if (files < baselineFiles) {",
+      "nach": "    if (false) {",
+      "rot": ["weniger Dateien als beim Einfrieren blockiert"]
+    },
+    {
+      "id": "O2 neue Befunde machen den Riegel nicht mehr rot",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "    return { code: added.length ? 1 : 0,",
+      "nach": "    return { code: 0,",
+      "rot": ["oxlint rc1 mit Fehlerdiagnose bleibt ein Befund"]
+    },
+    {
+      "id": "O3 oxlint-Abbruch (rc 2) wird als normaler Lauf gelesen",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "  if (result.error || result.signal || ![0, 1].includes(result.status) || result.stderr.trim()) {",
+      "nach": "  if (result.error || result.signal || ![0, 1, 2].includes(result.status) || result.stderr.trim()) {",
+      "rot": ["fehlendes Tool, kaputtes JSON, leerer Lauf und abnormaler Exit blockieren"]
+    },
+    {
+      "id": "O4 behoben ohne Einzelpruefung — eine ignorierte Datei hiesse behoben",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "(gitIgnoriert(root, file) || !lintetDatei(root, file, options))",
+      "nach": "(gitIgnoriert(root, file) || false)",
+      "rot": ["echtes oxlint: ignorePatterns nimmt dem Altbestand das"]
+    },
+    {
+      "id": "O5 .gitignore-Ausschluss nicht mehr erkannt",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "(gitIgnoriert(root, file) || !lintetDatei(root, file, options))",
+      "nach": "(false || !lintetDatei(root, file, options))",
+      "rot": ["echtes oxlint und git: .gitignore auf einer getrackten Datei wird erkannt"]
+    },
+    {
+      "id": "O6 --schreiben friert neue Befunde ohne --mit-neuen ein",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "  if (added?.length && !mitNeuen) {",
+      "nach": "  if (false) {",
+      "rot": ["--schreiben friert neue Befunde nur mit --mit-neuen ein"]
+    },
+    {
+      "id": "O7 Identitaet wieder positionsabhaengig — jede Zeile oberhalb macht die CI rot",
+      "datei": "webtool/frontend/scripts/oxlint_riegel.mjs",
+      "von": "      return JSON.stringify([line, text])",
+      "nach": "      return JSON.stringify([offset, line, text])",
+      "rot": ["Aenderung oberhalb eines Altbefunds laesst seine Identitaet stehen"]
+    }
+  ]
+}
