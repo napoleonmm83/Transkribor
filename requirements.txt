@@ -5,7 +5,7 @@
 # Aufloesung das CPU-Rad von PyPI — die GPU waere still weg.
 faster-whisper
 # faster-whisper 1.2.1 verwendet metadata_errors; PyAV 19 entfernte dieses Argument.
-av>=11,<19
+av>=19,<20
 # NeMo und faster-whisper laden Modelle über den Hub. Windows-TLS konfiguriert dessen
 # öffentliche set_client_factory-API; sie ist ab 1.x vorhanden, 2.x nutzt einen anderen
 # HTTP-Client. Die Grenze hält die gezielte Zertifikatsprüfung ausführbar.
