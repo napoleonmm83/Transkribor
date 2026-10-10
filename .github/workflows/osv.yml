@@ -81,7 +81,7 @@ jobs:
       # (Deckelungsregel; ohne die Zeile startup_failure, per Bisektion gemessen 2026-08-18).
       # Der Fork-Schutz steckt im deaktivierten Upload — das Recht wird nie eingeloest,
       # der SARIF-Upload-Step laeuft bei upload-sarif: false schlicht nicht.
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.5.1
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@v2.6.0
     with:
       upload-sarif: false
       # BEWUSST kein --recursive ./ — das nähme requirements.txt als Manifest mit
@@ -114,7 +114,7 @@ jobs:
       actions: read
       security-events: write
     needs: resolve-python
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.5.1
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v2.6.0
     with:
       download-artifact: osv-python-freeze
       # Dasselbe Prinzip wie im PR-Job: nur die drei Lockfiles explizit, kein
