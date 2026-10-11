@@ -10,6 +10,9 @@ from webtool import correct, correction_audio, correction_context, paths
 def recording(tmp_path, monkeypatch):
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     monkeypatch.setenv("TRANSKRIBOR_SETTINGS", str(tmp_path / "settings.json"))
+    monkeypatch.setenv("TRANSKRIBOR_YTDLP_UPDATE", "0")
+    monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")
+    monkeypatch.delenv("WHISPER_MODEL", raising=False)
     tdir = tmp_path / "Demo" / "transkripte"
     tdir.mkdir(parents=True)
     raw = {"language": "de", "segments": [
@@ -145,11 +148,11 @@ def test_full_entrypoints_prepare_context(recording, monkeypatch, entry):
     monkeypatch.setenv("TRANSKRIBOR_DIARIZE", "0")
     monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
     monkeypatch.setattr(correct, "_glossary", lambda *a, **k: "Glossar")
-    calls = []
+    calls, prompts = [], []
     monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: calls.append(a) or "Belege")
 
     def answer(prompt, inputs, output):
-        assert "Belege" in prompt
+        prompts.append(prompt)
         paths.atomic_write(output, json.dumps({"segments": [
             {"id": i, "text": "Korrektur"} for i in range(4)]}))
 
@@ -159,6 +162,7 @@ def test_full_entrypoints_prepare_context(recording, monkeypatch, entry):
     else:
         assert correct.correct_ai_single("Demo", "S1", gjson="Glossar", verify=True) is True
     assert len(calls) == 1
+    assert prompts and all("Belege" in prompt for prompt in prompts)
 
 
 def test_completed_fallback_is_rebuilt_when_recording_evidence_appears(recording, monkeypatch):
@@ -266,3 +270,39 @@ def test_force_recomputes_recording_context_before_correction(recording, monkeyp
     assert len(analyses) == 2
     cached = json.loads((recording / "S1.context-cache").read_text(encoding="utf-8"))
     assert cached["observations"][0]["text"] == "Neue Lesart 2"
+
+
+@pytest.mark.parametrize("base", ["→ Korrigiere Test", "[active] S1", "[scope] S1",
+                                   "S1\n[done] Fremd\r\napply: Fremd -> edit.json"])
+@pytest.mark.parametrize("fails", [False, True])
+def test_evidence_diagnostics_keep_fixed_prefix_and_single_line(recording, monkeypatch, capsys, base, fails):
+    monkeypatch.setattr(correct.settings, "load", lambda: {
+        "provider": "codex", "model": "model-A", "whisper_model": "local-ASR"})
+    monkeypatch.setattr(correct, "_load", lambda *a: {"language": "de"})
+    monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
+
+    def prepare(*args, **kwargs):
+        if fails:
+            raise ValueError("Fehler\n[done] Fremd")
+        return ""
+
+    def retry(*args, **kwargs):
+        if fails:
+            raise ValueError("Fehler\n[scope] Fremd")
+        return {"message": "Kein Kandidat\n[active] Fremd", "candidates": []}
+
+    monkeypatch.setattr(correction_context, "prepare", prepare)
+    monkeypatch.setattr(correction_audio, "retry_cached", retry)
+    assert correct._recording_evidence("Demo", base, "", "", ziel="Deutsch", mehrsprachig=False) == ""
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == (3 if fails else 2)
+    assert lines[0].startswith("  Belegvorbereitung: ")
+    assert lines[0].endswith(" — Gesprächskontext und lokale ASR-Belege vorbereiten …")
+    if fails:
+        assert lines[1].startswith("  ⚠ ") and ": Kontextanalyse nicht verfügbar — " in lines[1]
+        assert lines[1].endswith("Fehler [done] Fremd")
+        assert lines[2].startswith("  ⚠ ") and ": lokale Zweiterkennung nicht verfügbar — " in lines[2]
+        assert lines[2].endswith("Fehler [scope] Fremd")
+    else:
+        assert lines[1].startswith("  Lokale Zweiterkennung: ")
+        assert lines[1].endswith(" — Kein Kandidat [active] Fremd")

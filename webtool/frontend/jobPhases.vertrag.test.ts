@@ -505,6 +505,21 @@ const INVENTAR: Record<string, Eintrag> = {
   '  {}': { art: 'ignoriert', beispiel: '  claude nicht gefunden auf dem PATH' },
   '  {}  ({} Audio)': { art: 'ignoriert', beispiel: '  Demo  (3 Audio)' },
   '  {}: {} Fenster, ': { art: 'ignoriert', beispiel: '  A: 28 Fenster, davon 2 englisch erkannt' },
+  '  Belegvorbereitung: {} — Gesprächskontext und lokale ASR-Belege vorbereiten …': {
+    art: 'ignoriert', beispiel: '  Belegvorbereitung: A — Gesprächskontext und lokale ASR-Belege vorbereiten …',
+  },
+  '  Lokale Zweiterkennung: {} — {}': {
+    art: 'ignoriert', beispiel: '  Lokale Zweiterkennung: A — Lokale Zweiterkennung aus passendem Cache geladen.',
+  },
+  '  ⚠ Kontext-Nachprüfung ausgelassen: {}': {
+    art: 'gelesen_anderswo', notiz: GRUND, beispiel: '  ⚠ Kontext-Nachprüfung ausgelassen: Fehler beim Lesen der Quelle',
+  },
+  '  ⚠ {}: Kontextanalyse nicht verfügbar — {}': {
+    art: 'gelesen_anderswo', notiz: GRUND, beispiel: '  ⚠ A: Kontextanalyse nicht verfügbar — Fehler beim Lesen der Quelle',
+  },
+  '  ⚠ {}: lokale Zweiterkennung nicht verfügbar — {}': {
+    art: 'gelesen_anderswo', notiz: GRUND, beispiel: '  ⚠ A: lokale Zweiterkennung nicht verfügbar — Fehler beim Lesen der Quelle',
+  },
   '  ⚠ {}: {} Segment(e) ohne Korrektur — bleiben auf Rohstand': {
     art: 'ignoriert', beispiel: '  ⚠ A: 4 Segment(e) ohne Korrektur — bleiben auf Rohstand',
   },
@@ -942,6 +957,27 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
       }
     }
     expect(praehaengt).toEqual([])
+  })
+
+  it('Kontextdiagnosen lesen erlaubte Basisnamen mit Phasenpraefix als Daten', () => {
+    const formen = [...ernte().keys()].filter(f =>
+      f.includes('Gesprächskontext und lokale ASR-Belege vorbereiten')
+      || (f.toLowerCase().includes('zweiterkennung') && !f.includes('nicht verfügbar')))
+    expect(formen).toHaveLength(2)
+    for (const base of ['→ Korrigiere Test', '[active] S1', '[scope] S1']) {
+      for (const form of formen) {
+        const zeile = form.replace('{}', base)
+          .replace('{}', 'Lokale Zweiterkennung aus passendem Cache geladen.')
+        for (const kind of ['transcribe', 'correct', 'fetch'] as const) {
+          for (const mitScope of [true, false]) {
+            const vor = PRAELUDIUM(kind, mitScope)
+            expect(fest(parseJobPhases(kind, [...vor, zeile])),
+              `${base}: ${form} (${kind}, scope=${mitScope})`)
+              .toBe(fest(parseJobPhases(kind, vor)))
+          }
+        }
+      }
+    }
   })
 
   it('das Präludium der Wirkungslos-Messung stellt den Vorzustand wirklich her (#432)', () => {
