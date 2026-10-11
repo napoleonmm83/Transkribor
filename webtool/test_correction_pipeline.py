@@ -393,3 +393,33 @@ def test_failed_rebuild_never_restores_when_raw_identity_is_unknown(recording, m
     monkeypatch.setattr(correct, "_ask_llm", delete_and_fail)
     assert correct.correct_ai_single("Demo", "S1", verify=False, force=True) is False
     assert not (recording / "S1.correction.json").exists()
+
+
+def test_failed_rebuild_never_restores_raw_replaced_during_cache_validation(recording, monkeypatch):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: "Beleg A")
+
+    def answer(prompt, files, output):
+        paths.atomic_write(output, json.dumps({"segments": [{"id": 0, "text": "Alte Aufnahme"}]}))
+
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    original_match = correct._correction_cache_matches
+    matched = []
+
+    def match_and_replace(*args, **kwargs):
+        result = original_match(*args, **kwargs)
+        matched.append(result)
+        paths.atomic_write(str(recording / "S1.json"), json.dumps({"segments": [
+            {"id": 0, "start": 0, "end": 1, "text": "Neue andere Aufnahme"}]}))
+        return result
+
+    def fail(prompt, files, output):
+        raise RuntimeError("abgebrochen")
+
+    monkeypatch.setattr(correct, "_correction_cache_matches", match_and_replace)
+    monkeypatch.setattr(correct, "_ask_llm", fail)
+    assert correct.correct_ai_single("Demo", "S1", verify=False, force=True) is False
+    assert matched == [True]
+    assert not (recording / "S1.correction.json").exists()
