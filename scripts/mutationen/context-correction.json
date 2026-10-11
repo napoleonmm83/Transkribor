@@ -6,7 +6,8 @@
     "webtool/correction_audio.py",
     "webtool/test_correction_pipeline.py",
     "webtool/test_correction_context.py",
-    "webtool/test_correction_audio.py"
+    "webtool/test_correction_audio.py",
+    "webtool/llm.py"
   ],
   "mutationen": [
     {
@@ -91,6 +92,30 @@
       ],
       "gruen": [
         "test_clean_recording_never_imports_or_decodes"
+      ]
+    },
+    {
+      "id": "context-analysis-settings-reloaded",
+      "datei": "webtool/correct.py",
+      "von": "            _ask_llm(prompt, files, output, cfg=cfg)",
+      "nach": "            _ask_llm(prompt, files, output)",
+      "rot": [
+        "test_analysis_request_and_cache_keep_same_snapshot"
+      ],
+      "gruen": [
+        "test_evidence_is_shared_by_correct_and_verify"
+      ]
+    },
+    {
+      "id": "context-force-analysis-cache-reused",
+      "datei": "webtool/correct.py",
+      "von": "inputs, ask_analysis, force=force))",
+      "nach": "inputs, ask_analysis, force=False))",
+      "rot": [
+        "test_force_recomputes_recording_context_before_correction"
+      ],
+      "gruen": [
+        "test_evidence_is_shared_by_correct_and_verify"
       ]
     }
   ]

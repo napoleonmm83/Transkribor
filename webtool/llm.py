@@ -121,11 +121,11 @@ def _cfg(cfg: dict | None = None) -> tuple:
     return cfg, p
 
 
-def use_api() -> bool:
+def use_api(cfg: dict | None = None) -> bool:
     """True, sobald ein anderer Anbieter als das Abo eingestellt ist. Bewusst KEIN stiller
     Rueckfall auf das Abo, wenn der Key fehlt: wer einen Anbieter einstellt, soll den
     Konfigurationsfehler sehen und nicht heimlich etwas anderes bekommen."""
-    return _cfg()[1]["shape"] != "cli"
+    return _cfg(cfg)[1]["shape"] != "cli"
 
 
 # Kurzlebiger Cache fuer `available()`s ABO-Zweig (#250). Gemessen: ein GET /api/settings
@@ -311,9 +311,9 @@ def _headers(cfg: dict, prov: dict) -> dict:
     return h
 
 
-def complete(prompt: str) -> str:
+def complete(prompt: str, *, cfg: dict | None = None) -> str:
     """Eine Runde gegen den eingestellten API-Anbieter. Liefert den Antworttext."""
-    cfg, prov = _cfg()
+    cfg, prov = _cfg(cfg)
     # Der Abo-Weg ueber eine CLI hat weder URL noch Key noch Pflichtmodell — die Pruefungen
     # darunter gelten nur den HTTP-Anbietern.
     if prov["shape"] == "codex":
@@ -417,11 +417,12 @@ def _with_files(prompt: str, inputs) -> str:
     return "".join(teile)
 
 
-def complete_to_file(prompt: str, inputs, output: str) -> None:
+def complete_to_file(prompt: str, inputs, output: str, *, cfg: dict | None = None) -> None:
     """Der API-Gegenpart zu `claude -p`: Eingaben in den Prompt, Antwort nach `output`.
     Geschrieben wird nur gueltiges JSON — eine halbe Datei wuerde der naechste Lauf als
     'schon erledigt' durchwinken."""
-    doc = parse_json(complete(_with_files(prompt, inputs)))
+    text = _with_files(prompt, inputs)
+    doc = parse_json(complete(text) if cfg is None else complete(text, cfg=cfg))
     paths.atomic_write(output, json.dumps(doc, ensure_ascii=False, indent=1))
 
 

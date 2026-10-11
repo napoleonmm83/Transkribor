@@ -995,7 +995,7 @@ def _claude_exe() -> str:
     return exe
 
 
-def _run_claude(prompt: str, workdir: str) -> None:
+def _run_claude(prompt: str, workdir: str, *, cfg: dict | None = None) -> None:
     """Headless claude -p; schreibt die Zieldatei selbst via Write-Tool. Erfolg wird an
     der geschriebenen Datei gemessen (nicht am Exitcode) — Fehler/Timeout nur loggen.
 
@@ -1024,7 +1024,7 @@ def _run_claude(prompt: str, workdir: str) -> None:
     # aufgebraucht hat, soll die Korrektur auf sonnet weiterfahren koennen, statt bis zum
     # naechsten Fenster zu warten. Frisch gelesen wie ueberall (settings.load), damit ein
     # Wechsel im Browser ohne Server-Neustart greift.
-    modell = settings.load()["model"] or CLAUDE_MODEL
+    modell = (cfg if cfg is not None else settings.load())["model"] or CLAUDE_MODEL
     cmd = [exe, "-p", "--model", modell,
            "--permission-mode", "acceptEdits", "--allowedTools", "Read,Write",
            "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
@@ -1056,7 +1056,7 @@ def _run_claude(prompt: str, workdir: str) -> None:
         print(f"  [diagnose] {diag['kategorie']}\t{diag['titel']}\t{diag['hinweis']}", flush=True)
 
 
-def _ask_llm(prompt: str, inputs: list, output: str) -> None:
+def _ask_llm(prompt: str, inputs: list, output: str, *, cfg: dict | None = None) -> None:
     """Eine LLM-Runde, unabhaengig vom eingestellten Anbieter.
 
     Beim Claude-Abo schreibt `claude -p` die Zieldatei per Write-Tool selbst. Sonst — API-Key
@@ -1066,15 +1066,21 @@ def _ask_llm(prompt: str, inputs: list, output: str) -> None:
     In beiden Faellen gilt: Erfolg wird an der geschriebenen Datei gemessen, ein Fehler wird
     nur geloggt — eine Datei darf den Batch nicht abbrechen."""
     global _letzte_diagnose
-    if not llm.use_api():
+    if not (llm.use_api() if cfg is None else llm.use_api(cfg)):
         # Ein- und Ausgaben eines Aufrufs liegen IMMER im selben transkripte-Ordner (alle
         # Aufrufer bauen ihre Pfade aus paths.transkripte_dir) — daraus faellt die
         # Einengung ab, ohne das Projekt durch drei Funktionen zu reichen.
-        _run_claude(prompt, os.path.dirname(output))
+        if cfg is None:
+            _run_claude(prompt, os.path.dirname(output))
+        else:
+            _run_claude(prompt, os.path.dirname(output), cfg=cfg)
         return
     with _claude_slots:                      # derselbe Deckel wie im Abo-Weg
         try:
-            llm.complete_to_file(prompt, inputs, output)
+            if cfg is None:
+                llm.complete_to_file(prompt, inputs, output)
+            else:
+                llm.complete_to_file(prompt, inputs, output, cfg=cfg)
         except llm.LLMError as e:
             diag = llm.diagnose_fehler(e)
             _letzte_diagnose = diag
@@ -1631,7 +1637,7 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
 
 
 def _recording_evidence(project: str, base: str, gjson: str, context: str,
-                        *, ziel: str, mehrsprachig: bool) -> str:
+                        *, ziel: str, mehrsprachig: bool, force: bool = False) -> str:
     from . import correction_audio, correction_context
 
     tdir = paths.transkripte_dir(project)
@@ -1643,7 +1649,10 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
     try:
         inputs = correction_context.ContextInputs(context, gjson, ziel,
                                                   cfg["provider"], cfg["model"] or "Anbietervoreinstellung")
-        sections.append(correction_context.prepare(raw_path, tagged, inputs, _ask_llm))
+        def ask_analysis(prompt, files, output):
+            _ask_llm(prompt, files, output, cfg=cfg)
+
+        sections.append(correction_context.prepare(raw_path, tagged, inputs, ask_analysis, force=force))
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"  ⚠ {base}: Kontextanalyse nicht verfügbar — {_einzeilig(exc)}", flush=True)
     try:
@@ -1684,7 +1693,7 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
                                                     # womit kein Block je „neuer“ wäre und der Resume tot.
     if evidence is None:
         try:
-            evidence = _recording_evidence(project, base, gjson, context, ziel=ziel, mehrsprachig=mehrsprachig)
+            evidence = _recording_evidence(project, base, gjson, context, ziel=ziel, mehrsprachig=mehrsprachig, force=force)
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"  ⚠ Kontext-Nachprüfung ausgelassen: {_einzeilig(exc)}", flush=True)
             evidence = ""
@@ -1902,7 +1911,7 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         evidence = None
         if tiefe in ("voll", "voll_dialekt"):
             try:
-                evidence = _recording_evidence(project, b, gjson, context, ziel=ziel, mehrsprachig=mehr)
+                evidence = _recording_evidence(project, b, gjson, context, ziel=ziel, mehrsprachig=mehr, force=force)
             except (OSError, ValueError, RuntimeError) as exc:
                 print(f"  ⚠ Kontext-Nachprüfung ausgelassen: {_einzeilig(exc)}", flush=True)
                 evidence = ""
