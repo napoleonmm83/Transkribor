@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .paths import atomic_write
 
-ALGORITHM_VERSION = 1
+ALGORITHM_VERSION = 2
 MAX_OBSERVATIONS = 16
 MAX_TEXT_LENGTH = 512
 MAX_EVIDENCE_IDS = 8
@@ -114,7 +114,7 @@ belegt werden kann, schreibe {{"observations": []}}. Gib sonst nichts aus."""
 
 
 def prepare(raw_path: str, tagged_path: str, inputs: ContextInputs,
-            ask: Callable[[str, list[str], str], None]) -> str:
+            ask: Callable[[str, list[str], str], None], *, force: bool = False) -> str:
     """Analyse once for unchanged sources; failures propagate to the caller's fallback."""
     raw, tagged = Path(raw_path).resolve(), Path(tagged_path).resolve()
     if (raw.suffix != ".json" or raw.parent != tagged.parent
@@ -141,7 +141,7 @@ def prepare(raw_path: str, tagged_path: str, inputs: ContextInputs,
 
     try:
         cached = json.loads(cache.read_text(encoding="utf-8"))
-        if (isinstance(cached, dict)
+        if (not force and isinstance(cached, dict)
                 and set(cached) == {"algorithm", "fingerprint", "observations"}
                 and cached["algorithm"] == ALGORITHM_VERSION
                 and cached["fingerprint"] == fingerprint):

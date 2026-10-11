@@ -159,8 +159,9 @@ korrigieren lässt, fragt Transkribor noch einmal nach und überschreibt sie dan
 analysiert die KI die ganze Aufnahme auf Themen, Bezüge und wiederkehrende Begriffe.
 Diese Hinweise bleiben Hypothesen mit Verweisen auf die Rohsegmente. Besonders unsichere
 Stellen werden zusätzlich mit mehr Audio davor und danach lokal nacherkannt — höchstens
-zwölf Ausschnitte, mit dem bereits vorhandenen Spracherkennungsmodell. Das Audio bleibt
-auf deinem Rechner. Fehlt das lokale Modell, läuft die Korrektur mit einem Hinweis weiter.
+zwölf Ausschnitte, wenn das gewählte faster-whisper-Modell bereits lokal vorhanden ist.
+Ein reines whisper.cpp-/GGML-Modell auf dem Mac reicht dafür nicht. Das Audio bleibt
+auf deinem Rechner. Fehlt das passende lokale Modell, läuft die Korrektur mit einem Hinweis weiter.
 Die anschliessende Prüfung erhält dieselben Hinweise und das Glossar, damit begründete
 Korrekturen nicht allein wegen des fehlerhaften Rohtexts zurückgenommen werden. Unklare
 Stellen gehören weiterhin in die Anmerkungen zum Nachhören. Der zusätzliche KI-Aufruf und

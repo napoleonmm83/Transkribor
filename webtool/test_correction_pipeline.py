@@ -111,11 +111,14 @@ def test_evidence_builder_uses_current_settings_and_independent_audio(recording,
     monkeypatch.delenv("WHISPER_MODEL", raising=False)
     monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.mp3")
 
-    def prepare(raw, tagged, inputs, ask):
+    def prepare(raw, tagged, inputs, ask, *, force=False):
         seen.append(inputs)
         assert inputs.model  # Native CLI defaults must still reach the analysis.
         assert raw.endswith("S1.json") and tagged.endswith("S1.tagged.txt")
-        assert ask is correct._ask_llm
+        received = []
+        monkeypatch.setattr(correct, "_ask_llm", lambda *a, **k: received.append(k["cfg"]))
+        ask("prompt", [], "output")
+        assert received[0]["provider"] == "codex" and received[0]["model"] == model
         if analysis_fails:
             raise ValueError("invalid hypotheses")
         return "ASR-Hypothese mit Rohbeleg"
@@ -179,3 +182,87 @@ def test_completed_fallback_is_rebuilt_when_recording_evidence_appears(recording
     assert "Neue Audiolesart mit Beleg" in answered[-1]
     assert correct.correct_ai_single("Demo", "S1", verify=False)
     assert len(answered) == 2 and len(prepared) == 3  # Same evidence reuses the complete result.
+
+
+@pytest.mark.parametrize("changed_provider", ["custom", "claude-cli"])
+def test_analysis_request_and_cache_keep_same_snapshot(recording, monkeypatch, changed_provider):
+    from webtool import llm
+    a = {"provider": "custom", "base_url": "https://example.invalid/v1",
+         "api_key": "", "model": "model-A", "whisper_model": "small"}
+    b = {**a, "provider": changed_provider, "model": "model-B"}
+    reads, actual = [], []
+
+    def load():
+        reads.append(True)
+        return a if len(reads) == 1 else b
+
+    def request(url, headers, body, timeout):
+        actual.append(body["model"])
+        return {"choices": [{"message": {"content": json.dumps({
+            "observations": [{"text": "Lesart von " + body["model"], "ids": [0]}]
+        })}}]}
+
+    monkeypatch.setattr(correct.settings, "load", load)
+    monkeypatch.setattr(llm, "_request", request)
+    monkeypatch.setattr(correction_audio, "retry_cached",
+                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+    monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
+    first = correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False)
+    assert actual == ["model-A"] and len(reads) == 1
+    cache = json.loads((recording / "S1.context-cache").read_text(encoding="utf-8"))
+    assert cache["fingerprint"]["inputs"]["model"] == "model-A"
+    monkeypatch.setattr(correct.settings, "load", lambda: a)
+    second = correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False)
+    assert first == second and "Lesart von model-A" in second
+    assert actual == ["model-A"]
+
+
+def test_analysis_claude_uses_snapshot_model_after_provider_switch(recording, monkeypatch):
+    from types import SimpleNamespace
+    a = {"provider": "claude-cli", "model": "sonnet", "whisper_model": "small"}
+    b = {**a, "provider": "custom", "model": "model-B"}
+    reads, commands = [], []
+
+    def load():
+        reads.append(True)
+        return a if len(reads) == 1 else b
+
+    def run(cmd, **kwargs):
+        commands.append(cmd)
+        paths.atomic_write(str(recording / "S1.context.tmp"), json.dumps({
+            "observations": [{"text": "Lesart von sonnet", "ids": [0]}]}))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(correct.settings, "load", load)
+    monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
+    monkeypatch.setattr(correct.subprocess, "run", run)
+    monkeypatch.setattr(correction_audio, "retry_cached",
+                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+    monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
+    result = correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False)
+    assert "Lesart von sonnet" in result and len(reads) == 1
+    assert len(commands) == 1 and commands[0][commands[0].index("--model") + 1] == "sonnet"
+
+
+def test_force_recomputes_recording_context_before_correction(recording, monkeypatch):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    analyses = []
+
+    def ask(prompt, files, output, **kwargs):
+        if "Analysiere den Kontext" in prompt:
+            analyses.append(True)
+            payload = {"observations": [{"text": f"Neue Lesart {len(analyses)}", "ids": [0]}]}
+        else:
+            payload = {"segments": [{"id": i, "text": "Korrektur"} for i in range(4)]}
+        paths.atomic_write(output, json.dumps(payload))
+
+    monkeypatch.setattr(correct, "_ask_llm", ask)
+    monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
+    monkeypatch.setattr(correction_audio, "retry_cached",
+                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+    assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False)
+    assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False, force=True)
+    assert len(analyses) == 2
+    cached = json.loads((recording / "S1.context-cache").read_text(encoding="utf-8"))
+    assert cached["observations"][0]["text"] == "Neue Lesart 2"
