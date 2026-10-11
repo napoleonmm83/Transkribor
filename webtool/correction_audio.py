@@ -14,7 +14,7 @@ _LIMIT = 12
 _MARGIN = 12.0
 _MAX_CLIP = 45.0
 _SPACING = 20.0
-_REVISION = 1
+_REVISION = 2
 _LOCK = Semaphore(1)
 
 
@@ -25,7 +25,7 @@ class AudioOptions:
     multilingual: bool = False
 
 
-def _result(status, message, candidates=None):
+def _result(status, message, candidates=None) -> dict:
     return {"status": status, "message": message, "candidates": candidates or []}
 
 
@@ -114,7 +114,7 @@ def retry_cached(audio_path: str, raw_path: str, options: AudioOptions) -> dict:
         return _retry(Path(audio_path), Path(raw_path), options)
 
 
-def _retry(audio_path, raw_path, options):
+def _retry(audio_path, raw_path, options) -> dict:
     try:
         if not options.model.strip():
             return _result("skipped", "Zweiterkennung ausgelassen: kein Modell gewaehlt.")
@@ -128,23 +128,18 @@ def _retry(audio_path, raw_path, options):
         identity = _identity(audio_path, raw_path, options)
         if identity["raw_sha256"] != hashlib.sha256(raw_bytes).hexdigest():
             return _result("failed", "Zweiterkennung verworfen: Quelldateien wurden geaendert.")
-        from faster_whisper.audio import decode_audio
-        try:
-            samples = decode_audio(str(audio_path), sampling_rate=_SAMPLE_RATE)
-        except Exception:
-            return _result("failed", "Zweiterkennung ausgelassen: lokaler Audiodecoder konnte die Quelle nicht lesen.")
-        duration = len(samples) / _SAMPLE_RATE
-        if duration <= 0 or any(segment["end"] > duration for segment in segments):
-            return _result("failed", "Zweiterkennung ausgelassen: Segmentzeiten passen nicht zum Audio.")
-        if _identity(audio_path, raw_path, options) != identity:
-            return _result("failed", "Zweiterkennung verworfen: Quelldateien wurden geaendert.")
-        clips = _clips(selected, duration)
         cache_path = raw_path.with_suffix(".audio-evidence")
         try:
             cached = json.loads(cache_path.read_bytes())
-            if cached.get("identity") == identity and _valid_candidates(cached.get("candidates"), clips):
+            duration = cached.get("duration")
+            # Source-bound decoder metadata; validate clip bounds without decoding again.
+            if (cached.get("identity") == identity and _number(duration) and duration > 0
+                    and all(segment["end"] <= duration for segment in segments)
+                    and _valid_candidates(cached.get("candidates"), _clips(selected, duration))):
+                if _identity(audio_path, raw_path, options) != identity:
+                    return _result("failed", "Zweiterkennung verworfen: Quelldateien wurden geaendert.")
                 return _result("cached", "Lokale Zweiterkennung aus passendem Cache geladen.", cached["candidates"])
-        except (OSError, ValueError, AttributeError):
+        except (OSError, ValueError, AttributeError, OverflowError):
             pass
         from faster_whisper import WhisperModel
 
@@ -153,11 +148,23 @@ def _retry(audio_path, raw_path, options):
             model = WhisperModel(options.model, device="cpu", compute_type="int8", local_files_only=True)
         except Exception:
             return _result("skipped", "Zweiterkennung ausgelassen: lokales Modell nicht verfuegbar; kein Download.")
-        decoder_options = _opts(options.language, options.multilingual)
-        decoder_options.update(beam_size=10, log_progress=False)
-        candidates = []
-        failures = 0
         try:
+            from faster_whisper.audio import decode_audio
+            try:
+                # A miss decodes the full source once; ASR itself only sees bounded clips.
+                samples = decode_audio(str(audio_path), sampling_rate=_SAMPLE_RATE)
+            except Exception:
+                return _result("failed", "Zweiterkennung ausgelassen: lokaler Audiodecoder konnte die Quelle nicht lesen.")
+            duration = len(samples) / _SAMPLE_RATE
+            if duration <= 0 or any(segment["end"] > duration for segment in segments):
+                return _result("failed", "Zweiterkennung ausgelassen: Segmentzeiten passen nicht zum Audio.")
+            if _identity(audio_path, raw_path, options) != identity:
+                return _result("failed", "Zweiterkennung verworfen: Quelldateien wurden geaendert.")
+            clips = _clips(selected, duration)
+            decoder_options = _opts(options.language, options.multilingual)
+            decoder_options.update(beam_size=10, log_progress=False)
+            candidates = []
+            failures = 0
             for clip in clips:
                 stream = None
                 try:
@@ -169,7 +176,7 @@ def _retry(audio_path, raw_path, options):
                 except Exception:
                     failures += 1
                 finally:
-                    if hasattr(stream, "close"):
+                    if stream is not None and hasattr(stream, "close"):
                         try:
                             stream.close()
                         except Exception:
@@ -182,9 +189,15 @@ def _retry(audio_path, raw_path, options):
         if failures or not _valid_candidates(candidates, clips):
             return _result("partial" if candidates else "failed",
                            "Zweiterkennung unvollstaendig; fehlende Stellen bleiben ohne Audiokandidat.", candidates)
+        saved = True
         try:
-            atomic_write(str(cache_path), json.dumps({"identity": identity, "candidates": candidates}, ensure_ascii=False))
+            atomic_write(str(cache_path), json.dumps({"identity": identity, "duration": duration,
+                         "candidates": candidates}, ensure_ascii=False))
         except OSError:
+            saved = False
+        if _identity(audio_path, raw_path, options) != identity:
+            return _result("failed", "Zweiterkennung verworfen: Quelldateien wurden geaendert.")
+        if not saved:
             return _result("partial", "Audiokandidaten erstellt; Cache konnte nicht gespeichert werden.", candidates)
         return _result("ready", "Lokale Audiokandidaten erstellt; sie ersetzen keinen Text automatisch.", candidates)
     except (OSError, ValueError, TypeError, AttributeError, ImportError):

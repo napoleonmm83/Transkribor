@@ -115,7 +115,7 @@ def test_long_segment_and_audio_end_use_actual_bounded_clips(recording):
 
 @pytest.mark.parametrize("change", [
     {"id": True}, {"id": -1}, {"start": float("nan")}, {"end": float("inf")},
-    {"start": -1}, {"end": 9}, {"end": 501},
+    {"start": -1}, {"end": 9},
 ])
 def test_invalid_raw_is_rejected_before_model(recording, change):
     raw, _, segments, state = recording
@@ -152,6 +152,7 @@ def test_uncached_model_failure_is_not_cached_and_can_retry(recording, monkeypat
     result = run(recording)
     assert result["status"] == "skipped" and result["message"]
     assert not recording[0].with_suffix(".audio-evidence").exists()
+    assert state.decodes == 0
     monkeypatch.setattr(sys.modules["faster_whisper"], "WhisperModel", original)
     assert run(recording)["status"] == "ready"
     assert len(state.calls) == 12
@@ -160,7 +161,9 @@ def test_uncached_model_failure_is_not_cached_and_can_retry(recording, monkeypat
 def test_cache_reuses_model_work_and_is_bound_to_raw_audio_options(recording):
     raw, source, segments, state = recording
     run(recording)
+    decodes = state.decodes
     assert run(recording)["status"] == "cached" and len(state.loads) == 1
+    assert state.decodes == decodes
     segments[0]["text"] = "geaendert"
     rewrite(raw, segments)
     run(recording)
@@ -225,6 +228,8 @@ def test_decoder_failure_is_visible_and_can_retry(recording, monkeypatch):
     monkeypatch.setattr(module, "decode_audio", broken)
     result = run(recording)
     assert result["status"] == "failed" and result["message"]
+    gc.collect()
+    assert all(ref() is None for ref in recording[3].refs)
     assert "private source name" not in result["message"]
     assert not recording[0].with_suffix(".audio-evidence").exists()
     monkeypatch.setattr(module, "decode_audio", decoder)
@@ -333,3 +338,64 @@ def test_cpu_models_are_serialized(recording, monkeypatch):
         assert first.result()["status"] == "ready"
         assert second.result()["status"] == "ready"
     assert second_entered.is_set()
+
+
+@pytest.mark.parametrize("duration", [None, True, float("nan"), float("inf"), -1, 400])
+def test_missing_or_invalid_cached_duration_recomputes(recording, duration):
+    run(recording)
+    cache = recording[0].with_suffix(".audio-evidence")
+    payload = json.loads(cache.read_text(encoding="utf-8"))
+    if duration is None:
+        payload.pop("duration", None)
+    else:
+        payload["duration"] = duration
+    cache.write_text(json.dumps(payload), encoding="utf-8")
+    assert run(recording)["status"] == "ready"
+    assert recording[3].decodes == 2 and len(recording[3].loads) == 2
+
+
+def test_cache_hit_rechecks_source_identity_before_return(recording, monkeypatch):
+    from pathlib import Path
+
+    run(recording)
+    cache = recording[0].with_suffix(".audio-evidence")
+    read = Path.read_bytes
+    def drift(path):
+        result = read(path)
+        if path == cache:
+            recording[1].write_bytes(b"source changed while reading cache")
+        return result
+    monkeypatch.setattr(Path, "read_bytes", drift)
+    result = run(recording)
+    assert result["status"] == "failed" and result["candidates"] == []
+    assert recording[3].decodes == 1 and len(recording[3].loads) == 1
+
+
+def test_actual_audio_bounds_failure_releases_the_preloaded_model(recording):
+    raw, _, segments, state = recording
+    segments[0]["end"] = 501
+    rewrite(raw, segments)
+    result = run(recording)
+    assert result["status"] == "failed" and result["candidates"] == []
+    assert state.decodes == 1 and len(state.loads) == 1 and state.calls == []
+    gc.collect()
+    assert all(ref() is None for ref in state.refs)
+
+
+def test_missing_decoder_releases_the_preloaded_model(recording, monkeypatch):
+    monkeypatch.delitem(sys.modules, "faster_whisper.audio")
+    result = run(recording)
+    assert result["status"] == "failed" and result["candidates"] == []
+    assert len(recording[3].loads) == 1 and recording[3].decodes == 0
+    gc.collect()
+    assert all(ref() is None for ref in recording[3].refs)
+
+
+def test_source_change_while_cache_is_saved_discards_candidates(recording, monkeypatch):
+    write = audio.atomic_write
+    def changed(path, text):
+        write(path, text)
+        recording[1].write_bytes(b"source replaced while saving evidence")
+    monkeypatch.setattr(audio, "atomic_write", changed)
+    result = run(recording)
+    assert result["status"] == "failed" and result["candidates"] == []
