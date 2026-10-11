@@ -44,6 +44,18 @@
       "gruen": [
         "test_old_correction_policy_is_not_reused"
       ]
+    },
+    {
+      "id": "context-completed-cache-evidence-bypass",
+      "datei": "webtool/correct.py",
+      "von": "                 and _correction_cache_matches(cpath, raw_json, context, evidence=evidence))",
+      "nach": "                 and _correction_cache_matches(cpath, raw_json, context, evidence=None))",
+      "rot": [
+        "test_completed_fallback_is_rebuilt_when_recording_evidence_appears"
+      ],
+      "gruen": [
+        "test_partial_cache_requires_same_recording_evidence"
+      ]
     }
   ]
 }
