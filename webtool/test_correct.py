@@ -8,6 +8,13 @@ import pytest
 from webtool import correct, jobs, paths
 
 
+@pytest.fixture(autouse=True)
+def recording_evidence_stub(monkeypatch):
+    # Legacy correction contracts isolate the extra analysis/model calls.
+    # Real helper orchestration is covered by test_correction_pipeline.py.
+    monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: "")
+
+
 def _context_answer(tdir, calls, failed_parts=None):
     def answer(prompt, inputs, output):
         match = re.search(r"\.part(\d+)\.correction\.json$", output)
@@ -43,7 +50,7 @@ def test_context_cache_aendern_entfernen_und_wiederverwenden(project, monkeypatc
 
 
 @pytest.mark.parametrize("datei_da,context,count", [
-    (False, "", 0),              # nie Projektwissen gehabt -> Altbestand gilt weiter
+    (False, "", 1),              # alte Verfahrensrevision wird einmal erneuert
     (True, "", 1),               # Feld GELEERT -> alte Korrektur ist ueberholt
     (True, "Neuer Kontext", 1),  # Feld gefuellt -> ohnehin ueberholt
 ])
@@ -189,6 +196,7 @@ def test_auto_skips_glossary_when_no_fresh_full_correction(project, monkeypatch,
     if mode == "reuse":
         cp = tdir / "S1.correction.json"
         cp.write_text('{"segments": [{"id": 0}]}', encoding="utf-8")
+        correct._stamp_correction_context(str(cp), "")
         newer = (tdir / "S1.json").stat().st_mtime + 10
         os.utime(cp, (newer, newer))
     elif mode == "human":
@@ -1059,6 +1067,7 @@ def test_run_reuses_existing_correction(project, monkeypatch):
     (t / "S1.correction.json").write_text(json.dumps(
         {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "Schon da."}]}),
         encoding="utf-8")
+    correct._stamp_correction_context(str(t / "S1.correction.json"), "")
     calls = []
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
     assert correct.cmd_run("Demo") == 1
@@ -1460,6 +1469,7 @@ def test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_correction(project, mo
     _root, t = project
     (t / "S1.correction.json").write_text('{"segments": [{"id": 0, "text": 5}]}',
                                           encoding="utf-8")
+    correct._stamp_correction_context(str(t / "S1.correction.json"), "")
     monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
 
     with pytest.raises(SystemExit) as ei:
@@ -2536,6 +2546,7 @@ def test_ohne_force_bleibt_die_teil_datei_der_resume_anker(project, monkeypatch)
               "segments": [{"id": 2, "speaker": "X", "text": "SCHON FERTIG"},
                            {"id": 3, "speaker": "X", "text": "SCHON FERTIG"}]}
     (t / "S1.part2.correction.json").write_text(json.dumps(fertig), encoding="utf-8")
+    correct._stamp_correction_context(str(t / "S1.part2.correction.json"), "", evidence="")
     calls = []
     monkeypatch.setattr(correct, "_run_claude", _chunk_claude(t, calls))
 
@@ -3043,6 +3054,7 @@ def test_zusammenfassung_verwirft_den_text_schluessel_auf_BEIDEN_wegen(
 
     if wiederverwendet:
         cpath.write_text(ungehorsam, encoding="utf-8")
+        correct._stamp_correction_context(str(cpath), "")
         frisch = os.path.getmtime(tdir / "b.json") + 60
         os.utime(cpath, (frisch, frisch))
         # Positivkontrolle fuer den Weg selbst: auf dem reuse-Zweig darf KEIN LLM laufen.

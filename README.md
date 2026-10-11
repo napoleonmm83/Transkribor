@@ -140,8 +140,7 @@ an. Damit lässt sich auch ein älteres Transkript geradeziehen, in dem noch ein
 verstandener Name steht. Willst du einen der beiden Absätze ganz loswerden, löschst du einfach
 den Text — leer heisst gestrichen.
 
-**Namen und Fachbegriffe vorab hinterlegen** (ab der nächsten Fassung; in `v0.56.0` gibt es
-den Eintrag im Projektmenü noch nicht). Kennt die KI die Eigennamen aus deinem Projekt,
+**Namen und Fachbegriffe vorab hinterlegen** (seit `v0.57.0`). Kennt die KI die Eigennamen aus deinem Projekt,
 kann sie falsch gehörte Stellen beim Korrigieren richtigstellen. Im Projektmenü unter
 **Namen & Fachbegriffe** trägst du bekannte
 Personen, Orte und Schreibweisen einmal ein; sie gelten dann für alle Aufnahmen des Projekts.
@@ -155,6 +154,18 @@ laufen, es wird nur der Text überarbeitet. Änderst du die Namensliste, gelten 
 KI-Korrekturen als überholt und werden beim nächsten Lauf neu gemacht. Was du selbst von Hand
 bearbeitet hast, bleibt dabei geschützt; nur wenn du eine solche Aufnahme ausdrücklich neu
 korrigieren lässt, fragt Transkribor noch einmal nach und überschreibt sie dann.
+
+**Gesprächskontext bei der vollen Korrektur (seit `v0.59.0`).** Vor dem Korrigieren
+analysiert die KI die ganze Aufnahme auf Themen, Bezüge und wiederkehrende Begriffe.
+Diese Hinweise bleiben Hypothesen mit Verweisen auf die Rohsegmente. Besonders unsichere
+Stellen werden zusätzlich mit mehr Audio davor und danach lokal nacherkannt — höchstens
+zwölf Ausschnitte, mit dem bereits vorhandenen Spracherkennungsmodell. Das Audio bleibt
+auf deinem Rechner. Fehlt das lokale Modell, läuft die Korrektur mit einem Hinweis weiter.
+Die anschliessende Prüfung erhält dieselben Hinweise und das Glossar, damit begründete
+Korrekturen nicht allein wegen des fehlerhaften Rohtexts zurückgenommen werden. Unklare
+Stellen gehören weiterhin in die Anmerkungen zum Nachhören. Der zusätzliche KI-Aufruf und
+die lokale Zweiterkennung können den Lauf verlängern; das ist keine Garantie für eine
+fehlerfreie Fassung. Leichte Korrektur und reine Zusammenfassung behalten ihren Ablauf.
 
 **Offene Punkte abhaken.** Ganz unten unter „Anmerkungen“ sammelt die KI, was sie *nicht* raten
 wollte — also genau die Stellen, an denen sich Nachhören lohnt. Die Liste gehört dir: eine
@@ -754,7 +765,7 @@ die Ursache samt Handlungsempfehlung (z. B. Rate-Limit mit Wartezeit, aufgebrauc
 abgelaufene Anmeldung oder ungültiger API-Schlüssel) in der Meldung und im Verbindungstest der
 Einstellungen. Nicht erkannte Fehler zeigt Transkribor mit dem technischen Fehlertext an.
 
-**Ab der nächsten Fassung kostet dich eine beschädigte Aufnahme nicht mehr den ganzen Lauf.**
+**Seit `v0.57.0` kostet dich eine beschädigte Aufnahme nicht mehr den ganzen Lauf.**
 Bisher konnte eine Aufnahme, deren Transkriptdatei zwar lesbar, aber innen durcheinander war,
 den Korrekturlauf mitten im Betrieb abbrechen — ohne Schlussmeldung, und die Aufnahmen, die
 schon fertig waren, wurden dir nie gemeldet. Jetzt wird diese eine Aufnahme übersprungen und
