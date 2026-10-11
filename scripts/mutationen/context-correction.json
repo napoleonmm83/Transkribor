@@ -56,6 +56,42 @@
       "gruen": [
         "test_partial_cache_requires_same_recording_evidence"
       ]
+    },
+    {
+      "id": "context-hypothesis-foreign-id",
+      "datei": "webtool/correction_context.py",
+      "von": "or any(type(sid) is not int or sid not in texts for sid in ids)",
+      "nach": "or any(type(sid) is not int for sid in ids)",
+      "rot": [
+        "test_invalid_schema_never_becomes_context"
+      ],
+      "gruen": [
+        "test_empty_analysis_has_no_invented_evidence"
+      ]
+    },
+    {
+      "id": "context-audio-cache-redo",
+      "datei": "webtool/correction_audio.py",
+      "von": "if (cached.get(\"identity\") == identity and _number(duration) and duration > 0",
+      "nach": "if (False and _number(duration) and duration > 0",
+      "rot": [
+        "test_cache_reuses_model_work_and_is_bound_to_raw_audio_options"
+      ],
+      "gruen": [
+        "test_clean_recording_never_imports_or_decodes"
+      ]
+    },
+    {
+      "id": "context-audio-model-download-enabled",
+      "datei": "webtool/correction_audio.py",
+      "von": "compute_type=\"int8\", local_files_only=True)",
+      "nach": "compute_type=\"int8\", local_files_only=False)",
+      "rot": [
+        "test_bounded_local_retry_preserves_raw_and_returns_candidates"
+      ],
+      "gruen": [
+        "test_clean_recording_never_imports_or_decodes"
+      ]
     }
   ]
 }
