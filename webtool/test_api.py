@@ -2833,6 +2833,110 @@ def _artefakte(tmp_path, base="S1"):
     return t
 
 
+_KONTEXT_ARTEFAKT_ENDUNGEN = (
+    ".context-cache", ".audio-evidence", ".context.tmp",
+    ".context-cache.tmp", ".audio-evidence.tmp", ".context.tmp.tmp",
+)
+
+
+@pytest.mark.parametrize("base", ["S1", "S1.2026", "Video[id]"])
+@pytest.mark.parametrize("aktion", ["rename", "delete", "transcribe"])
+def test_kontextartefakte_folgen_dem_aufnahmelebenszyklus(
+        client, tmp_path, monkeypatch, base, aktion):
+    import webtool.app as appmod
+    from webtool import paths
+
+    tdir = tmp_path / "Demo" / "transkripte"
+    audio = tmp_path / "Demo" / "audio"
+    if base != "S1":
+        (tdir / "S1.json").rename(tdir / f"{base}.json")
+        (audio / "S1.mp3").rename(audio / f"{base}.mp3")
+    roh = (tdir / f"{base}.json").read_bytes()
+    nachbarn = [base + ".Nachbar", base + "2", "Videoi"]
+    for name in [base, *nachbarn]:
+        if name != base:
+            (tdir / f"{name}.json").write_bytes(roh)
+            (audio / f"{name}.mp3").write_bytes(b"Nachbarton")
+        for endung in _KONTEXT_ARTEFAKT_ENDUNGEN:
+            (tdir / (name + endung)).write_text(name + endung, encoding="utf-8")
+
+    # Keine zusaetzliche Aufnahme darf aus einer Cache- oder Tempdatei entstehen.
+    erwartet = {base, *nachbarn}
+    assert set(paths.transcript_bases("Demo")) == erwartet
+    assert {f["base"] for f in client.get("/api/projects/Demo").json()["files"]} == erwartet
+    monkeypatch.setattr(appmod, "_start_transcribe", lambda *a, **kw: ("j1", True, "test"))
+    url = f"/api/projects/Demo/files/{base}"
+    if aktion == "rename":
+        antwort = client.post(url + "/rename", json={"name": "Neu [42].2026"})
+    elif aktion == "delete":
+        antwort = client.delete(url)
+    else:
+        antwort = client.post(url + "/transcribe")
+
+    assert antwort.status_code == 200, antwort.text
+    for endung in _KONTEXT_ARTEFAKT_ENDUNGEN:
+        assert not (tdir / (base + endung)).exists()
+        if aktion == "rename":
+            assert (tdir / ("Neu [42].2026" + endung)).read_text(encoding="utf-8") == base + endung
+        for name in nachbarn:
+            assert (tdir / (name + endung)).read_text(encoding="utf-8") == name + endung
+    for name in nachbarn:
+        assert (tdir / f"{name}.json").read_bytes() == roh
+        assert (audio / f"{name}.mp3").read_bytes() == b"Nachbarton"
+    if aktion == "rename":
+        assert (audio / "Neu [42].2026.mp3").exists()
+        erwartet.remove(base)
+        erwartet.add("Neu [42].2026")
+    elif aktion == "delete":
+        assert not (audio / f"{base}.mp3").exists()
+        erwartet.remove(base)
+    else:
+        assert (audio / f"{base}.mp3").exists()
+        erwartet.remove(base)
+    assert set(paths.transcript_bases("Demo")) == erwartet
+
+
+@pytest.mark.parametrize("aktion", ["rename", "delete", "transcribe"])
+def test_kontextartefakte_weg_reste_bleiben_aufnahmegebunden(
+        client, tmp_path, monkeypatch, aktion):
+    import webtool.app as appmod
+
+    tdir = tmp_path / "Demo" / "transkripte"
+    gestempelt = [_weg_datei(tdir, "S1" + endung, 3600)
+                  for endung in _KONTEXT_ARTEFAKT_ENDUNGEN]
+    alte = [tdir / ("S1" + endung + ".cafe1234.weg")
+            for endung in _KONTEXT_ARTEFAKT_ENDUNGEN]
+    nachbarn = [tdir / ("S1.2026" + endung + ".cafe1234.weg")
+                for endung in _KONTEXT_ARTEFAKT_ENDUNGEN]
+    for rest in alte + nachbarn:
+        rest.write_text(rest.name, encoding="utf-8")
+    monkeypatch.setattr(appmod, "_start_transcribe", lambda *a, **kw: ("j1", True, "test"))
+    if aktion == "rename":
+        antwort = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    elif aktion == "delete":
+        antwort = client.delete("/api/projects/Demo/files/S1")
+    else:
+        antwort = client.post("/api/projects/Demo/files/S1/transcribe")
+
+    assert antwort.status_code == 200, antwort.text
+    assert all(rest.read_text(encoding="utf-8") == rest.name for rest in nachbarn)
+    if aktion == "rename":
+        # Gestempelte Reservierungen laesst Rename fuer den bestehenden Aufraeumlauf liegen.
+        assert all(rest.exists() for rest in gestempelt)
+        for rest in alte:
+            assert not rest.exists()
+            assert (tdir / rest.name.replace("S1", "Neu", 1)).read_text(encoding="utf-8") == rest.name
+        assert client.delete("/api/projects/Demo/files/Neu").status_code == 200
+        assert all(not (tdir / rest.name.replace("S1", "Neu", 1)).exists() for rest in alte)
+        assert appmod._weg_reste_aufraeumen(str(tmp_path)) == len(gestempelt)
+        assert all(not rest.exists() for rest in gestempelt)
+    elif aktion == "delete":
+        assert all(not rest.exists() for rest in gestempelt + alte)
+    else:
+        assert all(not rest.exists() for rest in gestempelt)
+        assert all(rest.read_text(encoding="utf-8") == rest.name for rest in alte)
+
+
 def test_datei_loeschen_raeumt_audio_und_alle_artefakte_weg(client, tmp_path):
     t = _artefakte(tmp_path)
     r = client.delete("/api/projects/Demo/files/S1")
