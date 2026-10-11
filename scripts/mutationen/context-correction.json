@@ -129,6 +129,18 @@
       "gruen": [
         "test_whole_recording_shared_evidence_and_cached_callback"
       ]
+    },
+    {
+      "id": "context-status-prefix-from-filename",
+      "datei": "webtool/correct.py",
+      "von": "print(f\"  Belegvorbereitung: {label} — Gesprächskontext und lokale ASR-Belege vorbereiten …\", flush=True)",
+      "nach": "print(f\"  {label}: Gesprächskontext und lokale ASR-Belege vorbereiten …\", flush=True)",
+      "rot": [
+        "test_evidence_diagnostics_keep_fixed_prefix_and_single_line"
+      ],
+      "gruen": [
+        "test_evidence_is_shared_by_correct_and_verify"
+      ]
     }
   ]
 }
