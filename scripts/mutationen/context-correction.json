@@ -165,6 +165,18 @@
       "gruen": [
         "test_failed_rebuild_never_restores_correction_after_raw_replacement"
       ]
+    },
+    {
+      "id": "context-snapshot-origin-after-cache-validation",
+      "datei": "webtool/correct.py",
+      "von": "            if tiefe in (\"voll\", \"voll_dialekt\"):\n                with contextlib.suppress(OSError, ValueError):\n                    previous_raw = paths.kennung(raw_json)\n                    if _correction_cache_matches(cpath, raw_json, context):\n                        previous = _load(cpath)",
+      "nach": "            if tiefe in (\"voll\", \"voll_dialekt\") and _correction_cache_matches(cpath, raw_json, context):\n                with contextlib.suppress(OSError, ValueError):\n                    previous_raw = paths.kennung(raw_json)\n                    previous = _load(cpath)",
+      "rot": [
+        "test_failed_rebuild_never_restores_raw_replaced_during_cache_validation"
+      ],
+      "gruen": [
+        "test_failed_evidence_rebuild_preserves_previous_matching_correction"
+      ]
     }
   ]
 }

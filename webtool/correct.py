@@ -1926,10 +1926,11 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
             # Frische Evidenz darf einen Neubau ausloesen, ein Fehlversuch aber
             # das bisherige passende Ergebnis nicht verlieren. Die Sicherung
             # bleibt nur bis zur Validierung und nur fuer dieselbe Rohdatei.
-            if tiefe in ("voll", "voll_dialekt") and _correction_cache_matches(cpath, raw_json, context):
+            if tiefe in ("voll", "voll_dialekt"):
                 with contextlib.suppress(OSError, ValueError):
                     previous_raw = paths.kennung(raw_json)
-                    previous = _load(cpath)
+                    if _correction_cache_matches(cpath, raw_json, context):
+                        previous = _load(cpath)
             # Auch leichte Korrektur, Zusammenfassung und Part-Merge brauchen ein
             # frisches Ziel. Die Editorfassung bleibt bis zum erfolgreichen Apply.
             with contextlib.suppress(FileNotFoundError):
