@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.59.0 — 2026-10-11
+
 **Neu**
 - Die volle Korrektur berücksichtigt Gesprächsbezüge über die ganze Aufnahme, prüft besonders unsichere Stellen zusätzlich mit lokalem Audio und nutzt diese Hinweise auch bei der anschliessenden Treueprüfung.
 
