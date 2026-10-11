@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Die volle Korrektur berücksichtigt Gesprächsbezüge über die ganze Aufnahme, prüft besonders unsichere Stellen zusätzlich mit lokalem Audio und nutzt diese Hinweise auch bei der anschliessenden Treueprüfung.
+
 **Behoben**
 - Wenn die Projekt-Einstellungen beim erneuten Öffnen nicht geladen werden können, lässt sich nicht mehr versehentlich der alte Stand speichern.
 - Wer während des Speicherns von Projekt- oder Datei-Einstellungen zu einem anderen Projekt oder einer anderen Aufnahme wechselt, bekommt deren Dialog nicht mehr von der späten Antwort geschlossen.

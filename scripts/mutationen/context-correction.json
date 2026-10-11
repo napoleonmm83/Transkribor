@@ -1,0 +1,49 @@
+{
+  "test": "python -m pytest webtool/test_correction_pipeline.py webtool/test_correction_context.py webtool/test_correction_audio.py -q",
+  "pfade": [
+    "webtool/correct.py",
+    "webtool/correction_context.py",
+    "webtool/correction_audio.py",
+    "webtool/test_correction_pipeline.py",
+    "webtool/test_correction_context.py",
+    "webtool/test_correction_audio.py"
+  ],
+  "mutationen": [
+    {
+      "id": "context-policy-old-cache",
+      "datei": "webtool/correct.py",
+      "von": "    if doc.get(\"_correction_revision\") != CORRECTION_REVISION:\n        return False",
+      "nach": "    if False:\n        return False",
+      "rot": [
+        "test_old_correction_policy_is_not_reused"
+      ],
+      "gruen": [
+        "test_partial_cache_requires_same_recording_evidence"
+      ]
+    },
+    {
+      "id": "context-evidence-not-shared",
+      "datei": "webtool/correct.py",
+      "von": "        _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt,\n                     mehrsprachig=mehrsprachig, evidence=evidence)",
+      "nach": "        _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt,\n                     mehrsprachig=mehrsprachig, evidence=\"\")",
+      "rot": [
+        "test_full_entrypoints_prepare_context"
+      ],
+      "gruen": [
+        "test_old_correction_policy_is_not_reused"
+      ]
+    },
+    {
+      "id": "context-independent-audio-disabled",
+      "datei": "webtool/correct.py",
+      "von": "        result = correction_audio.retry_cached(_audio_path(project, base), raw_path, options)",
+      "nach": "        result = {\"message\": \"Ausgelassen\", \"candidates\": []}",
+      "rot": [
+        "test_evidence_builder_uses_current_settings_and_independent_audio"
+      ],
+      "gruen": [
+        "test_old_correction_policy_is_not_reused"
+      ]
+    }
+  ]
+}
