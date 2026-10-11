@@ -1895,6 +1895,8 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         print(f"↷ SKIP {b} (human_edited=true; --force zum Neu-Korrigieren)", flush=True)
         return None
     print(f"[active] {b}", flush=True)
+    previous = None
+    previous_raw = None
     try:  # eine kaputte Datei darf den Batch nicht abbrechen
         from . import projekt as _pj
         if context is None:
@@ -1921,6 +1923,13 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if reuse:
             print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
         else:
+            # Frische Evidenz darf einen Neubau ausloesen, ein Fehlversuch aber
+            # das bisherige passende Ergebnis nicht verlieren. Die Sicherung
+            # bleibt nur bis zur Validierung und nur fuer dieselbe Rohdatei.
+            if tiefe in ("voll", "voll_dialekt") and _correction_cache_matches(cpath, raw_json, context):
+                with contextlib.suppress(OSError, ValueError):
+                    previous_raw = paths.kennung(raw_json)
+                    previous = _load(cpath)
             # Auch leichte Korrektur, Zusammenfassung und Part-Merge brauchen ein
             # frisches Ziel. Die Editorfassung bleibt bis zum erfolgreichen Apply.
             with contextlib.suppress(FileNotFoundError):
@@ -1939,6 +1948,7 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         if not _valid_correction(cpath):
             print(f"✗ FEHLT/ungültig: {b}.correction.json — überspringe", flush=True)
             return False
+        previous = None  # Identitaets- und Apply-Riegel duerfen keine alte Fassung wiederbeleben.
         if not reuse:
             # Der Stempel ist eine OPTIMIERUNG (er erspart der naechsten Runde einen
             # Neubau), kein Ergebnis. Ungefangen stuerbe eine GELUNGENE Korrektur an
@@ -2010,6 +2020,10 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         print(f"✗ Fehler bei {b}: {_einzeilig(e)} — überspringe", flush=True)
         return False
     finally:
+        if (previous is not None and previous_raw is not None
+                and paths.kennung(raw_json) == previous_raw and not _valid_correction(cpath)):
+            with contextlib.suppress(OSError, ValueError):
+                paths.atomic_write(cpath, json.dumps(previous, ensure_ascii=False, indent=1))
         print(f"[done] {b}", flush=True)
 
 

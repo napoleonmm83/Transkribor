@@ -91,12 +91,16 @@ def test_context_cache_providerfehler_erhaelt_editor_ohne_alten_erfolg(project, 
     assert correct.prep_single("Demo", "S1")
     assert correct.correct_ai_single("Demo", "S1", gjson="", context="alt", verify=False) is True
     previous = (t / "S1.edit.json").read_bytes()
+    previous_cache = json.loads((t / "S1.correction.json").read_text(encoding="utf-8"))
     attempts = []
     monkeypatch.setattr(correct, "_ask_llm", lambda *a: attempts.append(a))
     assert correct.correct_ai_single("Demo", "S1", gjson="", context="alt" if force else "neu", force=force) is False
     assert len(attempts) == 1
     assert (t / "S1.edit.json").read_bytes() == previous
-    assert not (t / "S1.correction.json").exists()
+    if force:  # Quelle und Kontext passen weiter; Fehlversuch bleibt trotzdem False.
+        assert json.loads((t / "S1.correction.json").read_text(encoding="utf-8")) == previous_cache
+    else:  # Ein Cache des anderen Nutzerkontexts darf nicht restauriert werden.
+        assert not (t / "S1.correction.json").exists()
 
 
 @pytest.mark.parametrize("context,count", [("Kontext A", 1), ("Kontext B", 2), ("", 2)])

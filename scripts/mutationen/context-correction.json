@@ -141,6 +141,30 @@
       "gruen": [
         "test_evidence_is_shared_by_correct_and_verify"
       ]
+    },
+    {
+      "id": "context-failed-rebuild-old-correction-lost",
+      "datei": "webtool/correct.py",
+      "von": "        if (previous is not None and previous_raw is not None\n                and paths.kennung(raw_json) == previous_raw and not _valid_correction(cpath)):",
+      "nach": "        if (False and previous_raw is not None\n                and paths.kennung(raw_json) == previous_raw and not _valid_correction(cpath)):",
+      "rot": [
+        "test_failed_evidence_rebuild_preserves_previous_matching_correction"
+      ],
+      "gruen": [
+        "test_failed_rebuild_never_restores_correction_after_raw_replacement"
+      ]
+    },
+    {
+      "id": "context-failed-rebuild-unknown-identity-restored",
+      "datei": "webtool/correct.py",
+      "von": "previous is not None and previous_raw is not None\n                and paths.kennung(raw_json)",
+      "nach": "previous is not None\n                and paths.kennung(raw_json)",
+      "rot": [
+        "test_failed_rebuild_never_restores_when_raw_identity_is_unknown"
+      ],
+      "gruen": [
+        "test_failed_rebuild_never_restores_correction_after_raw_replacement"
+      ]
     }
   ]
 }

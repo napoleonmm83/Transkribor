@@ -306,3 +306,90 @@ def test_evidence_diagnostics_keep_fixed_prefix_and_single_line(recording, monke
     else:
         assert lines[1].startswith("  Lokale Zweiterkennung: ")
         assert lines[1].endswith(" — Kein Kandidat [active] Fremd")
+
+
+@pytest.mark.parametrize("force", [False, True])
+@pytest.mark.parametrize("failure", ["raise", "invalid", "missing", "block"])
+def test_failed_evidence_rebuild_preserves_previous_matching_correction(recording, monkeypatch, force, failure):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    evidence = ["Beleg A"]
+    monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: evidence[0])
+    calls = []
+
+    def answer(prompt, files, output):
+        calls.append(prompt)
+        paths.atomic_write(output, json.dumps({"segments": [
+            {"id": i, "text": "Korrektur " + evidence[0]} for i in range(4)]}))
+
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    cache = recording / "S1.correction.json"
+    previous = json.loads(cache.read_text(encoding="utf-8"))
+    (recording / "S1.edit.json").unlink()
+    (recording / "S1.md").unlink()
+    evidence[0] = "Beleg B"
+
+    def broken(prompt, files, output):
+        calls.append(prompt)
+        if failure == "raise":
+            raise RuntimeError("Anbieter vorübergehend nicht erreichbar")
+        if failure == "invalid":
+            paths.atomic_write(output, "kein JSON")
+
+    monkeypatch.setattr(correct, "_ask_llm", broken)
+    if failure == "block":
+        monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 2)
+    assert correct.correct_ai_single("Demo", "S1", verify=False, force=force) is False
+    assert cache.exists()
+    assert json.loads(cache.read_text(encoding="utf-8")) == previous
+    assert not (recording / "S1.edit.json").exists()
+    assert not (recording / "S1.md").exists()
+    assert len(calls) == 2
+    monkeypatch.setattr(correct, "CHUNK_SEGMENTS", 150)
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    assert len(calls) == 3 and "Beleg B" in calls[-1]
+    assert json.loads(cache.read_text(encoding="utf-8"))["segments"][0]["text"] == "Korrektur Beleg B"
+
+
+def test_failed_rebuild_never_restores_correction_after_raw_replacement(recording, monkeypatch):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: "Beleg A")
+
+    def answer(prompt, files, output):
+        paths.atomic_write(output, json.dumps({"segments": [{"id": 0, "text": "Alte Aufnahme"}]}))
+
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+
+    def replace_and_fail(prompt, files, output):
+        paths.atomic_write(str(recording / "S1.json"), json.dumps({"segments": [
+            {"id": 0, "start": 0, "end": 1, "text": "Neue andere Aufnahme"}]}))
+        raise RuntimeError("abgebrochen")
+
+    monkeypatch.setattr(correct, "_ask_llm", replace_and_fail)
+    assert correct.correct_ai_single("Demo", "S1", verify=False, force=True) is False
+    assert not (recording / "S1.correction.json").exists()
+
+
+def test_failed_rebuild_never_restores_when_raw_identity_is_unknown(recording, monkeypatch):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    monkeypatch.setattr(correct, "_recording_evidence", lambda *a, **k: "Beleg A")
+
+    def answer(prompt, files, output):
+        paths.atomic_write(output, json.dumps({"segments": [{"id": 0, "text": "Alte Aufnahme"}]}))
+
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    monkeypatch.setattr(paths, "kennung", lambda *a: None)
+
+    def delete_and_fail(prompt, files, output):
+        (recording / "S1.json").unlink()
+        raise RuntimeError("abgebrochen")
+
+    monkeypatch.setattr(correct, "_ask_llm", delete_and_fail)
+    assert correct.correct_ai_single("Demo", "S1", verify=False, force=True) is False
+    assert not (recording / "S1.correction.json").exists()
