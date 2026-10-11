@@ -116,6 +116,8 @@ def namensform(name: str) -> str:
 
 _TRANSKRIPT_ENDUNGEN = (
     ".edit.json", ".correction.json", ".diar.json", ".segments.json",
+    ".context-cache", ".audio-evidence", ".context.tmp",
+    ".context-cache.tmp", ".audio-evidence.tmp", ".context.tmp.tmp",
     ".json", ".md", ".srt", ".vtt", ".txt",
 )
 
