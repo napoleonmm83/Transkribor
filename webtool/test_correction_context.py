@@ -247,3 +247,18 @@ def test_same_named_cache_from_another_recording_is_not_reused(recording, tmp_pa
     calls = []
     context.prepare(str(other_raw), str(other_tagged), inputs, answer(observation(), calls))
     assert len(calls) == 1
+
+
+def test_failed_force_does_not_restore_old_context_on_next_run(recording):
+    calls = []
+    prepare(recording, answer(observation("Alte Lesart"), calls))
+    raw, tagged, inputs = recording
+
+    def fail(*args):
+        raise RuntimeError("Analyse gescheitert")
+
+    with pytest.raises(RuntimeError):
+        context.prepare(str(raw), str(tagged), inputs, fail, force=True)
+    renewed = prepare(recording, answer(observation("Neue Lesart"), calls))
+    assert "Neue Lesart" in renewed and "Alte Lesart" not in renewed
+    assert len(calls) == 2
