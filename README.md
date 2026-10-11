@@ -161,7 +161,8 @@ Diese Hinweise bleiben Hypothesen mit Verweisen auf die Rohsegmente. Besonders u
 Stellen werden zusätzlich mit mehr Audio davor und danach lokal nacherkannt — höchstens
 zwölf Ausschnitte, wenn das gewählte faster-whisper-Modell bereits lokal vorhanden ist.
 Ein reines whisper.cpp-/GGML-Modell auf dem Mac reicht dafür nicht. Das Audio bleibt
-auf deinem Rechner. Fehlt das passende lokale Modell, läuft die Korrektur mit einem Hinweis weiter.
+auf deinem Rechner. Fehlt das passende lokale Modell, läuft die Korrektur ohne lokale
+Zweiterkennung weiter.
 Die anschliessende Prüfung erhält dieselben Hinweise und das Glossar, damit begründete
 Korrekturen nicht allein wegen des fehlerhaften Rohtexts zurückgenommen werden. Unklare
 Stellen gehören weiterhin in die Anmerkungen zum Nachhören. Der zusätzliche KI-Aufruf und
