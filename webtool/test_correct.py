@@ -196,7 +196,7 @@ def test_auto_skips_glossary_when_no_fresh_full_correction(project, monkeypatch,
     if mode == "reuse":
         cp = tdir / "S1.correction.json"
         cp.write_text('{"segments": [{"id": 0}]}', encoding="utf-8")
-        correct._stamp_correction_context(str(cp), "")
+        correct._stamp_correction_context(str(cp), "", evidence="")
         newer = (tdir / "S1.json").stat().st_mtime + 10
         os.utime(cp, (newer, newer))
     elif mode == "human":
@@ -1067,7 +1067,7 @@ def test_run_reuses_existing_correction(project, monkeypatch):
     (t / "S1.correction.json").write_text(json.dumps(
         {"base": "S1", "segments": [{"id": 0, "speaker": "Interviewer", "text": "Schon da."}]}),
         encoding="utf-8")
-    correct._stamp_correction_context(str(t / "S1.correction.json"), "")
+    correct._stamp_correction_context(str(t / "S1.correction.json"), "", evidence="")
     calls = []
     monkeypatch.setattr(correct, "_run_claude", _fake_claude(t, calls))
     assert correct.cmd_run("Demo") == 1
@@ -1469,7 +1469,7 @@ def test_run_bilanz_nennt_nicht_den_anbieter_bei_kaputter_correction(project, mo
     _root, t = project
     (t / "S1.correction.json").write_text('{"segments": [{"id": 0, "text": 5}]}',
                                           encoding="utf-8")
-    correct._stamp_correction_context(str(t / "S1.correction.json"), "")
+    correct._stamp_correction_context(str(t / "S1.correction.json"), "", evidence="")
     monkeypatch.setattr(correct, "_run_claude", lambda prompt, workdir: None)
 
     with pytest.raises(SystemExit) as ei:

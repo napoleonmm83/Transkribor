@@ -1666,7 +1666,7 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
 def _correct_file(project: str, base: str, gjson: str, context: str, verify: bool,
                   force: bool = False,
                   ziel: str = "lesbarem Standarddeutsch", dialekt: bool = True,
-                  mehrsprachig: bool = False) -> None:
+                  mehrsprachig: bool = False, evidence: str | None = None) -> None:
     """Korrektur für EINE Datei -> <base>.correction.json.
 
     Bis CHUNK_SEGMENTS Segmente genau wie bisher: ein claude-Aufruf schreibt direkt die
@@ -1682,11 +1682,12 @@ def _correct_file(project: str, base: str, gjson: str, context: str, verify: boo
     raw_json = os.path.join(tdir, base + ".json")   # Frische-Anker der Blöcke: die Roh-JSON, NICHT
     ids = _tagged_ids(tagged)                       # tagged.txt — das schreibt cmd_prep bei JEDEM Lauf neu,
                                                     # womit kein Block je „neuer“ wäre und der Resume tot.
-    try:
-        evidence = _recording_evidence(project, base, gjson, context, ziel=ziel, mehrsprachig=mehrsprachig)
-    except (OSError, ValueError, RuntimeError) as exc:
-        print(f"  ⚠ Kontext-Nachprüfung ausgelassen: {_einzeilig(exc)}", flush=True)
-        evidence = ""
+    if evidence is None:
+        try:
+            evidence = _recording_evidence(project, base, gjson, context, ziel=ziel, mehrsprachig=mehrsprachig)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"  ⚠ Kontext-Nachprüfung ausgelassen: {_einzeilig(exc)}", flush=True)
+            evidence = ""
     if len(ids) <= CHUNK_SEGMENTS:
         _correct_one(base, tagged, cpath, gjson, context, verify, ziel=ziel, dialekt=dialekt,
                      mehrsprachig=mehrsprachig, evidence=evidence)
@@ -1888,8 +1889,6 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         from . import projekt as _pj
         if context is None:
             context = _context(project)
-        reuse = (base_explicit is None and not force
-                 and _correction_cache_matches(cpath, raw_json, context))
         # Tiefe pro Datei: voll-Dateien laufen wie bisher (Glossar + Verify),
         # leicht/zusammenfassung sind einzelne LLM-Aufrufe ohne Treue-Pass.
         #
@@ -1899,6 +1898,16 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
         # `_valid_correction` winkt sie durch und `cmd_apply` wendet sie an. Der Riegel steht
         # deshalb an der EINEN Stelle, an der beide Wege zusammenlaufen (CodeRabbit-CLI).
         tiefe = _pj.tiefe_effektiv(project, b)
+        ziel, dialekt, mehr = _ziel_dialekt(project, b)
+        evidence = None
+        if tiefe in ("voll", "voll_dialekt"):
+            try:
+                evidence = _recording_evidence(project, b, gjson, context, ziel=ziel, mehrsprachig=mehr)
+            except (OSError, ValueError, RuntimeError) as exc:
+                print(f"  ⚠ Kontext-Nachprüfung ausgelassen: {_einzeilig(exc)}", flush=True)
+                evidence = ""
+        reuse = (base_explicit is None and not force
+                 and _correction_cache_matches(cpath, raw_json, context, evidence=evidence))
         if reuse:
             print(f"↷ nutze vorhandene {b}.correction.json", flush=True)
         else:
@@ -1906,12 +1915,11 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
             # frisches Ziel. Die Editorfassung bleibt bis zum erfolgreichen Apply.
             with contextlib.suppress(FileNotFoundError):
                 os.remove(cpath)
-            ziel, dialekt, mehr = _ziel_dialekt(project, b)
             if tiefe in ("voll", "voll_dialekt"):
                 # Kein Glossarbau an dieser Stelle: siehe Docstring — im gestaffelten
                 # Lauf waere das ein korpusweiter Aufruf JE Aufnahme.
                 _correct_file(project, b, gjson, context, verify, force,
-                              ziel=ziel, dialekt=dialekt, mehrsprachig=mehr)
+                              ziel=ziel, dialekt=dialekt, mehrsprachig=mehr, evidence=evidence)
             elif tiefe == "leicht":
                 _light_correct_file(project, b, ziel, dialekt, context, mehrsprachig=mehr)
             else:  # zusammenfassung
@@ -1929,7 +1937,7 @@ def correct_ai_single(project: str, b: str, gjson: str = "", context: str = None
             # machte daraus ein `False`, und die edit.json bliebe ungeschrieben, obwohl
             # die gueltige Korrektur auf der Platte liegt.
             with contextlib.suppress(OSError, ValueError):
-                _stamp_correction_context(cpath, context)
+                _stamp_correction_context(cpath, context, evidence=evidence)
         # LETZTE Identitaetspruefung, unmittelbar vor dem Schreiben (#523, CodeRabbit-CLI).
         #
         # Zwischen der Pruefung in `one()` und dieser Zeile liegt die ganze KI-Phase — das

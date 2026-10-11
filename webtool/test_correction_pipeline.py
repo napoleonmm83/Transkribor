@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -69,7 +70,8 @@ def test_prepare_evidence_once_before_all_blocks(recording, monkeypatch):
 
 def test_old_correction_policy_is_not_reused(recording):
     target = recording / "S1.correction.json"
-    paths.atomic_write(str(target), json.dumps({"base": "S1", "segments": [{"id": 0, "text": "Alt"}]}))
+    paths.atomic_write(str(target), json.dumps({"base": "S1", "segments": [{"id": 0, "text": "Alt"}],
+                                              "_context_sha256": hashlib.sha256(b"").hexdigest()}))
     assert not correct._correction_cache_matches(str(target), str(recording / "S1.json"), "")
     correct._stamp_correction_context(str(target), "")
     assert correct._correction_cache_matches(str(target), str(recording / "S1.json"), "")
@@ -154,3 +156,26 @@ def test_full_entrypoints_prepare_context(recording, monkeypatch, entry):
     else:
         assert correct.correct_ai_single("Demo", "S1", gjson="Glossar", verify=True) is True
     assert len(calls) == 1
+
+
+def test_completed_fallback_is_rebuilt_when_recording_evidence_appears(recording, monkeypatch):
+    from webtool import projekt
+    monkeypatch.setattr(projekt, "tiefe_effektiv", lambda *a: "voll")
+    evidence = [""]
+    prepared, answered = [], []
+    monkeypatch.setattr(correct, "_recording_evidence",
+                        lambda *a, **k: prepared.append(a) or evidence[0])
+
+    def answer(prompt, inputs, output):
+        answered.append(prompt)
+        paths.atomic_write(output, json.dumps({"segments": [
+            {"id": i, "text": f"Pass {len(answered)}"} for i in range(4)]}))
+
+    monkeypatch.setattr(correct, "_ask_llm", answer)
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    evidence[0] = "Neue Audiolesart mit Beleg"
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    assert len(answered) == 2 and len(prepared) == 2
+    assert "Neue Audiolesart mit Beleg" in answered[-1]
+    assert correct.correct_ai_single("Demo", "S1", verify=False)
+    assert len(answered) == 2 and len(prepared) == 3  # Same evidence reuses the complete result.
