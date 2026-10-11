@@ -117,6 +117,18 @@
       "gruen": [
         "test_evidence_is_shared_by_correct_and_verify"
       ]
+    },
+    {
+      "id": "context-force-old-analysis-resurrected",
+      "datei": "webtool/correction_context.py",
+      "von": "    if force:\n        cache.unlink(missing_ok=True)\n        Path(str(cache) + \".tmp\").unlink(missing_ok=True)",
+      "nach": "    if False:\n        cache.unlink(missing_ok=True)\n        Path(str(cache) + \".tmp\").unlink(missing_ok=True)",
+      "rot": [
+        "test_failed_force_does_not_restore_old_context_on_next_run"
+      ],
+      "gruen": [
+        "test_whole_recording_shared_evidence_and_cached_callback"
+      ]
     }
   ]
 }

@@ -134,6 +134,10 @@ def prepare(raw_path: str, tagged_path: str, inputs: ContextInputs,
         "inputs": input_values,
     }
     cache, target = raw.with_suffix(".context-cache"), raw.with_suffix(".context.tmp")
+    if force:
+        cache.unlink(missing_ok=True)
+        Path(str(cache) + ".tmp").unlink(missing_ok=True)
+
 
     def unchanged():
         if raw.read_bytes() != raw_bytes or tagged.read_bytes() != tagged_bytes:
