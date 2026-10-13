@@ -9,10 +9,10 @@ Hier arbeiten Codex und Claude Code parallel im selben Repo. Deshalb gilt:
 2. **Beende jede Aufgabe mit einem Commit auf diesem Branch**, auch wenn sie noch
    nicht fertig ist (dann als WIP-Commit). Geprüfte, aber uncommittete Änderungen
    sind für die andere Seite unsichtbar und gehen beim nächsten Aufräumen verloren.
-3. **Pushen und PR nur auf ausdrücklichen Auftrag.** Codex führt die Review-Kette
-   selbst aus: `.agents/skills/pr-review/SKILL.md` lesen und anwenden. Dafür ist
-   keine Übergabe an Claude Code nötig. Ohne Push-/PR-Auftrag endet die Arbeit
-   nach Commit und lokalen Reviews; Merge und Release sind eigene Aufträge.
+3. **Fertige beauftragte Arbeit nach der Review-Kette pushen und als PR anlegen.**
+   Dauerhafte Nutzerfreigabe vom 2026-10-13. Codex führt dafür
+   `.agents/skills/pr-review/SKILL.md` selbst aus. „Nur lokal“/„nicht pushen“
+   hat Vorrang; WIP bleibt lokal. Merge und Release sind eigene Aufträge.
 4. **Wegwerfordner** gehören nach `.tmp-<name>/` in den Repo-Stamm; die `.gitignore`
    schliesst sie aus. Sie sind nie ein Ablageort für Arbeit, die bleiben soll.
 

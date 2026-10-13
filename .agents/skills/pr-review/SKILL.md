@@ -1,6 +1,6 @@
 ---
 name: pr-review
-description: Führt die Transkribor-PR-Review-Kette mit Codex aus. Nach beauftragten Fixes, Features oder Änderungen an Arbeitsanweisungen vor Abschluss anwenden; auch für ausdrücklich beauftragte PR-Prüfungen. Veröffentlichung nur mit Push-/PR-Auftrag, reine Fragen oder nur lesende Aufträge veröffentlichen nichts.
+description: Führt die Transkribor-PR-Review-Kette mit Codex aus. Nach beauftragten Fixes, Features oder Änderungen an Arbeitsanweisungen vor Abschluss anwenden; fertige Arbeit wird nach Review gepusht und als PR angelegt. Nur-lokal-Aufträge, reine Fragen und nur lesende Aufträge veröffentlichen nichts.
 ---
 
 # Transkribor: PR-Review mit Codex
@@ -12,10 +12,10 @@ Codex-Plugin-Stufe und `codex review` bleiben ausgeschlossen; keine Aussage
 
 ## Freigabe und Vorbereitung
 
-Die Freigabegrenze aus `AGENTS.md` bleibt erhalten: **Push und PR nur auf
-ausdrücklichen Auftrag.** Ohne diesen endet die Aufgabe nach Commit und lokalen
-Reviews. „Nur lokal“/„nicht pushen“ hat Vorrang. Merge, Release, fremde alte
-Branches und Kundendaten sind nicht Teil eines Review- oder PR-Auftrags.
+Der Nutzer hat am 2026-10-13 dauerhaft **Push und PR für fertig beauftragte
+Codex-Arbeit nach dieser Review-Kette** freigegeben. „Nur lokal“/„nicht pushen“
+hat Vorrang; WIP bleibt lokal. Merge, Release, fremde alte Branches und
+Kundendaten sind nicht Teil dieser Freigabe.
 Die Review-Kette selbst läuft ohne erneute Rückfrage; vorhandene ausdrückliche
 Freigaben werden nicht erneut abgefragt.
 
@@ -91,9 +91,9 @@ Limits ohne Warten als übersprungen dokumentieren. Bei bestehendem PR-Auftrag
 darf danach ein PR zur transparenten Übergabe entstehen, mit der fehlenden
 Prüfung ausdrücklich im PR-Text. Bekannte kritische Defekte vorher beheben.
 
-## 3. Bei PR-Auftrag: Push, PR und CI/Reviews
+## 3. Push, PR und CI/Reviews
 
-Ohne ausdrücklichen Push-/PR-Auftrag hier stoppen, lokale Ergebnisse berichten.
+Bei „nur lokal“/„nicht pushen“ hier stoppen; sonst gilt die dauerhafte Freigabe.
 GitHub-Befehle im ursprünglichen Worktree ausführen, **nicht im Reviewclone**:
 dessen origin zeigt auf ein lokales Repo. Vor Push HEAD/Branch gegen Berichte
 prüfen. Nur eigenen Branch ohne force pushen. Prüfe, ob ein offener PR für
