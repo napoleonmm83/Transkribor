@@ -35,9 +35,8 @@ Die frühere zusätzliche Plugin-Stufe `codex review` bleibt ausgeschlossen.
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the
 code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
-scanning cannot.
+the codebase.** The graph can provide structural context (callers, dependents,
+and test coverage) and may reduce the need for file scanning.
 
 ### When to use graph tools FIRST
 
