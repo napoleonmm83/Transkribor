@@ -41,6 +41,9 @@ jobs:
   # Entscheidet, WAS dieser Lauf ist, und hebt bei einem Merge die Version.
   version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
     outputs:
       art: ${{ steps.plan.outputs.art }}       # release | test | keine
       ref: ${{ steps.plan.outputs.ref }}       # was gebaut wird (leer = Vorgabe)
@@ -51,11 +54,14 @@ jobs:
           fetch-depth: 0     # ohne Historie und Tags findet scripts/fassung.sh nichts
       - id: plan
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           schreib() { echo "$1=$2" >> "$GITHUB_OUTPUT"; }
 
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            bash scripts/release-vorabpruefung.sh readme
             echo "Von Hand gesetzter Tag — bauen und veroeffentlichen."
             schreib art release; schreib tag "${GITHUB_REF#refs/tags/}"; schreib ref ""
             exit 0
@@ -81,7 +87,7 @@ jobs:
           # liesse den Job mit rc=1 und ohne jede Begruendung stehen — und der Bau-Job, wo
           # die Tests sichtbar laufen, kommt dann nie dran.
           #
-          # Seit #536 sind es VIER Skripte: `macos-mindest.sh` schreibt die Mindest-macOS-Version
+          # Seit #536 schreibt `macos-mindest.sh` die Mindest-macOS-Version
           # in die `latest-mac.yml`, und was der Update-Feed sagt, holt nach dem Veroeffentlichen
           # ebenfalls niemand zurueck.
           #
@@ -90,13 +96,17 @@ jobs:
           # 4,9 s); fassung.test.sh legt drei Wegwerf-Repos mit Tags an und kostet lokal
           # 2,4 s (Windows/Git Bash, Minimum aus drei Laeufen — auf Linux weniger, dort
           # sind die vielen kleinen git-Aufrufe billiger).
-          for t in versionshoehe notizen fassung macos-mindest; do
+          for t in versionshoehe notizen fassung macos-mindest release-vorabpruefung; do
             if ! aus="$(bash "scripts/$t.test.sh" 2>&1)"; then
               printf '%s\n' "$aus"
               echo "scripts/$t.test.sh ist rot — Abbruch vor jeder Auswertung."
               exit 1
             fi
           done
+
+          # Beide Vorbedingungen vor dem ersten Versions-/Notiz-/Tag-Schreibzugriff.
+          bash scripts/release-vorabpruefung.sh readme
+          bash scripts/release-vorabpruefung.sh lauf "$GITHUB_SHA" "$GITHUB_REF_NAME"
 
           # Welcher Tag eine Fassung IST, entscheidet scripts/fassung.sh. Dort steht auch,
           # warum ein Glob das nicht kann: `modelle-v1` traegt die Sprechertrennungs-Modelle,
@@ -238,6 +248,7 @@ jobs:
           bash scripts/notizen.test.sh
           bash scripts/fassung.test.sh
           bash scripts/macos-mindest.test.sh
+          bash scripts/release-vorabpruefung.test.sh
 
       # electron-updater vergleicht die Version aus der package.json, NICHT den Tag. Ein Tag
       # v0.2.0 auf einer package.json mit 0.1.0 baut Installer, die sich als 0.1.0 ausgeben —
