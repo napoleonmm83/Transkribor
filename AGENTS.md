@@ -2,6 +2,9 @@
 
 Hier arbeiten Codex und Claude Code parallel im selben Repo. Deshalb gilt:
 
+Reine Fragen und ausdrücklich nur lesende Aufträge sind von der Worktree- und
+Commitpflicht ausgenommen. Sie enden ohne Repository-Änderung und ohne leeren Commit.
+
 1. **Arbeite nie direkt auf `master` im Haupt-Checkout `E:\Git\Transkribor`.**
    Lege zu Beginn jeder Aufgabe einen eigenen Branch in einem eigenen Arbeitsbaum an:
    `git -C E:\Git\Transkribor worktree add .worktrees/<aufgabe> -b <typ>/<aufgabe> origin/master`
