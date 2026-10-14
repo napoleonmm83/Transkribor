@@ -14,8 +14,8 @@ Freigabe-Job Version, Release-Notizen und Tag schreibt:
   Fuehrende Nullen und Hex-Grossschreibung werden ebenfalls beruecksichtigt.
   Die Pruefung rendert kein allgemeines HTML oder Markdown; beispielsweise
   HTML-Tags, Linktexte und HTML-Fehlerkorrektur (etwa fehlende Semikolons)
-  werden nicht aufgeloest. Sie unterscheidet keinen
-  Treffer von einem Lesefehler.
+  werden nicht aufgeloest. Nicht lesbare Dateien, Normalisierungsfehler und
+  grep-Fehler werden getrennt von einem fehlenden Treffer diagnostiziert.
 - `lauf <vollstaendige Commit-SHA> <Branch>`: Der neueste Push-Lauf von
   `test.yml` fuer genau diesen Commit und Branch muss `completed/success`
   melden. Fehlende, laufende, abgebrochene oder rote Laeufe sowie API-Fehler

@@ -71,7 +71,7 @@ const LoadedWaveform = forwardRef<WaveHandle, WaveProps & { data?: WaveformData 
     const [mediaError, setMediaError] = useState<string | null>(null)
     useEffect(() => {
       if (!wavesurfer) return
-      return wavesurfer.on('error', (error: Error) => setMediaError(error.message))
+      return wavesurfer.on('error', (error: Error) => setMediaError(error.message || 'Keine weiteren Angaben'))
     }, [wavesurfer])
 
     // Das zuletzt angespielte Stueck. Muss hier liegen und nicht in wavesurfer: der loescht

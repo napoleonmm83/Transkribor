@@ -165,8 +165,33 @@ describe('Waveform bounded stored recordings', () => {
   it('shows a media load failure', async () => {
     render(<Waveform url={storedUrl} onTime={() => {}} />)
     await waitFor(() => expect(h.options).toHaveBeenCalled())
-    act(() => h.listeners.get('error')?.(new Error('Audio fehlt') as never))
+    expect(h.listeners.has('error')).toBe(true)
+    act(() => h.listeners.get('error')!(new Error('Audio fehlt') as never))
     expect(screen.getByRole('alert')).toHaveTextContent('Audio fehlt')
     expect(screen.getByLabelText('Abspielen')).toBeDisabled()
+    expect(screen.getByLabelText('Stopp')).toBeDisabled()
   })
+  it.each([
+    ['Error', new Error('')],
+    ['MediaError', { code: 3, message: '' }],
+  ])('shows empty media error as an alert and disables controls: %s', async (_kind, error) => {
+    render(<Waveform url={storedUrl} onTime={() => {}} />)
+    await waitFor(() => expect(h.options).toHaveBeenCalled())
+    expect(h.listeners.has('error')).toBe(true)
+    act(() => h.listeners.get('error')!(error as never))
+    expect(screen.getByRole('alert')).toHaveTextContent('Keine weiteren Angaben')
+    expect(screen.getByLabelText('Abspielen')).toBeDisabled()
+    expect(screen.getByLabelText('Stopp')).toBeDisabled()
+  })
+
+  it('preserves a nonempty MediaError diagnostic', async () => {
+    render(<Waveform url={storedUrl} onTime={() => {}} />)
+    await waitFor(() => expect(h.options).toHaveBeenCalled())
+    expect(h.listeners.has('error')).toBe(true)
+    act(() => h.listeners.get('error')!({ code: 3, message: 'Decoderdiagnose' } as never))
+    expect(screen.getByRole('alert')).toHaveTextContent('Decoderdiagnose')
+    expect(screen.getByLabelText('Abspielen')).toBeDisabled()
+    expect(screen.getByLabelText('Stopp')).toBeDisabled()
+  })
+
 })
