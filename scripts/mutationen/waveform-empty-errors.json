@@ -16,7 +16,8 @@
       "gruen": [
         "preserves a nonempty MediaError diagnostic",
         "never starts a stored URL before peaks arrive and reports supplied duration",
-        "preserves local blob preview with onBereit"
+        "preserves local blob preview with onBereit",
+        "clears media error when recording URL changes"
       ]
     }
   ]
