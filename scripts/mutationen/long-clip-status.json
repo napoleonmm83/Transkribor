@@ -1,0 +1,21 @@
+{
+  "test": "npm --prefix webtool/frontend test -- src/lib/jobPhases.test.ts -t \"raw transcript replacement\"",
+  "pfade": [
+    "webtool/frontend/src/lib/jobPhases.ts",
+    "webtool/frontend/src/lib/jobPhases.test.ts"
+  ],
+  "mutationen": [
+    {
+      "id": "raw-replacement-keeps-old-active",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "    // Die Quelle wurde ersetzt: alte Arbeit endet, ein Urteil ueber die neue fehlt.\n    else if ((m = l.match(/^↷ SKIP (.+) \\(Roh-Transkript waehrend des Laufs ausgetauscht\\)$/))) {\n      delete active[m[1]]\n      delete blocks[m[1]]\n      if (cursor === m[1]) cursor = null\n    }",
+      "nach": "",
+      "rot": [
+        "preparation without judging the replacement"
+      ],
+      "gruen": [
+        "does not turn an unrelated nested done into a preparation outcome"
+      ]
+    }
+  ]
+}
