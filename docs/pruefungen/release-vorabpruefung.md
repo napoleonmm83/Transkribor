@@ -9,9 +9,11 @@ Freigabe-Job Version, Release-Notizen und Tag schreibt:
   `LC_ALL=C`, beruecksichtigt Zeilenumbrueche, Markdown-Zitate/Hervorhebung
   durch Sternchen, Unterstriche und Backticks sowie geschuetzte Leerzeichen
   U+00A0/U+202F (literal, &nbsp; fuer U+00A0 oder numerisch dezimal/hex).
+  Numerische Referenzen muessen mit einem Semikolon enden.
   Fuehrende Nullen und Hex-Grossschreibung werden ebenfalls beruecksichtigt.
   Die Pruefung rendert kein allgemeines HTML oder Markdown; beispielsweise
-  HTML-Tags und Linktexte werden nicht aufgeloest. Sie unterscheidet keinen
+  HTML-Tags, Linktexte und HTML-Fehlerkorrektur (etwa fehlende Semikolons)
+  werden nicht aufgeloest. Sie unterscheidet keinen
   Treffer von einem Lesefehler.
 - `lauf <vollstaendige Commit-SHA> <Branch>`: Der neueste Push-Lauf von
   `test.yml` fuer genau diesen Commit und Branch muss `completed/success`
