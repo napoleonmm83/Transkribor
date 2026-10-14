@@ -164,8 +164,7 @@ describe('Waveform bounded stored recordings', () => {
 
   it('shows a media load failure', async () => {
     render(<Waveform url={storedUrl} onTime={() => {}} />)
-    await waitFor(() => expect(h.options).toHaveBeenCalled())
-    expect(h.listeners.has('error')).toBe(true)
+    await waitFor(() => expect(h.listeners.has('error')).toBe(true))
     act(() => h.listeners.get('error')!(new Error('Audio fehlt') as never))
     expect(screen.getByRole('alert')).toHaveTextContent('Audio fehlt')
     expect(screen.getByLabelText('Abspielen')).toBeDisabled()
@@ -176,8 +175,7 @@ describe('Waveform bounded stored recordings', () => {
     ['MediaError', { code: 3, message: '' }],
   ])('shows empty media error as an alert and disables controls: %s', async (_kind, error) => {
     render(<Waveform url={storedUrl} onTime={() => {}} />)
-    await waitFor(() => expect(h.options).toHaveBeenCalled())
-    expect(h.listeners.has('error')).toBe(true)
+    await waitFor(() => expect(h.listeners.has('error')).toBe(true))
     act(() => h.listeners.get('error')!(error as never))
     expect(screen.getByRole('alert')).toHaveTextContent('Keine weiteren Angaben')
     expect(screen.getByLabelText('Abspielen')).toBeDisabled()
@@ -186,12 +184,26 @@ describe('Waveform bounded stored recordings', () => {
 
   it('preserves a nonempty MediaError diagnostic', async () => {
     render(<Waveform url={storedUrl} onTime={() => {}} />)
-    await waitFor(() => expect(h.options).toHaveBeenCalled())
-    expect(h.listeners.has('error')).toBe(true)
+    await waitFor(() => expect(h.listeners.has('error')).toBe(true))
     act(() => h.listeners.get('error')!({ code: 3, message: 'Decoderdiagnose' } as never))
     expect(screen.getByRole('alert')).toHaveTextContent('Decoderdiagnose')
     expect(screen.getByLabelText('Abspielen')).toBeDisabled()
     expect(screen.getByLabelText('Stopp')).toBeDisabled()
+  })
+
+  it('clears media error when recording URL changes', async () => {
+    const { rerender } = render(<Waveform url={storedUrl} onTime={() => {}} />)
+    await waitFor(() => expect(h.listeners.has('error')).toBe(true))
+    act(() => h.listeners.get('error')!(new Error('alte Quelle') as never))
+    expect(screen.getByRole('alert')).toHaveTextContent('alte Quelle')
+    expect(screen.getByLabelText('Abspielen')).toBeDisabled()
+    rerender(<Waveform url={storedUrl + '2'} onTime={() => {}} />)
+    await waitFor(() => expect(h.ws.load).toHaveBeenLastCalledWith(
+      storedUrl + '2', envelope.peaks, envelope.duration,
+    ))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByLabelText('Abspielen')).toBeEnabled()
+    expect(screen.getByLabelText('Stopp')).toBeEnabled()
   })
 
 })
