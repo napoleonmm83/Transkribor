@@ -18,7 +18,7 @@ case "${1:-}" in
     rc=0
     # In C matcht -i nur ASCII. Die beiden UTF-8-Schreibweisen stehen deshalb
     # ausdruecklich daneben; eine Zeichenklasse [aä] zerlegt dort den Umlaut.
-    treffer="$(LC_ALL=C grep -Eio 'n(ae|ä|Ä)chste[nr]?[[:space:]]+Fassung([[:space:][:punct:]]|„|“|”|«|»|‘|’|…|–|—|$)' <<< "$text")" || rc=$?
+    treffer="$(LC_ALL=C grep -Eio 'n(ae|ä|Ä)chste[nr]?[[:space:]]+Fassung(en)?([[:space:][:punct:]]|„|“|”|«|»|‘|’|…|–|—|$)' <<< "$text")" || rc=$?
     case "$rc" in
       0) printf '%s\n' "$treffer" >&2; fehler 'README traegt noch einen Hinweis auf die naechste Fassung' ;;
       1) printf 'release-vorabpruefung: README ohne Platzhalter\n' ;;

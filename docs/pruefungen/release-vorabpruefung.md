@@ -4,7 +4,8 @@
 Freigabe-Job Version, Release-Notizen und Tag schreibt:
 
 - `readme [README.md]`: Kein Hinweis auf die „nächsten Fassung“ bzw.
-  „naechsten Fassung“, auch bei Grossschreibung, ohne End-n und ohne Artikel.
+  „naechsten Fassung“, auch im Plural („Fassungen“), bei Grossschreibung,
+  ohne End-n und ohne Artikel.
   Die Pruefung arbeitet unter
   `LC_ALL=C`, beruecksichtigt Zeilenumbrueche, Markdown-Zitate/Hervorhebung
   durch Sternchen, Unterstriche und Backticks sowie geschuetzte Leerzeichen

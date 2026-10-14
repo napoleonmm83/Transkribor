@@ -55,6 +55,10 @@ for entity in '&#160;' '&#xA0;' '&#xa0;' '&#00160;' '&#X00A0;' '&#8239;' '&#x202
   printf 'Keine naechsten%sFassungslosigkeiten\n' "$entity" > "$W/README.md"
   pruef 0 "numerisches Leerzeichen vor anderem Wort $entity" readme "$W/README.md"
 done
+for hinweis in 'in einer der nächsten Fassungen' 'NÄCHSTE FASSUNGEN' 'naechsten Fassungen.'; do
+  printf '%s\n' "$hinweis" > "$W/README.md"
+  pruef 1 "Pluralhinweis $hinweis" readme "$W/README.md"
+done
 printf 'Keine nächsten Fassungslosigkeiten\n' > "$W/README.md"
 pruef 0 'anderes Wort mit Fassung-Praefix' readme "$W/README.md"
 for ende in '“' '”' '»' '’' '…' '–' '—'; do
