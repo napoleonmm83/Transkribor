@@ -1,9 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { useWavesurfer } from '@wavesurfer/react'
 import { Pause, Play, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { playWindow, naechsteAktion, zeitText, type Fenster } from '@/lib/playback'
 import { useTheme } from '@/hooks/useTheme'
+import { getWaveform, type WaveformData } from '@/lib/api'
 import type { Segment } from '@/lib/types'
 
 export type WaveHandle = {
@@ -26,20 +27,52 @@ const colors = (dark: boolean) => ({
   progressColor: dark ? '#818CF8' : '#4F46E5',    // --primary hell/dunkel
 })
 
-export const Waveform = forwardRef<WaveHandle,
-  { url: string; onTime: (t: number) => void
-    /** Einmal beim `ready`: Pegel-Spitzen und Dauer. Optional — der Editor braucht sie
-     *  nicht, der Hoerbalken leitet daraus seine Sprungstelle ab. */
-    onBereit?: (peaks: Float32Array, dauer: number) => void }>(
-  function Waveform({ url, onTime, onBereit }, ref) {
+type WaveProps = {
+  url: string
+  onTime: (t: number) => void
+  onBereit?: (peaks: Float32Array, dauer: number) => void
+}
+
+export const Waveform = forwardRef<WaveHandle, WaveProps>(function Waveform(props, ref) {
+  const { url } = props
+  const stored = url.startsWith('/api/projects/')
+  const [loaded, setLoaded] = useState<{ url: string; data?: WaveformData; error?: string } | null>(null)
+  useEffect(() => {
+    if (!stored) return
+    const abort = new AbortController()
+    getWaveform(url, abort.signal).then(data => {
+      if (!abort.signal.aborted) setLoaded({ url, data })
+    }).catch(error => {
+      if (!abort.signal.aborted) setLoaded({ url, error: error instanceof Error ? error.message : 'Wellenform konnte nicht geladen werden' })
+    })
+    return () => abort.abort()
+  }, [url, stored])
+  // A new URL must never render with the previous recording's envelope.
+  if (stored && (loaded?.url !== url || !loaded.data)) {
+    const error = loaded?.url === url ? loaded.error : undefined
+    return <p role={error ? 'alert' : 'status'} className="py-4 text-sm text-muted-foreground">
+      {error ? `Wellenform konnte nicht geladen werden: ${error}` : 'Wellenform wird vorbereitet …'}
+    </p>
+  }
+  return <LoadedWaveform key={url} {...props} ref={ref} data={stored ? loaded?.data : undefined} />
+})
+
+const LoadedWaveform = forwardRef<WaveHandle, WaveProps & { data?: WaveformData }>(
+  function LoadedWaveform({ url, onTime, onBereit, data }, ref) {
     const container = useRef<HTMLDivElement>(null)
     const { theme } = useTheme()
     // isPlaying/currentTime/isReady bringt der Hook ohnehin mit und rendert ohnehin bei jedem
     // timeupdate neu — eigener State dafuer waere ein zweiter, langsamerer Zaehler.
     const { wavesurfer, isPlaying, currentTime, isReady } = useWavesurfer({
-      container, url, height: 72, barWidth: 2, barGap: 1,
+      container, backend: 'MediaElement', height: 72, barWidth: 2, barGap: 1,
       ...colors(theme === 'dark'),
     })
+
+    const [mediaError, setMediaError] = useState<string | null>(null)
+    useEffect(() => {
+      if (!wavesurfer) return
+      return wavesurfer.on('error', (error: Error) => setMediaError(error.message))
+    }, [wavesurfer])
 
     // Das zuletzt angespielte Stueck. Muss hier liegen und nicht in wavesurfer: der loescht
     // seine eigene Endgrenze (stopAtPosition) im pause-Handler, ein blosses playPause() liefe
@@ -47,22 +80,14 @@ export const Waveform = forwardRef<WaveHandle,
     const fenster = useRef<Fenster | null>(null)
     useEffect(() => { fenster.current = null }, [url])   // andere Datei -> alte Grenze gilt nicht
 
-    // Am EREIGNIS haengen, nicht am `isReady`-Flag — und das ist kein Stilfrage:
-    // `isReady` bleibt beim Dateiwechsel stehen, waehrend die neue Datei noch laedt. Der
-    // Effekt lief dann mit der NEUEN `url` und den ALTEN Dekodierdaten, meldete also die
-    // Pegel der vorigen Aufnahme fuer die neue — und weil der Hoerbalken sich merkt, dass er
-    // fuer diese url schon gesprungen ist, wuerde die richtige Meldung danach verworfen: die
-    // zweite Datei spraenge auf die Geraeuschstelle der ersten, dauerhaft. `ready` feuert
-    // dagegen genau einmal je geladener Datei und traegt ihre Dauer mit (CodeRabbit-CLI).
-    //
-    // `channels: 1` — der Default ist 2, und `exportPeaks` laeuft je Kanal ueber die
-    // VOLLSTAENDIGEN Dekodierdaten. Wir brauchen nur den ersten (eine Pegelschwelle).
+    // Readiness belongs to the current loaded player. Stored recordings already
+    // carry compact peaks; local blob previews retain exportPeaks behavior.
     useEffect(() => {
       if (!wavesurfer || !onBereit) return
       return wavesurfer.on('ready', (dauer: number) => {
-        onBereit(new Float32Array(wavesurfer.exportPeaks({ channels: 1 })[0] ?? []), dauer)
+        onBereit(new Float32Array(data?.peaks[0] ?? wavesurfer.exportPeaks({ channels: 1 })[0] ?? []), data?.duration ?? dauer)
       })
-    }, [wavesurfer, onBereit])
+    }, [wavesurfer, onBereit, data])
 
     useEffect(() => {
       if (!wavesurfer) return
@@ -70,6 +95,16 @@ export const Waveform = forwardRef<WaveHandle,
     }, [wavesurfer, onTime])
 
     useEffect(() => { wavesurfer?.setOptions(colors(theme === 'dark')) }, [theme, wavesurfer])
+
+    // With precomputed data, load can finish before the hook's next render.
+    // Start it after readiness/error subscriptions, never in the constructor.
+    useEffect(() => {
+      if (!wavesurfer) return
+      wavesurfer.getMediaElement().preload = 'metadata'
+      void wavesurfer.load(url, data?.peaks, data?.duration).catch(() => {
+        // The error event above presents load failures to the user.
+      })
+    }, [wavesurfer, url, data])
 
     // useMemo statt direkt im useImperativeHandle: die Knoepfe unter der Welle brauchen
     // dieselben Aktionen wie die Tastenkuerzel — zweimal geschrieben liefen sie auseinander.
@@ -141,12 +176,13 @@ export const Waveform = forwardRef<WaveHandle,
     return (
       <>
         <div ref={container} />
+        {mediaError && <p role="alert" className="text-sm text-muted-foreground">Audio konnte nicht geladen werden: {mediaError}</p>}
         <div className="mt-1.5 flex items-center gap-1">
-          <Button size="icon" variant="ghost" disabled={!isReady}
+          <Button size="icon" variant="ghost" disabled={!isReady || !!mediaError}
             aria-label={isPlaying ? 'Pause' : 'Abspielen'} onClick={() => steuerung.toggle(null)}>
             {isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
           </Button>
-          <Button size="icon" variant="ghost" disabled={!isReady}
+          <Button size="icon" variant="ghost" disabled={!isReady || !!mediaError}
             aria-label="Stopp" onClick={() => steuerung.stop()}>
             <Square className="size-4" />
           </Button>

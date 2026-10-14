@@ -1,6 +1,7 @@
 import type { Erreicht, FilePhase, FileState, FileWork, GlobalPhase, JobPhases, Warten } from './types'
 
 export const PHASE_LABEL: Record<FilePhase, string> = {
+  context: 'Gesprächskontext vorbereiten', audio: 'Lokale Zweiterkennung',
   diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
 }
 export const GLOBAL_LABEL: Record<GlobalPhase, string> = {
@@ -45,6 +46,9 @@ export function parseJobPhases(kind: string, lines: string[],
   // Vorbestehend (der kalte Diff-Leser fand es an diesem PR), hier mitgenommen, weil dieselben
   // Zeilen angefasst wurden und die neue Karte die Angriffsflaeche sonst vergroessert haette.
   const perBase: Record<string, FileState> = Object.create(null)
+  // Vorbereitung versteckt den Transkriptionserfolg nur waehrend der Arbeit.
+  // Die Abschlussbilanz braucht ihn weiterhin, auch wenn Handarbeit die Korrektur stoppt.
+  const vorherDone = new Set<string>()
   const active: Record<string, FileWork> = Object.create(null)
   // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
   // '✓ fertig' (correct.py faellt nach dem Reuse in dieselbe Pruefung) — ein ++ zaehlte ihn
@@ -142,6 +146,7 @@ export function parseJobPhases(kind: string, lines: string[],
     // AUCH OHNE neue Datei — der Server reaktiviert (discard), das folgende `skip (Audio
     // nicht mehr vorhanden)` bucht ganz normal 'failed' (Vorverhalten).
     if (ungueltig.has(base)) {
+      vorherDone.delete(base)
       delete active[base]
       delete blocks[base]
       if (cursor === base) cursor = null
@@ -172,7 +177,8 @@ export function parseJobPhases(kind: string, lines: string[],
     // geaendert, `npx vitest run` ⇒ 826 von 826 gruen. Wer das Argument pruefen will, mutiert
     // genau diese Zeile; wer `RANG` um zwei Zustaende GLEICHEN Rangs erweitert, macht den
     // Mutanten damit nicht-aequivalent und braucht dann einen Test.
-    if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
+    const vorher = perBase[base] ?? (vorherDone.has(base) ? 'done' : undefined)
+    perBase[base] = !vorher || RANG[state] >= RANG[vorher] ? state : vorher
     // Der Beleg folgt NICHT dem RANG: er sagt, was auf der Platte liegt, nicht wie der Lauf
     // ausging. Er folgt der ZEILENREIHENFOLGE — die spaetere Zeile ist der frischere Beweis.
     //
@@ -358,6 +364,37 @@ export function parseJobPhases(kind: string, lines: string[],
     // blieb jeder Test gruen, weil diese Zeile denselben Fall schon abfaengt. Ein Waechter,
     // den keine Mutation rot bekommt, sieht aus wie Schutz und ist keiner.
     if (kind !== 'correct' && kind !== 'transcribe') continue
+
+    // Preparation begins a new correction attempt; retain raw evidence and real errors.
+    if (l.startsWith('[correction-stage] ')) {
+      try {
+        const event = JSON.parse(l.slice('[correction-stage] '.length))
+        if (!event || typeof event !== 'object' || typeof event.base !== 'string' || !event.base
+            || ungueltig.has(event.base)
+            || (scope && !scope.has(event.base) && !gesehen.has(event.base))) continue
+        const detail: Record<string, string | undefined> = {
+          context: undefined, 'audio-wait': 'wartet auf lokalen Slot',
+          'audio-model': 'Modell laden', 'audio-decode': 'Audio vorbereiten',
+          'audio-recognize': undefined,
+        }
+        if (typeof event.stage !== 'string' || !Object.hasOwn(detail, event.stage)) continue
+        const work: FileWork = { phase: event.stage === 'context' ? 'context' : 'audio' }
+        if (detail[event.stage]) work.detail = detail[event.stage]
+        if (event.stage === 'audio-recognize' && Number.isSafeInteger(event.completed)
+            && Number.isSafeInteger(event.total) && event.total > 0
+            && event.completed >= 0 && event.completed <= event.total) {
+          work.detail = `${event.completed}/${event.total} Ausschnitte`
+          work.pct = Math.round(event.completed / event.total * 100)
+        }
+        if (perBase[event.base] === 'done') {
+          vorherDone.add(event.base)
+          delete perBase[event.base]
+        }
+        active[event.base] = work
+        global = null
+      } catch { /* Malformed status is not evidence of progress. */ }
+      continue
+    }
 
     // `(.+?)` + optionaler Zusatz: correct.py haengt seit #264 ` ({n} Sprecher)` an, das gierige
     // `(.+)` verschluckte ihn -> Schluessel "Timeline 13 (5 Sprecher)". Beide Verbraucher schlagen
@@ -605,6 +642,7 @@ export function parseJobPhases(kind: string, lines: string[],
         // verdraengt, und die Reaktivierung der Unterdrueckung geschah ohnehin
         // SERVERSEITIG beim Eintreffen der Marke.
         if (scope.has(b)) {
+          vorherDone.delete(b)
           delete perBase[b]
           delete erreicht[b]
           delete active[b]

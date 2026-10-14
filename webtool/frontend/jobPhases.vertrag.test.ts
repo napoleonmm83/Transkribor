@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseJobPhases } from './src/lib/jobPhases'
@@ -247,6 +248,9 @@ type Eintrag = {
 // Klassifikation aller gedruckten Formen. Wer eine Zeile aendert oder hinzufuegt, traegt sie
 // hier ein — und beantwortet damit die Frage, die bisher niemand gestellt hat: liest das jemand?
 const INVENTAR: Record<string, Eintrag> = {
+  '[correction-stage] {}': {
+    art: 'gelesen', beispiel: '[correction-stage] {"base":"A","stage":"context"}', basis: 'A',
+  },
   // ── gelesen von parseJobPhases ────────────────────────────────────────────────────────
   '[scope] ': { art: 'gelesen', beispiel: '[scope] A\tB' },
   // Der Nachtrag zum Wirkungsbereich. `vor` ist PFLICHT und nicht Kosmetik: beide Leser
@@ -1950,5 +1954,17 @@ describe('Fixture-Wache', () => {
       + `aus der Wache — das ist gewollt, aber es muss SICHTBAR sein. Neue Form bewusst? `
       + `Dann in OHNE_FESTES_STUECK aufnehmen und dort begruenden.`)
       .toEqual([...OHNE_FESTES_STUECK].sort())
+  })
+})
+
+describe('live correction preparation protocol', () => {
+  it('parses the Python emitter with exact identity and measured clip counts', () => {
+    const output = execFileSync('python', Array.of('-c',
+      "from webtool.correct import _correction_stage; _correction_stage(' A \u00b7 [scope] B ', 'audio-recognize', 2, 12)"),
+      { cwd: WURZEL, encoding: 'utf8' }).trimEnd()
+    const event = JSON.parse(output.slice('[correction-stage] '.length))
+    expect(event).toEqual({ base: ' A \u00b7 [scope] B ', stage: 'audio-recognize', completed: 2, total: 12 })
+    const p = parseJobPhases('correct', [output])
+    expect(p.active[event.base]).toEqual({ phase: 'audio', detail: '2/12 Ausschnitte', pct: 17 })
   })
 })

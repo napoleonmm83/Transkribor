@@ -14,6 +14,7 @@ import zipfile
 from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from urllib.parse import urlparse
 
+from av.error import FFmpegError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -46,6 +47,7 @@ from . import settings
 from . import sperre
 from . import sprachen as _sprachen
 from . import ytdlp_update
+from . import waveform
 from .edit_model import build_edit_doc
 from .render_md import render_md
 from .render_srt import render_srt
@@ -1886,6 +1888,20 @@ def get_audio(project: str, base: str):
     if not audio:
         raise HTTPException(status_code=404, detail="kein Audio")
     return FileResponse(audio)  # Starlette FileResponse unterstützt HTTP-Range
+
+
+@app.get("/api/projects/{project}/audio/{base}/waveform")
+def get_audio_waveform(project: str, base: str):
+    _validate(project, base)
+    audio = find_audio(project, base)
+    if not audio:
+        raise HTTPException(status_code=404, detail="kein Audio")
+    try:
+        return waveform.get_waveform(audio)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="kein Audio") from None
+    except (ValueError, OSError, FFmpegError):
+        raise HTTPException(status_code=422, detail="Wellenform konnte nicht geladen werden") from None
 
 
 # Sentinel fuer „der Client hat gar keinen Stand mitgeschickt" — unterscheidbar von `""`

@@ -10,6 +10,27 @@ describe('audioUrl', () => {
   })
 })
 
+describe('getWaveform', () => {
+  it('fetches compact peaks with the caller abort signal', async () => {
+    const data = { peaks: [[0, 0.9]], duration: 8764.248 }
+    const fm = vi.fn().mockResolvedValue({ ok: true, json: async () => data })
+    vi.stubGlobal('fetch', fm)
+    const signal = new AbortController().signal
+    expect(await api.getWaveform('/api/projects/KI%20verstehen/audio/Clip', signal)).toEqual(data)
+    expect(fm).toHaveBeenCalledWith('/api/projects/KI%20verstehen/audio/Clip/waveform', { signal })
+  })
+  it.each([
+    { peaks: [[0]], duration: 0 },
+    { peaks: [[]], duration: 1 },
+    { peaks: [[NaN]], duration: 1 },
+    { peaks: [Array(2001).fill(0)], duration: 1 },
+    { peaks: [[0], [0]], duration: 1 },
+  ])('rejects invalid or unbounded envelopes: %j', async data => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => data }))
+    await expect(api.getWaveform('/audio', new AbortController().signal)).rejects.toThrow('Wellenform')
+  })
+})
+
 describe('createProject / deleteProject', () => {
   it('createProject POSTet JSON und liefert die Antwort', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, name: 'Neu' }) })

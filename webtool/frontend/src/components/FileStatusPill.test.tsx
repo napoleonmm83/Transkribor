@@ -197,3 +197,15 @@ describe('FileStatusPill', () => {
     expect(screen.getByText(/Nur Audio/)).toBeInTheDocument()
   })
 })
+
+describe('correction preparation pill', () => {
+  it('shows parsed preparation after transcription done', async () => {
+    const { parseJobPhases } = await import('@/lib/jobPhases')
+    const p = parseJobPhases('transcribe', ['[scope] a', '[Demo] fertig a: 5s, 2 Segmente, ',
+      '[correction-stage] {"base":"a","stage":"audio-recognize","completed":2,"total":12}'])
+    render(<FileStatusPill file={f()} active={p.active.a?.phase} detail={p.active.a?.detail}
+      state={p.perBase.a} erreicht={p.erreicht?.a} jobRunning inScope mitText />)
+    expect(screen.getByText('Lokale Zweiterkennung 2/12 Ausschnitte')).toBeInTheDocument()
+    expect(screen.queryByText(/noch nicht korrigiert/)).toBeNull()
+  })
+})

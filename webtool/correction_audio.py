@@ -108,13 +108,15 @@ def _valid_candidates(candidates, clips):
     return True
 
 
-def retry_cached(audio_path: str, raw_path: str, options: AudioOptions) -> dict:
+def retry_cached(audio_path: str, raw_path: str, options: AudioOptions, *, progress=None) -> dict:
     """Return independent clip readings, using only a locally cached CPU model."""
+    if progress:
+        progress("audio-wait")
     with _LOCK:
-        return _retry(Path(audio_path), Path(raw_path), options)
+        return _retry(Path(audio_path), Path(raw_path), options, progress)
 
 
-def _retry(audio_path, raw_path, options) -> dict:
+def _retry(audio_path, raw_path, options, progress=None) -> dict:
     try:
         if not options.model.strip():
             return _result("skipped", "Zweiterkennung ausgelassen: kein Modell gewaehlt.")
@@ -144,6 +146,8 @@ def _retry(audio_path, raw_path, options) -> dict:
         from faster_whisper import WhisperModel
 
         from transcribe import _opts
+        if progress:
+            progress("audio-model")
         try:
             model = WhisperModel(options.model, device="cpu", compute_type="int8", local_files_only=True)
         except Exception:
@@ -152,6 +156,8 @@ def _retry(audio_path, raw_path, options) -> dict:
             from faster_whisper.audio import decode_audio
             try:
                 # A miss decodes the full source once; ASR itself only sees bounded clips.
+                if progress:
+                    progress("audio-decode")
                 samples = decode_audio(str(audio_path), sampling_rate=_SAMPLE_RATE)
             except Exception:
                 return _result("failed", "Zweiterkennung ausgelassen: lokaler Audiodecoder konnte die Quelle nicht lesen.")
@@ -165,7 +171,9 @@ def _retry(audio_path, raw_path, options) -> dict:
             decoder_options.update(beam_size=10, log_progress=False)
             candidates = []
             failures = 0
-            for clip in clips:
+            if progress:
+                progress("audio-recognize", 0, len(clips))
+            for completed, clip in enumerate(clips, 1):
                 stream = None
                 try:
                     chunk = samples[round(clip["start"] * _SAMPLE_RATE):round(clip["end"] * _SAMPLE_RATE)]
@@ -182,6 +190,8 @@ def _retry(audio_path, raw_path, options) -> dict:
                         except Exception:
                             failures += 1
                     stream = None
+                    if progress:
+                        progress("audio-recognize", completed, len(clips))
         finally:
             del model
         if _identity(audio_path, raw_path, options) != identity:

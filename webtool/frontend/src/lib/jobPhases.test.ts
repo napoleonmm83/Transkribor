@@ -4,6 +4,26 @@ import { describePhases, parseJobPhases , imBereich, zugelassen, laufOrdnung, wa
 // Meldung daraus weiterhin „fertig" sagt (#405 + #376).
 import { ausgang } from './jobAusgang'
 
+it('bewahrt Transkriptionserfolg in der Abschlussbilanz nach Vorbereitung und geschützter Handarbeit', () => {
+  const p = parseJobPhases('transcribe', [
+    '[scope] A\tB', '[Demo] fertig A: 5s, 2 Segmente, ', '[Demo] fertig B: 5s, 2 Segmente, ',
+    '[correction-stage] {"base":"A","stage":"context"}',
+    'apply: SKIP A (waehrend des Laufs handbearbeitet; --force zum Ueberschreiben)',
+    'apply: FEHLT B.correction.json - erst Korrektur-Workflow laufen lassen',
+  ])
+  expect(p.perBase.A).toBe('done')
+  expect(ausgang({ status: 'done', phases: p })).toEqual({ art: 'teil', misslungen: ['B'], versucht: 2 })
+})
+
+it('überträgt zurückgestellten Transkriptionserfolg nicht auf eine neue gleichnamige Aufnahme', () => {
+  const p = parseJobPhases('transcribe', [
+    '[scope] A', '[Demo] fertig A: 5s, 2 Segmente, ',
+    '[correction-stage] {"base":"A","stage":"context"}', '[scope+] A',
+    'apply: SKIP A (human_edited=true; --force zum Ueberschreiben)',
+  ])
+  expect(p.perBase.A).toBe('skipped')
+})
+
 describe('parseJobPhases — correct', () => {
   it('aktive Datei + Phase, sequentiell', () => {
     const p = parseJobPhases('correct', [
@@ -1551,5 +1571,49 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     // A steht mit drin, obwohl es gerade LAEUFT — so gewollt seit K3: es liegt vor B, und
     // seine eigene Pille zeigt ohnehin die Phase, nicht den Wartetext.
     expect(warteKarte(p, 'correct')).toEqual({ A: { art: 'correct', vor: 0 }, B: { art: 'correct', vor: 1 } })
+  })
+})
+
+describe('structured correction preparation', () => {
+  const line = (base: string, stage: string, extra = {}) =>
+    '[correction-stage] ' + JSON.stringify({ base, stage, ...extra })
+  const contextA = line('A', 'context')
+  const malformedCounts = line('A', 'audio-recognize', { completed: 13, total: 12 })
+  const bogus = line('A', 'bogus')
+  it('replaces transcription done and carries combined pipeline through apply', () => {
+    const start = ['[scope] A', '[Demo] fertig A: 5s, 2 Segmente, ', contextA]
+    const p = parseJobPhases('transcribe', start)
+    expect(p.active.A).toEqual({ phase: 'context' })
+    expect(p.perBase.A).toBeUndefined()
+    expect(p.erreicht?.A).toBe('raw')
+    expect(parseJobPhases('transcribe', [...start, '→ Korrigiere A …']).active.A.phase).toBe('correct')
+    expect(parseJobPhases('transcribe', [...start, '→ Verifiziere A (Treue gegen Roh) …']).active.A.phase).toBe('verify')
+    const end = parseJobPhases('transcribe', [...start, 'apply: A -> edit.json'])
+    expect(end.active).toEqual({})
+    expect(end.perBase.A).toBe('done')
+  })
+  it('keeps exact names, parallel stages and real processed clip count', () => {
+    const base = ' A · Block 1/2 — [scope] B '
+    const scopeLine = '[scope] '+base+'\tB'
+    const contextLine = line(base, 'context')
+    const audioLine = line('B', 'audio-recognize', { completed: 2, total: 12 })
+    const p = parseJobPhases('correct', [scopeLine, contextLine, audioLine])
+    expect(p.active[base]).toEqual({ phase: 'context' })
+    expect(p.active.B).toEqual({ phase: 'audio', detail: '2/12 Ausschnitte', pct: 17 })
+    expect(p.global).toBeNull()
+  })
+  it('gates kinds, deleted and unscoped bases; malformed progress stays indeterminate', () => {
+    expect(parseJobPhases('fetch', [contextA]).active).toEqual({})
+    expect(parseJobPhases('correct', ['[scope] B', contextA]).active).toEqual({})
+    expect(parseJobPhases('correct', ['[scope] A', contextA], undefined, ['A']).active).toEqual({})
+    expect(parseJobPhases('correct', [malformedCounts]).active.A)
+      .toEqual({ phase: 'audio' })
+    expect(parseJobPhases('correct', ['[correction-stage] broken', bogus]).active).toEqual({})
+  })
+  it('preserves failures and clears stale glossary while preparation is active', () => {
+    const p = parseJobPhases('correct', ['[scope] A', '✗ Fehler bei A: kaputt — überspringe',
+      '→ Glossar (gemeinsame Namen/Begriffe) …', contextA])
+    expect(p.perBase.A).toBe('failed')
+    expect(p.global).toBeNull()
   })
 })
