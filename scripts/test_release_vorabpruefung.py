@@ -102,7 +102,11 @@ def test_api_fehler_verhindert_mutation(tmp_path):
                                     "ab der nächsten\nFassung", "ab der **nächsten**\n**Fassung**",
                                     "Nächste Fassung", "in naechster Fassung",
                                     "> ab der nächsten\n> Fassung", "in der nächsten\u00a0Fassung",
-                                    "„ab der nächsten Fassung“"])
+                                    "„ab der nächsten Fassung“",
+                                    "in der naechsten&#160;Fassung", "in der naechsten&#xA0;Fassung",
+                                    "in der naechsten&#00160;Fassung", "in der naechsten&#X00a0;Fassung",
+                                    "in der naechsten&#8239;Fassung", "in der naechsten&#x202F;Fassung",
+                                    "in der naechsten&#008239;Fassung", "in der naechsten&#X00202f;Fassung"])
 @pytest.mark.parametrize("tag", [False, True])
 def test_readme_verhindert_mutation_und_tagfreigabe(tmp_path, hinweis, tag):
     run, calls, output = _fahre(tmp_path, f"{SHA}\tpush\tmaster\tcompleted\tsuccess", readme=hinweis, tag=tag)

@@ -10,7 +10,8 @@ case "${1:-}" in
     [ -f "$datei" ] && [ -r "$datei" ] || fehler "README nicht lesbar: $datei"
     # Markdown-Hervorhebung und weiche Zeilenumbrueche aendern den Hinweis
     # fuer den Leser nicht. Lesefehler separat vom grep-Leerfall behandeln.
-    if ! text="$(LC_ALL=C sed -e 's/ / /g' -e 's/ / /g' -e 's/&nbsp;/ /g' \
+    if ! text="$(LC_ALL=C sed -E -e 's/ / /g' -e 's/ / /g' -e 's/&nbsp;/ /g' \
+      -e 's/&#(0*160|0*8239|[xX]0*[aA]0|[xX]0*202[fF]);/ /g' \
       -e 's/^[[:blank:]]*>[[:blank:]>]*//' "$datei" | tr -d '*_`' | tr '\r\n' '  ')"; then
       fehler 'README konnte nicht normalisiert werden'
     fi

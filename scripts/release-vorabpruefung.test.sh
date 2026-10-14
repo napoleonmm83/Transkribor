@@ -49,6 +49,12 @@ printf 'in der nächsten Fassung\n' > "$W/README.md"
 pruef 1 'geschuetztes Leerzeichen' readme "$W/README.md"
 printf 'in der nächsten&nbsp;Fassung\n' > "$W/README.md"
 pruef 1 'HTML-Leerzeichen' readme "$W/README.md"
+for entity in '&#160;' '&#xA0;' '&#xa0;' '&#00160;' '&#X00A0;' '&#8239;' '&#x202F;' '&#x202f;' '&#008239;' '&#X00202F;'; do
+  printf 'in der naechsten%sFassung\n' "$entity" > "$W/README.md"
+  pruef 1 "numerisches geschuetztes Leerzeichen $entity" readme "$W/README.md"
+  printf 'Keine naechsten%sFassungslosigkeiten\n' "$entity" > "$W/README.md"
+  pruef 0 "numerisches Leerzeichen vor anderem Wort $entity" readme "$W/README.md"
+done
 printf 'Keine nächsten Fassungslosigkeiten\n' > "$W/README.md"
 pruef 0 'anderes Wort mit Fassung-Praefix' readme "$W/README.md"
 for ende in '“' '”' '»' '’' '…' '–' '—'; do
