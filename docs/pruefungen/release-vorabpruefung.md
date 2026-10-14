@@ -7,8 +7,12 @@ Freigabe-Job Version, Release-Notizen und Tag schreibt:
   „naechsten Fassung“, auch bei Grossschreibung, ohne End-n und ohne Artikel.
   Die Pruefung arbeitet unter
   `LC_ALL=C`, beruecksichtigt Zeilenumbrueche, Markdown-Zitate/Hervorhebung
-  und geschuetzte Leerzeichen
-  und unterscheidet keinen Treffer von einem Lesefehler.
+  durch Sternchen, Unterstriche und Backticks sowie geschuetzte Leerzeichen
+  U+00A0/U+202F (literal, &nbsp; fuer U+00A0 oder numerisch dezimal/hex).
+  Fuehrende Nullen und Hex-Grossschreibung werden ebenfalls beruecksichtigt.
+  Die Pruefung rendert kein allgemeines HTML oder Markdown; beispielsweise
+  HTML-Tags und Linktexte werden nicht aufgeloest. Sie unterscheidet keinen
+  Treffer von einem Lesefehler.
 - `lauf <vollstaendige Commit-SHA> <Branch>`: Der neueste Push-Lauf von
   `test.yml` fuer genau diesen Commit und Branch muss `completed/success`
   melden. Fehlende, laufende, abgebrochene oder rote Laeufe sowie API-Fehler
