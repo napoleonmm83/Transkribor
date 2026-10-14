@@ -37,7 +37,7 @@
     {
       "id": "context-independent-audio-disabled",
       "datei": "webtool/correct.py",
-      "von": "        result = correction_audio.retry_cached(_audio_path(project, base), raw_path, options)",
+      "von": "        result = correction_audio.retry_cached(\n            _audio_path(project, base), raw_path, options,\n            progress=lambda stage, completed=None, total=None:\n                _correction_stage(base, stage, completed, total))",
       "nach": "        result = {\"message\": \"Ausgelassen\", \"candidates\": []}",
       "rot": [
         "test_evidence_builder_uses_current_settings_and_independent_audio"

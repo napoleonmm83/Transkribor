@@ -480,6 +480,12 @@ export function parseJobPhases(kind: string, lines: string[],
     else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |\1\.edit\.json nicht lesbar: )/)))
       terminal(m[1], 'skipped', 'edit')
     else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped', 'edit')
+    // Die Quelle wurde ersetzt: alte Arbeit endet, ein Urteil ueber die neue fehlt.
+    else if ((m = l.match(/^↷ SKIP (.+) \(Roh-Transkript waehrend des Laufs ausgetauscht\)$/))) {
+      delete active[m[1]]
+      delete blocks[m[1]]
+      if (cursor === m[1]) cursor = null
+    }
     // Der Zwilling MUSS vor der Zeile darunter stehen. Er ist der spezifischere Ausdruck
     // (voller Grundtext, $-verankert); andersherum riesse die kuerzere Regex einen Basisnamen
     // auseinander, der selbst auf `.correction` endet.

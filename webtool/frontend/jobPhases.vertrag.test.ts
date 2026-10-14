@@ -408,16 +408,12 @@ const INVENTAR: Record<string, Eintrag> = {
   // Lauf laesst sie in Ruhe. Die Zeile gibt es NUR fuer den Austausch, nicht fuer das blosse
   // Verschwinden (das war hier immer schon ein stiller Ausstieg).
   //
-  // `ignoriert`, NICHT `gelesen` wie der Schutz-Skip zwei Zeilen darueber — und der
-  // Unterschied ist der ganze Punkt. Jener sagt etwas ueber DIE Datei, an der der Lauf
-  // gerade war; diese sagt etwas ueber eine Datei, die es unter diesem Namen nicht mehr
-  // gibt. Ein `skipped`-Urteil daraus stuende ueber der NEUEN Aufnahme, die in diesem
-  // Moment von ihrem eigenen Transkriptionslauf bearbeitet wird — genau das veraltete
-  // Fremd-Urteil, gegen das #479/#489 die `entfernt`-Menge gebaut haben. Der erste Entwurf
-  // trug hier `gelesen`; der Vertragswaechter meldete ihn als „ohne Wirkung", und beim
-  // Nachsehen war nicht der Parser zu eng, sondern die Einstufung falsch.
+  // Kein Endurteil fuer eine ausgetauschte Quelle: es stuende sonst ueber der neuen
+  // Aufnahme. Die alte Arbeitsanzeige muss trotzdem enden; das Kontextereignis
+  // macht diese Raeumwirkung messbar, ohne einen Zustand oder Plattenbeleg zu buchen.
   '↷ SKIP {} (Roh-Transkript waehrend des Laufs ausgetauscht)': {
-    art: 'ignoriert', beispiel: '↷ SKIP A (Roh-Transkript waehrend des Laufs ausgetauscht)',
+    art: 'gelesen', beispiel: '↷ SKIP A (Roh-Transkript waehrend des Laufs ausgetauscht)',
+    vor: ['[correction-stage] {"base":"A","stage":"context"}'],
   },
   '✗ FEHLT/ungültig: {}.correction.json — überspringe': {
     art: 'gelesen', beispiel: '✗ FEHLT/ungültig: A.correction.json — überspringe', basis: 'A',
@@ -1058,6 +1054,8 @@ describe('Vertrag: gedruckte Statuszeilen <-> jobPhases.ts (#375)', () => {
       // Form, deren Klammerrest ein nacktes Wort ist, dreht diese Zeile rot — dann bewusst
       // entscheiden, nicht die Begründung hier verbiegen (Review F3 zu #432).
       done: [],
+      // Gewoehnliche Projektzeilen enthalten hier kein gueltiges Stage-JSON.
+      'correction-stage': [],
     }
     // Der Ernte-Pin: ERWARTETs Schluessel MUESSEN der Python-Menge entsprechen. Sensor
     // gegen die leere Ernte inklusive (kaputter Pfad, umgebautes Literal ⇒ rot statt still).
