@@ -34,9 +34,9 @@ Die Rendererprobe nutzt dieselbe vollständige Kopie im lokalen Chromium und mis
 | DOM-Elemente | 99198 | 99198 |
 | JS-Heap in diesem Lauf | 286 MB | 286 MB |
 
-Dies ist eine lokale Einzelvergleichsmessung, keine Produktionslatenz-Verteilung. Der vollständige Dokument-DOM bleibt erhalten; eine allgemeine Heap-Reduktion wird nicht behauptet. Komponentenregressionen belegen unabhängig, dass ein Markerwechsel nur neue/bisher aktive Zeilen erneut aufbaut.
+Die Tabellenwerte dokumentieren einen lokalen Einzelvergleich an der oben genannten Aufnahme. Ohne versioniertes Fixture und Benchmarkbefehl sind sie kein reproduzierbarer Messnachweis; Produktionslatenzen lassen sich daraus nicht ableiten. Der vollständige Dokument-DOM bleibt erhalten; eine allgemeine Heap-Reduktion wird nicht behauptet. Komponentenregressionen belegen unabhängig, dass ein Markerwechsel nur neue/bisher aktive Zeilen erneut aufbaut.
 
-Die lange MP3 benötigte mehrfach etwa 6.5 Sekunden für die kalte Peak-Berechnung; ein warmer Abruf benötigt keine erneute Dekodierung. Der Decoder verarbeitet einzelne Frames; die Wellenformausgabe enthält höchstens 2000 Peak-Werte. Daraus wird ein begrenzter eigener Datenbestand hergeleitet; ein zusätzlicher nativer RAM-Verbrauch wird hier mangels dokumentiertem Messwert und reproduzierbarem Messbefehl nicht als gemessen ausgewiesen. Eine allgemeine harte RAM-Garantie für alle Decoderformate ist damit nicht belegt.
+Bei einer lokalen Beobachtung benötigte die untersuchte lange MP3 mehrfach etwa 6.5 Sekunden für die kalte Peak-Berechnung. Für diese Laufzeitangabe liegt hier kein reproduzierbarer Messnachweis vor. Ein warmer Abruf benötigt keine erneute Dekodierung. Der Decoder verarbeitet einzelne Frames; die Wellenformausgabe enthält höchstens 2000 Peak-Werte. Daraus wird ein begrenzter eigener Datenbestand hergeleitet; ein zusätzlicher nativer RAM-Verbrauch wird hier mangels dokumentiertem Messwert und reproduzierbarem Messbefehl nicht als gemessen ausgewiesen. Eine allgemeine harte RAM-Garantie für alle Decoderformate ist damit nicht belegt.
 
 Im vollständigen App-Browserlauf: weit entfernter Suchtreffer sichtbar; Wiedergabesprung zur zugehörigen Zeitmarke; HTTP 206 für Audio; **kein Aufruf von decodeAudioData**, keine Browserfehler.
 
