@@ -28,6 +28,10 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Der Editor reagiert beim Abspielen und Bearbeiten langer Aufnahmen flüssiger.
+- Während der Korrekturvorbereitung zeigt die App jetzt den tatsächlichen Arbeitsschritt und den Fortschritt der erneut geprüften Audioausschnitte.
+
 ## v0.59.0 — 2026-10-11
 
 **Neu**
