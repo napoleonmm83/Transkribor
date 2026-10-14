@@ -1617,3 +1617,60 @@ describe('structured correction preparation', () => {
     expect(p.global).toBeNull()
   })
 })
+
+
+describe('raw transcript replacement ends only the old active work', () => {
+  const stage = (base: string, phase: string) => '[correction-stage] ' + JSON.stringify({ base, stage: phase })
+  const skip = (base: string) => '↷ SKIP ' + base + ' (Roh-Transkript waehrend des Laufs ausgetauscht)'
+
+  it.each(['context', 'audio-model'])('clears %s preparation without judging the replacement', phase => {
+    const base = ' Interview (Teil 1) '
+    const scopeLine = '[scope] ' + base + '\tB'
+    const lines = [scopeLine, stage(base, phase), stage('B', 'context')]
+    const before = parseJobPhases('correct', lines)
+    expect(before.active[base]).toBeDefined()
+    const finished = [...lines, skip(base), '[done] ' + base]
+    const after = parseJobPhases('correct', finished)
+    expect(after.active[base]).toBeUndefined()
+    expect(after.active.B).toEqual(before.active.B)
+    expect(after.perBase).toEqual(before.perBase)
+    expect(after.erreicht).toEqual(before.erreicht)
+  })
+
+  it.each(['failed', 'raw', 'edit'])('keeps existing %s verdicts and evidence unchanged', prior => {
+    const earlier = prior === 'failed' ? '✗ Fehler bei A: kaputt — überspringe'
+      : prior === 'raw' ? '[Demo] fertig A: 4 Segmente' : 'apply: A -> edit.json geschrieben'
+    const scopeLine = '[scope] A\tB'
+    const lines = [scopeLine, earlier, stage('A', 'context'), stage('B', 'audio-model')]
+    const before = parseJobPhases('transcribe', lines)
+    if (prior === 'failed') expect(before.perBase.A).toBe('failed')
+    else expect(before.erreicht?.A).toBe(prior)
+    const finished = [...lines, skip('A')]
+    const after = parseJobPhases('transcribe', finished)
+    expect(after.active.A).toBeUndefined()
+    expect(after.active.B).toEqual(before.active.B)
+    expect(after.perBase).toEqual(before.perBase)
+    expect(after.erreicht).toEqual(before.erreicht)
+  })
+
+  it('clears old block progress and only the matching transcription cursor', () => {
+    const abandoned = skip('A')
+    const correction = parseJobPhases('correct', ['A: 540 Segmente → 4 Blöcke à max. 150',
+      '→ Korrigiere A · Block 1/4 …', '✓ A · Block 1/4 fertig', abandoned, '→ Korrigiere A …'])
+    expect(correction.active.A).toEqual({ phase: 'correct' })
+    const cleared = parseJobPhases('transcribe', ['[Demo] -> transkribiere A …', abandoned, '50%|'])
+    expect(cleared.active.A).toBeUndefined()
+    const preparing = stage('A', 'context')
+    const parallel = parseJobPhases('transcribe', [preparing,
+      '[Demo] -> transkribiere B …', abandoned, '50%|'])
+    expect(parallel.active.B.pct).toBe(50)
+  })
+
+  it('does not turn an unrelated nested done into a preparation outcome', () => {
+    const preparing = stage('A', 'context')
+    const abandoned = skip('A')
+    expect(parseJobPhases('correct', [preparing, '[done] A']).active.A)
+      .toEqual({ phase: 'context' })
+    expect(parseJobPhases('correct', [abandoned]).perBase).toEqual({})
+  })
+})
