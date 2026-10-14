@@ -19,7 +19,7 @@ Der lokale Testserver lief auf 8194, der eigene Vite-Server auf 5195. Nach dem A
 Die unabhängigen Prüfungen fanden zusätzliche Randfälle, die vor Abschluss behoben wurden:
 
 - Nach erfolgreicher Transkription und wegen Handarbeit übersprungener Korrektur bleibt der Erfolg in der Abschlussbilanz erhalten. Die laufende Vorbereitungsanzeige verdeckt den Erfolg vorübergehend; ein Identitätswechsel unter gleichem Namen übernimmt ihn nicht.
-- AAC/ADTS kann die Dauer stark unter- oder überschätzen. Der Decoder misst den tatsächlichen Umfang und berechnet bei relevanter Abweichung die Peaks in einer zweiten, ebenfalls speicherbegrenzten Passage. Reale variable AAC-Fixtures prüfen Impulsstärke und Position. Normale MP3-Dateien benötigen keine zweite Passage.
+- AAC/ADTS kann die Dauer stark unter- oder überschätzen. Der Decoder misst den tatsächlichen Umfang und berechnet bei relevanter Abweichung die Peaks in einer zweiten, ebenfalls speicherbegrenzten Passage. Reale variable AAC-Fixtures prüfen Impulsstärke und Position. Die hier geprüfte lange MP3-Datei benötigte keine zweite Passage; daraus folgt keine Zusicherung für andere MP3-Dateien.
 - Beschädigte OGG-Dateien können eine eigene FFmpeg-Ausnahme erzeugen. Der Endpunkt liefert dafür eine verständliche 422-Antwort statt eines internen Serverfehlers.
 - Die Audiotests benötigen den bereits in requirements.txt erklärten PyAV-Decoder auch in der schlanken Python-Testumgebung. Die gemeinsame dev-Gruppe übernimmt dessen bestehenden Versionsbereich; die Tests werden nicht übersprungen.
 
@@ -36,7 +36,7 @@ Die Rendererprobe nutzt dieselbe vollständige Kopie im lokalen Chromium und mis
 
 Dies ist eine lokale Einzelvergleichsmessung, keine Produktionslatenz-Verteilung. Der vollständige Dokument-DOM bleibt erhalten; eine allgemeine Heap-Reduktion wird nicht behauptet. Komponentenregressionen belegen unabhängig, dass ein Markerwechsel nur neue/bisher aktive Zeilen erneut aufbaut.
 
-Die lange MP3 benötigte mehrfach etwa 6.5 Sekunden für die kalte Peak-Berechnung; ein warmer Abruf benötigt keine erneute Dekodierung. Frame-Instrumentierung und native Prozessmessung bestätigten kleinen zusätzlichen Speicherbedarf für diese Probe. Das ist keine allgemeine harte RAM-Garantie für alle Decoderformate.
+Die lange MP3 benötigte mehrfach etwa 6.5 Sekunden für die kalte Peak-Berechnung; ein warmer Abruf benötigt keine erneute Dekodierung. Der Decoder verarbeitet einzelne Frames und hält höchstens 2000 Peak-Werte vor. Daraus wird ein begrenzter eigener Datenbestand hergeleitet; ein zusätzlicher nativer RAM-Verbrauch wird hier mangels dokumentiertem Messwert und reproduzierbarem Messbefehl nicht als gemessen ausgewiesen. Eine allgemeine harte RAM-Garantie für alle Decoderformate ist damit nicht belegt.
 
 Im vollständigen App-Browserlauf: weit entfernter Suchtreffer sichtbar; Wiedergabesprung zur zugehörigen Zeitmarke; HTTP 206 für Audio; **kein Aufruf von decodeAudioData**, keine Browserfehler.
 
