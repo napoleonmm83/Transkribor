@@ -46,10 +46,18 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
   sucheAktiv?: boolean; trefferIds?: Set<number>; suchAktivId?: number | null;
   kopfTreffer?: Set<'context' | 'summary'>; annotTreffer?: Set<number>; aktivOrt?: TrefferOrt | null;
 }) {
-  const turns = useMemo(() => (doc ? groupIntoTurns(doc.segments) : []), [doc])
-  const speakerOptions = useMemo(() =>
-    doc ? [...new Set([...doc.speakers, ...doc.segments.map(s => s.speaker)])].filter(Boolean) : [],
-    [doc])
+  const segments = doc?.segments
+  const speakers = doc?.speakers
+  const turns = useMemo(() => groupIntoTurns(segments ?? []), [segments])
+  // Text-/Notizaenderungen behalten dieselben Optionen. Eine neue Array-Identitaet wuerde
+  // sonst die Memo-Grenze jeder Segmentzeile durchbrechen, obwohl kein Sprecher hinzukam.
+  const speakerKey = useMemo(() => JSON.stringify(segments
+    ? [...new Set([...(speakers ?? []), ...segments.map(s => s.speaker)])].filter(Boolean) : []),
+  [speakers, segments])
+  const speakerOptions = useMemo(() => JSON.parse(speakerKey) as string[], [speakerKey])
+  const turnBySegment = useMemo(() => new Map(turns.flatMap(t => t.segments.map(s => [s.id, t.key] as const))), [turns])
+  const activeTurn = activeId == null ? null : turnBySegment.get(activeId)
+  const suchTurn = suchAktivId == null ? null : turnBySegment.get(suchAktivId)
   const contentRef = useRef<HTMLDivElement>(null)
   useEffect(() => { if (activeId != null) scrollSegInView(contentRef, activeId) }, [activeId])
   // Ein Such-Effekt fuer alle Treffer-Arten; eigene Abhaengigkeit, kein gemeinsamer Zustand mit
@@ -116,10 +124,10 @@ export function Transcript({ doc, loading, activeId, onPlaySeg, onPlayTurn, upda
           </div>
         </section>
         {turns.map(t => (
-          <SpeakerTurn key={t.key} turn={t} activeId={activeId}
+          <SpeakerTurn key={t.key} turn={t} activeId={t.key === activeTurn ? activeId : null}
             onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
             updateSegment={updateSegment} renameSpeaker={renameSpeaker} speakerOptions={speakerOptions}
-            sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={suchAktivId} />
+            sucheAktiv={sucheAktiv} trefferIds={trefferIds} suchAktivId={t.key === suchTurn ? suchAktivId : null} />
         ))}
         <Anmerkungen items={doc.annotations} onChange={annotations => updateDoc({ annotations })}
           aktivIndex={aktivOrt?.kind === 'annotation' ? aktivOrt.index : null}

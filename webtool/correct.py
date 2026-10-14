@@ -1636,6 +1636,15 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     print(f"⏱ {base}{part}: Korrektur {dt_korrektur:.0f}s{wie}", flush=True)
 
 
+def _correction_stage(base: str, stage: str, completed: int | None = None,
+                      total: int | None = None) -> None:
+    """Exact recording identity and measured work; JSON keeps foreign text on one line."""
+    event: dict[str, str | int] = {"base": base, "stage": stage}
+    if completed is not None and total is not None:
+        event.update(completed=completed, total=total)
+    print(f"[correction-stage] {json.dumps(event, ensure_ascii=True)}", flush=True)
+
+
 def _recording_evidence(project: str, base: str, gjson: str, context: str,
                         *, ziel: str, mehrsprachig: bool, force: bool = False) -> str:
     from . import correction_audio, correction_context
@@ -1653,6 +1662,7 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
         def ask_analysis(prompt, files, output):
             _ask_llm(prompt, files, output, cfg=cfg)
 
+        _correction_stage(base, "context")
         sections.append(correction_context.prepare(raw_path, tagged, inputs, ask_analysis, force=force))
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"  ⚠ {label}: Kontextanalyse nicht verfügbar — {_einzeilig(exc)}", flush=True)
@@ -1661,7 +1671,10 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
         options = correction_audio.AudioOptions(
             os.environ.get("WHISPER_MODEL") or cfg["whisper_model"],
             raw.get("language"), mehrsprachig)
-        result = correction_audio.retry_cached(_audio_path(project, base), raw_path, options)
+        result = correction_audio.retry_cached(
+            _audio_path(project, base), raw_path, options,
+            progress=lambda stage, completed=None, total=None:
+                _correction_stage(base, stage, completed, total))
         print(f"  Lokale Zweiterkennung: {label} — {_einzeilig(result['message'])}", flush=True)
         if result["candidates"]:
             sections.append("Lokale ASR-Zweitmeinungen mit Ausschnittzeiten (unbestätigte Textkandidaten, "

@@ -399,3 +399,37 @@ def test_source_change_while_cache_is_saved_discards_candidates(recording, monke
     monkeypatch.setattr(audio, "atomic_write", changed)
     result = run(recording)
     assert result["status"] == "failed" and result["candidates"] == []
+
+def test_progress_precedes_blocking_work_and_counts_processed_clips(recording, monkeypatch):
+    events = []
+    raw, source, _, state = recording
+    class Lock:
+        def __enter__(self):
+            assert events[-1] == ("audio-wait", None, None)
+        def __exit__(self, *args):
+            pass
+    monkeypatch.setattr(audio, "_LOCK", Lock())
+    def progress(stage, completed=None, total=None):
+        if stage == "audio-model":
+            assert not state.loads
+        if stage == "audio-decode":
+            assert state.loads and state.decodes == 0
+        if stage == "audio-recognize":
+            assert completed == len(state.calls)
+        events.append((stage, completed, total))
+    state.fail.add(1)
+    result = audio.retry_cached(str(source), str(raw), audio.AudioOptions("large-v3", "de"), progress=progress)
+    assert result["status"] == "partial"
+    assert events[:3] == [("audio-wait", None, None), ("audio-model", None, None), ("audio-decode", None, None)]
+    assert events[3:] == [("audio-recognize", n, 12) for n in range(13)]
+
+
+def test_cached_evidence_does_not_claim_model_decode_or_clip_work(recording):
+    run(recording)
+    events = []
+    raw, source, _, state = recording
+    result = audio.retry_cached(str(source), str(raw), audio.AudioOptions("large-v3", "de"),
+                               progress=lambda stage, *counts: events.append(stage))
+    assert result["status"] == "cached"
+    assert events == ["audio-wait"]
+    assert len(state.loads) == 1 and state.decodes == 1

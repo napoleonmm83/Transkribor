@@ -126,7 +126,7 @@ def test_evidence_builder_uses_current_settings_and_independent_audio(recording,
             raise ValueError("invalid hypotheses")
         return "ASR-Hypothese mit Rohbeleg"
 
-    def retry(audio, raw, options):
+    def retry(audio, raw, options, **kwargs):
         assert audio == "clip.mp3"
         assert options == correction_audio.AudioOptions("local-ASR", "de", True)
         return {"message": "Lokaler Kandidat", "candidates": [
@@ -209,7 +209,7 @@ def test_analysis_request_and_cache_keep_same_snapshot(recording, monkeypatch, c
     monkeypatch.setattr(correct.settings, "load", load)
     monkeypatch.setattr(llm, "_request", request)
     monkeypatch.setattr(correction_audio, "retry_cached",
-                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+                        lambda *a, **k: {"message": "kein Audio im Test", "candidates": []})
     monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
     first = correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False)
     assert actual == ["model-A"] and len(reads) == 1
@@ -241,7 +241,7 @@ def test_analysis_claude_uses_snapshot_model_after_provider_switch(recording, mo
     monkeypatch.setattr(correct, "_claude_exe", lambda: "claude")
     monkeypatch.setattr(correct.subprocess, "run", run)
     monkeypatch.setattr(correction_audio, "retry_cached",
-                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+                        lambda *a, **k: {"message": "kein Audio im Test", "candidates": []})
     monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
     result = correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False)
     assert "Lesart von sonnet" in result and len(reads) == 1
@@ -264,7 +264,7 @@ def test_force_recomputes_recording_context_before_correction(recording, monkeyp
     monkeypatch.setattr(correct, "_ask_llm", ask)
     monkeypatch.setattr(correct, "_audio_path", lambda *a: "clip.wav")
     monkeypatch.setattr(correction_audio, "retry_cached",
-                        lambda *a: {"message": "kein Audio im Test", "candidates": []})
+                        lambda *a, **k: {"message": "kein Audio im Test", "candidates": []})
     assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False)
     assert correct.correct_ai_single("Demo", "S1", gjson="", verify=False, force=True)
     assert len(analyses) == 2
@@ -294,7 +294,11 @@ def test_evidence_diagnostics_keep_fixed_prefix_and_single_line(recording, monke
     monkeypatch.setattr(correction_context, "prepare", prepare)
     monkeypatch.setattr(correction_audio, "retry_cached", retry)
     assert correct._recording_evidence("Demo", base, "", "", ziel="Deutsch", mehrsprachig=False) == ""
-    lines = capsys.readouterr().out.splitlines()
+    all_lines = capsys.readouterr().out.splitlines()
+    stages = [json.loads(line.removeprefix("[correction-stage] "))
+              for line in all_lines if line.startswith("[correction-stage] ")]
+    assert stages == [{"base": base, "stage": "context"}]
+    lines = [line for line in all_lines if not line.startswith("[correction-stage] ")]
     assert len(lines) == (3 if fails else 2)
     assert lines[0].startswith("  Belegvorbereitung: ")
     assert lines[0].endswith(" — Gesprächskontext und lokale ASR-Belege vorbereiten …")
@@ -423,3 +427,21 @@ def test_failed_rebuild_never_restores_raw_replaced_during_cache_validation(reco
     assert correct.correct_ai_single("Demo", "S1", verify=False, force=True) is False
     assert matched == [True]
     assert not (recording / "S1.correction.json").exists()
+
+def test_context_stage_is_emitted_before_blocking_analysis(recording, monkeypatch, capsys):
+    def prepare(*args, **kwargs):
+        lines = capsys.readouterr().out.splitlines()
+        event = json.loads(lines[-1].removeprefix("[correction-stage] "))
+        assert event == {"base": "S1", "stage": "context"}
+        return ""
+    def retry(*args, progress, **kwargs):
+        progress("audio-wait")
+        progress("audio-recognize", 1, 2)
+        lines = capsys.readouterr().out.splitlines()
+        events = [json.loads(line.removeprefix("[correction-stage] ")) for line in lines]
+        assert events == [{"base": "S1", "stage": "audio-wait"},
+                          {"base": "S1", "stage": "audio-recognize", "completed": 1, "total": 2}]
+        return {"message": "done", "candidates": []}
+    monkeypatch.setattr(correction_context, "prepare", prepare)
+    monkeypatch.setattr(correction_audio, "retry_cached", retry)
+    assert correct._recording_evidence("Demo", "S1", "", "", ziel="Deutsch", mehrsprachig=False) == ""

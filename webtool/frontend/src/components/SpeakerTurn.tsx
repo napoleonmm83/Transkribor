@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Play } from 'lucide-react'
 import type { Segment, Turn } from '@/lib/types'
 import { SegmentView } from './SegmentView'
@@ -18,7 +19,27 @@ function color(speaker: string) { // stabil je Name (Interviewer/Befragte unters
 }
 /** Default für trefferIds: "keine Treffer" — greift nur, solange die Suche aus ist. */
 const KEINE_TREFFER = new Set<number>()
-export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions, sucheAktiv = false, trefferIds = KEINE_TREFFER, suchAktivId = null }: {
+
+// Die Wiedergabe wechselt oft die aktive ID. Pro Zeile brauchen wir nur deren booleschen
+// Zustand: so bleiben die Tausenden unveraenderten Wortansichten und Popover unangetastet.
+const SegmentRow = memo(function SegmentRow({ seg, active, dimmen, aktiverTreffer,
+  speakerOptions, onPlaySeg, updateSegment }: {
+  seg: Segment; active: boolean; dimmen: boolean; aktiverTreffer: boolean;
+  speakerOptions: string[]; onPlaySeg: (s: Segment) => void;
+  updateSegment: (id: number, patch: Partial<Segment>) => void;
+}) {
+  return (
+    <div className="group">
+      <SpeakerCombobox value={seg.speaker} options={speakerOptions}
+        onChange={v => updateSegment(seg.id, { speaker: v })}
+        className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100 data-[state=open]:opacity-100" />
+      <SegmentView seg={seg} active={active} dimmen={dimmen} aktiverTreffer={aktiverTreffer}
+        onPlay={() => onPlaySeg(seg)} updateSegment={updateSegment} />
+    </div>
+  )
+})
+
+export const SpeakerTurn = memo(function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegment, renameSpeaker, speakerOptions, sucheAktiv = false, trefferIds = KEINE_TREFFER, suchAktivId = null }: {
   turn: Turn; activeId: number | null;
   onPlaySeg: (s: Segment) => void; onPlayTurn: (segs: Segment[]) => void;
   updateSegment: (id: number, patch: Partial<Segment>) => void;
@@ -51,19 +72,11 @@ export function SpeakerTurn({ turn, activeId, onPlaySeg, onPlayTurn, updateSegme
       </div>
       <div>
         {turn.segments.map(s => (
-          <div key={s.id} className="group">
-            {/* any-pointer-coarse: ohne Zeiger ist hier nicht ein Aktionsmenue unerreichbar,
-                sondern die SPRECHERWAHL selbst (#428). Im Issue-Text fehlte diese Fundstelle;
-                sie kam beim Nachmessen dazu. Begruendung der Variante: HomeGallery.tsx. */}
-            <SpeakerCombobox value={s.speaker} options={speakerOptions}
-              onChange={v => updateSegment(s.id, { speaker: v })}
-              className="opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100 data-[state=open]:opacity-100" />
-            <SegmentView seg={s} active={activeId === s.id}
-              dimmen={sucheAktiv && !trefferIds.has(s.id)} aktiverTreffer={suchAktivId === s.id}
-              onPlay={() => onPlaySeg(s)} updateSegment={updateSegment} />
-          </div>
+          <SegmentRow key={s.id} seg={s} active={activeId === s.id}
+            dimmen={sucheAktiv && !trefferIds.has(s.id)} aktiverTreffer={suchAktivId === s.id}
+            speakerOptions={speakerOptions} onPlaySeg={onPlaySeg} updateSegment={updateSegment} />
         ))}
       </div>
     </div>
   )
-}
+})

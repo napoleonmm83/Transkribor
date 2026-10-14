@@ -10,6 +10,7 @@ import { Toolbar } from '@/components/Toolbar'
 import { Transcript } from '@/components/Transcript'
 import { PlayerDock } from '@/components/PlayerDock'
 import type { WaveHandle } from '@/components/Waveform'
+import type { Segment } from '@/lib/types'
 
 export function EditorView() {
   const { project, base } = useParams<{ project: string; base: string }>()
@@ -85,6 +86,8 @@ export function EditorView() {
   const suchNext = () => setSuche(s => ({ ...s, index: anzahl ? (s.index + 1) % anzahl : 0 }))
   const suchPrev = () => setSuche(s => ({ ...s, index: anzahl ? (s.index - 1 + anzahl) % anzahl : 0 }))
   const waveRef = useRef<WaveHandle>(null)
+  const onPlaySeg = useCallback((s: Segment) => waveRef.current?.playSegment(s), [])
+  const onPlayTurn = useCallback((segs: Segment[]) => waveRef.current?.playTurn(segs), [])
   const [activeId, setActiveId] = useState<number | null>(null)
   const onTime = useCallback((t: number) => {
     const id = doc?.segments.find(s => t >= s.start && t < s.end)?.id ?? null
@@ -154,8 +157,7 @@ export function EditorView() {
           Behaelter selbst, damit ein entkoppeltes `absolute`-Kind nie wieder am Viewport landet. */}
       <div className="relative min-h-0 overflow-auto">
         <Transcript doc={doc} loading={docLoading} activeId={activeId}
-          onPlaySeg={s => waveRef.current?.playSegment(s)}
-          onPlayTurn={segs => waveRef.current?.playTurn(segs)}
+          onPlaySeg={onPlaySeg} onPlayTurn={onPlayTurn}
           updateSegment={updateSegment} updateDoc={updateDoc} renameSpeaker={renameSpeaker}
           sucheAktiv={suchAktiv} trefferIds={treffer.segmentTreffer} suchAktivId={suchAktivId}
           kopfTreffer={kopfTreffer} annotTreffer={annotTreffer} aktivOrt={aktivOrt} />
