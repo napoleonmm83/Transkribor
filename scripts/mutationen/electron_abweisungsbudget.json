@@ -1,0 +1,36 @@
+{
+  "test": "node scripts/testlauf.mjs electron/main.test.js",
+  "pfade": [
+    "electron/main.js",
+    "electron/main.test.js"
+  ],
+  "mutationen": [
+    {
+      "id": "EA1 Reserve je Art entfernt",
+      "datei": "electron/main.js",
+      "von": "if (reservierteAbweisungsarten.has(was) ||",
+      "nach": "if (false ||",
+      "rot": [
+        "eine Abweisungsflut laesst die Erstmeldung jedes anderen Ereignisweges sichtbar (#520)"
+      ]
+    },
+    {
+      "id": "EA2 Reserve liegt ausserhalb des Gesamtdeckels",
+      "datei": "electron/main.js",
+      "von": "abweisungen < ABWEISUNGEN_MAX - reservierteAbweisungsarten.size",
+      "nach": "abweisungen < ABWEISUNGEN_MAX",
+      "rot": [
+        "reservierte Erstmeldungen und gemischte Fluten halten denselben Gesamtdeckel (#520)"
+      ]
+    },
+    {
+      "id": "EA3 Neues Stundenfenster erneuert die Schlussmeldung nicht",
+      "datei": "electron/main.js",
+      "von": "    unterdrueckungGemeldet = false",
+      "nach": "    unterdrueckungGemeldet = true",
+      "rot": [
+        "ein neues Stundenfenster erneuert Gesamtbudget, Reserven und Schlussmeldung (#520)"
+      ]
+    }
+  ]
+}
