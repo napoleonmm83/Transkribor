@@ -742,7 +742,9 @@ Weiterleitung dahintersteckte, die ein Server ausgesucht hat und nicht du.
 einschliesslich `v0.50.2` stand dort immer derselbe Text, auch wenn er nicht passte. Und die
 Meldung verstummte früher, sobald in einer Sitzung zwanzig Links abgewiesen worden waren —
 jetzt wird sie stündlich wieder aufgezeichnet, du findest sie also auch dann noch, wenn die
-App schon länger offen ist.)*
+App schon länger offen ist. Ab `v0.59.2` verdrängen viele abgewiesene Anfragen einer Sorte die
+erste Abweisung einer anderen Sorte nicht mehr: ein abgewiesener Link bleibt im Protokoll
+stehen, auch wenn kurz vorher viele Berechtigungsanfragen abgewiesen wurden.)*
 
 </details>
 
