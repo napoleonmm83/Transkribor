@@ -696,13 +696,13 @@ test('eine Linkflut laesst Reserven frei und meldet die Unterdrueckung einmal (#
   // Ohne Bremse: 20 000 Aufrufe ohne Nutzergeste kamen alle an (~4200/s, kein Popup-Blocker).
   for (let i = 0; i < 50; i++) w.oeffnenHandler({ url: 'file:///x' + i })
   const abgewiesen = w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen'))
-  assert.strictEqual(abgewiesen.length, 15, 'fuenf Erstmeldungen anderer Arten bleiben reserviert')
+  assert.strictEqual(abgewiesen.length, 13, 'sieben Erstmeldungen anderer Arten und Herkuenfte bleiben reserviert')
   const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht 30-mal')
   // Sie muss den Vorgang mitnennen (#506): `bericht.letzteZeilen` laesst genau EINE Zeile
   // dieser Gruppe in die Fehlermail, und im Flutfall ist das GENAU diese. Ohne Art, Grund und
   // Ziel schickt der Nutzer eine Zeile ab, aus der sich nichts rekonstruieren laesst.
-  assert.match(schluss[0], /die naechste war: Externer Link, Schema nicht erlaubt, file:\/\/\/x15/)
+  assert.match(schluss[0], /die naechste war: Externer Link, Schema nicht erlaubt, file:\/\/\/x13/)
 })
 
 // ── Navigationswaechter (#434) ───────────────────────────────────────────────
@@ -833,7 +833,7 @@ test('der Deckel ist ein Zeitfenster, kein Lebenszeit-Budget (#448)', async () =
     performance.now = () => jetzt
     for (let i = 0; i < 30; i++) w.oeffnenHandler({ url: 'file:///a' + i })
     assert.strictEqual(w.protokollzeilen.filter(z => z.startsWith('Externer Link abgewiesen')).length,
-      15, 'innerhalb der Stunde bleiben die Erstmeldungen anderer Arten reserviert')
+      13, 'innerhalb der Stunde bleiben die Erstmeldungen anderer Arten reserviert')
     // Die Schlusszeile muss sagen, dass der Deckel ein FENSTER ist. Ohne diese Zusicherung stand
     // „je Stunde" ungedeckt im Code (`grep "je Stunde" electron/*.test.js` war leer) — ein
     // Zusatz, den niemand rot bekommt, ist eine Behauptung, keine Zusicherung.
@@ -855,7 +855,7 @@ test('Fensteroeffner und Navigation teilen EINEN Deckel und EINE Bremse (#434)',
   for (let i = 0; i < 15; i++) w.oeffnenHandler({ url: `file:///x${i}` })
   for (let i = 0; i < 15; i++) navigieren(w, `file:///y${i}`)
   const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen (Schema nicht erlaubt): '))
-  assert.strictEqual(abgewiesen.length, 16, 'vier weitere Arten behalten ihre Erstmeldung im gemeinsamen Deckel')
+  assert.strictEqual(abgewiesen.length, 14, 'sechs weitere Reserven behalten ihre Erstmeldung im gemeinsamen Deckel')
   const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht je Weg einmal')
 })
@@ -1029,7 +1029,7 @@ test('Berechtigungen teilen den Deckel der Linkabweisungen (#446, #426)', async 
   for (let i = 0; i < 15; i++) berechtigungFragen(w, 'media')
   for (let i = 0; i < 15; i++) w.oeffnenHandler({ url: 'file:///x' + i })
   const abgewiesen = w.protokollzeilen.filter(z => z.includes(' abgewiesen ('))
-  assert.strictEqual(abgewiesen.length, 16, 'EIN geteilter Deckel mit vier reservierten Erstmeldungen')
+  assert.strictEqual(abgewiesen.length, 14, 'EIN geteilter Deckel mit sechs reservierten Erstmeldungen')
 })
 
 // ── Berechtigungs-PRUEFUNGEN (#518) ──────────────────────────────────────────
@@ -1079,7 +1079,7 @@ test('je Art nur EINE Zeile — sonst frisst die Pruefung den Fehlerbericht (#51
   assert.deepStrictEqual(pruefzeilen(w).length, 2, '80 Pruefungen, zwei Arten, zwei Zeilen')
   // Der Deckel bleibt trotzdem geteilt: die Pruefung schreibt ueber denselben Zaehler.
   for (let i = 0; i < 25; i++) w.oeffnenHandler({ url: 'file:///x' + i })
-  assert.strictEqual(w.protokollzeilen.filter(z => z.includes(' abgewiesen (')).length, 16)
+  assert.strictEqual(w.protokollzeilen.filter(z => z.includes(' abgewiesen (')).length, 14)
 })
 
 test('eine fremde Herkunft bekommt auch die erlaubten Rechte nicht (#518)', async () => {
@@ -1157,6 +1157,14 @@ function abweisungsWege(w, pruefart = 'media') {
       { preventDefault: () => {} }, {}, { src: 'https://example.org/spaeter' })],
   ]
 }
+// Die beiden fremden Reserven (#520, je Herkunftsklasse) — fuer Tests, die den VOLLEN Deckel fahren.
+const FREMD = { requestingUrl: 'https://boese.example/x', isMainFrame: false }
+function fremdeWege(w, pruefart = 'media') {
+  return [
+    ['Berechtigung', () => berechtigungFragen(w, 'media', FREMD)],
+    ['Berechtigungspruefung', () => pruefungFragen(w, pruefart, FREMD, 'https://boese.example')],
+  ]
+}
 
 test('eine Abweisungsflut laesst die Erstmeldung jedes anderen Ereignisweges sichtbar (#520)', async () => {
   for (const flutArt of ['Externer Link', 'Berechtigung']) {
@@ -1183,7 +1191,7 @@ test('eine Abweisungsflut laesst die Erstmeldung jedes anderen Ereignisweges sic
 test('reservierte Erstmeldungen und gemischte Fluten halten denselben Gesamtdeckel (#520)', async () => {
   for (const rueckwaerts of [false, true]) {
     const w = await laden()
-    const wege = abweisungsWege(w)
+    const wege = [...abweisungsWege(w), ...fremdeWege(w)]
     if (rueckwaerts) wege.reverse()
     for (const [, ausloesen] of wege) {
       for (let i = 0; i < 40; i++) ausloesen()
@@ -1193,8 +1201,52 @@ test('reservierte Erstmeldungen und gemischte Fluten halten denselben Gesamtdeck
     for (const [art] of wege) assert.ok(details.some(z => z.startsWith(`${art} abgewiesen (`)), art)
     const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
     assert.strictEqual(schluss.length, 1, 'auch bei mehreren Fluten nur eine Schlusszeile')
-    assert.match(schluss[0], /reservierten Erstmeldungen/)
+    assert.match(schluss[0], /Deckel: 20 je Stunde, davon bis zu 8 fuer Erstmeldungen reserviert/,
+      'die Schlusszeile erklaert, warum bei einer Einzelflut weniger als 20 Zeilen dastehen')
   }
+})
+
+test('eigene Abweisungen verbrauchen die Reserve einer fremden Herkunft nicht (#520)', async () => {
+  const fremd = { requestingUrl: 'https://boese.example/x', isMainFrame: false }
+  // Pruefweg: die vier eigenen Startzeilen (main.js, Check-Handler) laufen nach jedem App-Start auf.
+  const w = await laden()
+  for (const art of ['media', 'web-app-installation', 'geolocation', 'background-sync']) pruefungFragen(w, art)
+  for (let i = 0; i < 21; i++) w.oeffnenHandler({ url: 'file:///flut' + i })
+  let vorher = w.protokollzeilen.length
+  pruefungFragen(w, 'media', fremd, 'https://boese.example')
+  assert.strictEqual(w.protokollzeilen.length, vorher + 1, 'die fremde Pruefung nach Start und Flut bleibt sichtbar')
+  assert.match(w.protokollzeilen.at(-1), /^Berechtigungspruefung abgewiesen \(fremde Herkunft\): media von https:\/\/boese\.example/)
+  // Anfrageweg: eine EIGENE Flut darf die erste fremde Anfrage nicht verschlucken.
+  const v = await laden()
+  for (let i = 0; i < 21; i++) berechtigungFragen(v, 'media')
+  vorher = v.protokollzeilen.length
+  berechtigungFragen(v, 'media', fremd)
+  assert.strictEqual(v.protokollzeilen.length, vorher + 1, 'die fremde Anfrage nach einer eigenen Flut bleibt sichtbar')
+  assert.match(v.protokollzeilen.at(-1), /^Berechtigung abgewiesen \(fremde Herkunft\): media von https:\/\/boese\.example/)
+})
+
+test('jeder Aufrufer von abweisungProtokollieren hat eine Reserve in ABWEISUNGSARTEN (#520)', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8')
+  const liste = quelle.match(/const ABWEISUNGSARTEN = \[([^\]]*)\]/)
+  assert.ok(liste, 'ABWEISUNGSARTEN nicht gefunden')
+  const arten = new Set([...liste[1].matchAll(/'([^']+)'/g)].map(m => m[1]))
+  // Das ZWEITE Argument je Aufruf, per Klammerzaehlung — es kann ein Ternaer mit zwei Arten sein
+  // (Navigation/Weiterleitung). Die Funktionsdefinition selbst ist kein Aufruf.
+  const aufrufe = []
+  for (const m of quelle.matchAll(/(?<!function )abweisungProtokollieren\(/g)) {
+    let tiefe = 0, argument = 0, zweites = ''
+    for (let i = m.index + m[0].length; i < quelle.length; i++) {
+      const c = quelle[i]
+      if ('([{'.includes(c)) tiefe++
+      else if (')]}'.includes(c)) { if (tiefe === 0) break; tiefe-- }
+      else if (c === ',' && tiefe === 0) { argument++; continue }
+      if (argument === 1) zweites += c
+    }
+    aufrufe.push(...[...zweites.matchAll(/'([^']+)'/g)].map(t => t[1]))
+  }
+  assert.ok(aufrufe.length >= 6, `Positivkontrolle: mindestens sechs Aufrufer erkannt, gefunden ${aufrufe.length}`)
+  for (const was of aufrufe) assert.ok(arten.has(was), `${was} hat keine Reserve`)
+  assert.deepStrictEqual([...arten].sort(), [...new Set(aufrufe)].sort(), 'keine Reserve ohne Aufrufer')
 })
 
 test('ein neues Stundenfenster erneuert Gesamtbudget, Reserven und Schlussmeldung (#520)', async () => {
@@ -1204,7 +1256,7 @@ test('ein neues Stundenfenster erneuert Gesamtbudget, Reserven und Schlussmeldun
     let jetzt = 0
     performance.now = () => jetzt
     const fuellen = pruefart => {
-      for (const [, ausloesen] of abweisungsWege(w, pruefart)) {
+      for (const [, ausloesen] of [...abweisungsWege(w, pruefart), ...fremdeWege(w, pruefart)]) {
         for (let i = 0; i < 30; i++) ausloesen()
       }
     }
@@ -1229,12 +1281,13 @@ test('echte Budgetzeilen lassen den Fehler im Bericht neben genau einer Abweisun
   for (let i = 0; i < 30; i++) w.oeffnenHandler({ url: 'javascript:flut' + i })
   const fehler = 'FEHLER: Transkription fehlgeschlagen'
   const bericht = () => letzteZeilen([fehler, ...w.protokollzeilen].join('\n'))
-  assert.deepStrictEqual(bericht(), [fehler, w.protokollzeilen.at(-1)],
-    'die erzeugte Schlusszeile zaehlt als Abweisung')
+  assert.deepStrictEqual(bericht(), [fehler, w.protokollzeilen.at(-2), w.protokollzeilen.at(-1)],
+    'juengste Detailzeile und Schlusszeile haben je einen eigenen Platz')
+  const schluss = w.protokollzeilen.at(-1)
   berechtigungFragen(w, 'media')
-  assert.deepStrictEqual(bericht(), [fehler,
+  assert.deepStrictEqual(bericht(), [fehler, schluss,
     'Berechtigung abgewiesen (nicht in der Weissliste): media'],
-    'eine spaetere reservierte Detailzeile ersetzt die Schlusszeile im Bericht')
+    'eine spaetere reservierte Detailzeile verdraengt die Schlusszeile NICHT aus dem Bericht (#506)')
 })
 /** Die Nachfrage haengt an einem nicht abgewarteten Versprechen hinter `serverStarten` —
  *  ein Makrotask reicht, damit Dialog und Datei durch sind. */

@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Das Protokoll der Desktop-App hält jede Art von abgewiesenem Link oder abgewiesener Anfrage wieder fest, auch wenn kurz vorher viele Anfragen einer anderen Art abgewiesen wurden.
+- Das Protokoll der Desktop-App hält die erste abgewiesene Anfrage jeder Sorte pro Stunde fest, auch wenn kurz vorher viele Anfragen einer anderen Sorte abgewiesen wurden.
 
 ## v0.59.1 — 2026-10-15
 

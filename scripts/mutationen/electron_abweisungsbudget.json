@@ -2,13 +2,14 @@
   "test": "node scripts/testlauf.mjs electron/main.test.js",
   "pfade": [
     "electron/main.js",
-    "electron/main.test.js"
+    "electron/main.test.js",
+    "electron/bericht.js"
   ],
   "mutationen": [
     {
       "id": "EA1 Reserve je Art entfernt",
       "datei": "electron/main.js",
-      "von": "if (reservierteAbweisungsarten.has(was) ||",
+      "von": "if (reservierteAbweisungsarten.has(reserve) ||",
       "nach": "if (false ||",
       "rot": [
         "eine Abweisungsflut laesst die Erstmeldung jedes anderen Ereignisweges sichtbar (#520)"
@@ -30,6 +31,24 @@
       "nach": "    unterdrueckungGemeldet = true",
       "rot": [
         "ein neues Stundenfenster erneuert Gesamtbudget, Reserven und Schlussmeldung (#520)"
+      ]
+    },
+    {
+      "id": "EA4 Reserve ohne Herkunftsklasse",
+      "datei": "electron/main.js",
+      "von": "const reserve = MIT_HERKUNFT.has(was) ? `${was}|${eigen ? 'eigen' : 'fremd'}` : was",
+      "nach": "const reserve = MIT_HERKUNFT.has(was) ? `${was}|eigen` : was",
+      "rot": [
+        "eigene Abweisungen verbrauchen die Reserve einer fremden Herkunft nicht (#520)"
+      ]
+    },
+    {
+      "id": "EA5 Bericht zaehlt Detail- und Schlusszeile gemeinsam",
+      "datei": "electron/bericht.js",
+      "von": "if (k >= 0 && ++gezaehlt[k] > ABWEISUNGEN_IM_BERICHT) continue",
+      "nach": "if (k >= 0 && ++gezaehlt[0] > ABWEISUNGEN_IM_BERICHT) continue",
+      "rot": [
+        "echte Budgetzeilen lassen den Fehler im Bericht neben genau einer Abweisung stehen (#520)"
       ]
     }
   ]

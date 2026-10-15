@@ -119,9 +119,15 @@ const ABWEISUNGSARTEN = [
   'Externer Link', 'Navigation', 'Weiterleitung', 'Berechtigung',
   'Berechtigungspruefung', 'Eingebettete Ansicht',
 ]
+// Die beiden Berechtigungswege reservieren je Herkunftsklasse: sonst nimmt das eigene
+// Startrauschen (vier Pruefzeilen nach jedem Start, siehe Check-Handler) die Reserve, die eine
+// spaetere FREMDE Pruefung braeuchte (Review zu #520, nachgemessen in main.test.js).
+const MIT_HERKUNFT = new Set(['Berechtigung', 'Berechtigungspruefung'])
+const RESERVEN = ABWEISUNGSARTEN.flatMap(a =>
+  MIT_HERKUNFT.has(a) ? [`${a}|eigen`, `${a}|fremd`] : [a])
 let abweisungen = 0
 let fensterStart = 0
-let reservierteAbweisungsarten = new Set(ABWEISUNGSARTEN)
+let reservierteAbweisungsarten = new Set(RESERVEN)
 let unterdrueckungGemeldet = false
 /** Fremde URLs werden auf ihre Herkunft gekuerzt, bevor sie ins Protokoll gehen. */
 function nurHerkunft(url) {
@@ -131,7 +137,7 @@ function nurHerkunft(url) {
   } catch { return '(unlesbare Herkunft)' }
 }
 
-function abweisungProtokollieren(url, was = 'Externer Link', grund) {
+function abweisungProtokollieren(url, was = 'Externer Link', grund, eigen) {
   // `performance.now()`, NICHT `Date.now()`: die Wanduhr springt (NTP, Handkorrektur,
   // VM-Snapshot). Ausgefuehrt gemessen: bei einem Ruecksprung um 24 h schwieg die Diagnose
   // 25 h statt einer Stunde, 24 von 30 Abweisungen gingen verloren — und der Satz „beginnt
@@ -143,21 +149,22 @@ function abweisungProtokollieren(url, was = 'Externer Link', grund) {
   if (jetzt - fensterStart >= ABWEISUNGEN_FENSTER_MS) {
     fensterStart = jetzt
     abweisungen = 0
-    reservierteAbweisungsarten = new Set(ABWEISUNGSARTEN)
+    reservierteAbweisungsarten = new Set(RESERVEN)
     unterdrueckungGemeldet = false
   }
   // #520: Eine Flut darf die Erstmeldung einer anderen Art nicht verschlucken.
   // Die Reserve liegt INNERHALB des Gesamtdeckels, sonst wuechse der Schreibweg.
-  if (reservierteAbweisungsarten.has(was) ||
+  const reserve = MIT_HERKUNFT.has(was) ? `${was}|${eigen ? 'eigen' : 'fremd'}` : was
+  if (reservierteAbweisungsarten.has(reserve) ||
       abweisungen < ABWEISUNGEN_MAX - reservierteAbweisungsarten.size) {
-    reservierteAbweisungsarten.delete(was)
+    reservierteAbweisungsarten.delete(reserve)
     abweisungen += 1
     protokoll.schreiben(was + ' abgewiesen (' + grund + '): ' + String(url).slice(0, 200))
   } else if (!unterdrueckungGemeldet) {
     unterdrueckungGemeldet = true
     // Der Fehlerbericht behaelt nur die juengste Abweisungszeile (#506).
     // Auch diese muss deshalb Art, Grund und gekapptes Ziel tragen.
-    protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert, ausser reservierten Erstmeldungen (Deckel: ${ABWEISUNGEN_MAX} je Stunde; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
+    protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert, ausser reservierten Erstmeldungen (Deckel: ${ABWEISUNGEN_MAX} je Stunde, davon bis zu ${RESERVEN.length} fuer Erstmeldungen reserviert; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
   }
 }
 
@@ -345,7 +352,7 @@ function fenster() {
       // Bei fremder Herkunft faehrt sie mit: „media abgelehnt" allein sagt nicht, WER gefragt
       // hat, und genau das ist dort die Information. Der 200-Zeichen-Deckel gilt wie ueberall.
       abweisungProtokollieren(eigen ? art : `${art} von ${nurHerkunft(angaben?.requestingUrl)}`,
-        'Berechtigung', eigen ? 'nicht in der Weissliste' : 'fremde Herkunft')
+        'Berechtigung', eigen ? 'nicht in der Weissliste' : 'fremde Herkunft', eigen)
     }
     erlauben(erlaubt)
   })
@@ -447,7 +454,8 @@ function fenster() {
       // Rahmen-Sonde; in dieser App heute unerreichbar, sie hat kein `<iframe>`).
       abweisungProtokollieren(eigen ? art : `${art} von ${nurHerkunft(wer)}`,
         'Berechtigungspruefung',
-        eigen ? 'nicht in der Weissliste' : angaben?.requestingUrl ? 'fremde Herkunft' : 'ohne Seitenangabe')
+        eigen ? 'nicht in der Weissliste' : angaben?.requestingUrl ? 'fremde Herkunft' : 'ohne Seitenangabe',
+        eigen)
     }
     return erlaubt
   })
