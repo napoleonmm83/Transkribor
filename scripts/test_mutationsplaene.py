@@ -93,10 +93,15 @@ def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
             return f"npm-Skript {skript!r} startet keinen unterstuetzten Testlaeufer"
         return None
     if mutation._node_testlaeufer(teile, wurzel, wurzel):
+        mit_wert = {"--test-reporter", "--test-reporter-destination", "--test-name-pattern",
+                    "--test-skip-pattern", "--test-concurrency", "--test-timeout",
+                    "--import", "--require", "-r"}
+        vorige = ""
         for teil in teile[2:]:
-            if not teil.startswith("-") and not any(c in teil for c in "*?[") \
-                    and not (wurzel / teil).exists():
+            if not teil.startswith("-") and vorige not in mit_wert \
+                    and not any(c in teil for c in "*?[") and not (wurzel / teil).exists():
                 return f"Testpfad {teil} existiert nicht"
+            vorige = teil
         return None
     if ci is None:
         return f"Testkommando {teile[0]!r} ist lokal nicht aufloesbar; `nur_ci` begruenden"
@@ -244,7 +249,8 @@ def test_node_testkommandos_sind_lokal_startbar(tmp_path):
     (scripts / "testlauf.mjs").write_text("", encoding="utf-8")
     (tmp_path / "probe.test.mjs").write_text("", encoding="utf-8")
     for kommando in ("node --test probe.test.mjs", "node scripts/testlauf.mjs probe.test.mjs",
-                     "node --test --test-reporter=tap pro*.test.mjs"):
+                     "node --test --test-reporter=tap pro*.test.mjs",
+                     "node --test --test-reporter tap probe.test.mjs"):
         assert _testkommando_fehler({"test": kommando}, tmp_path) is None
     for kommando in ("node probe.mjs", "node fremd/testlauf.mjs probe.test.mjs",
                      "node --test probe.test.mjs && echo 1 passed",
@@ -269,6 +275,8 @@ def test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest(tmp_path):
                    "node ../scripts/testlauf.mjs probe.test.mjs && echo 1 passed"):
         manifest.write_text(json.dumps({"scripts": {"test": befehl}}), encoding="utf-8")
         assert _testkommando_fehler({"test": "npm --prefix frontend test"}, tmp_path)
+    manifest.write_text(json.dumps({"scripts": {"test": "node --test probe.test.mjs"}}), encoding="utf-8")
+    assert _testkommando_fehler({"test": "npm --prefix frontend test -- --watch"}, tmp_path)
 
 
 def test_echter_electron_testlauf_ist_startbar():

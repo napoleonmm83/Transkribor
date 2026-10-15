@@ -453,7 +453,9 @@ def _node_testlaeufer(teile: list[str], wurzel: pathlib.Path,
     """Direkter Node-Testlauf oder unser Wrapper, relativ zum echten Laufordner."""
     if len(teile) < 2 or teile[0] != "node":
         return False
-    # --watch endet nie, und _lauf hat keinen Deckel (Review #659, gemessen: rc 124 nach 15 s).
+    # --watch kann endlos laufen, und _lauf hat keinen Deckel. Ob es greift, haengt an der
+    # Position (Review #659: vor dem Pfad haengend, CodeRabbit: dahinter wirkungslos) - die
+    # Form wird deshalb unabhaengig von der Position abgewiesen.
     if any(t.startswith("--watch") for t in teile):
         return False
     if teile[1] == "--test":
@@ -466,7 +468,9 @@ def _npm_testlaeufer(teile: list[str], wurzel: pathlib.Path) -> bool:
     """Das benannte npm-Skript muss selbst einen Testlaeufer starten."""
     if len(teile) < 4 or teile[:2] != ["npm", "--prefix"]:
         return False
-    skript = teile[3] if teile[3] != "run" else (teile[4] if len(teile) > 4 else "")
+    if any(t.startswith("--watch") for t in teile[3:]):  # auch `npm … -- --watch`
+        return False
+    skript =teile[3] if teile[3] != "run" else (teile[4] if len(teile) > 4 else "")
     paket = (wurzel / teile[2] / "package.json").resolve()
     if wurzel.resolve() not in paket.parents:
         return False
