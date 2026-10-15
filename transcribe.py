@@ -122,7 +122,7 @@ class _Sprachschwelle:
     Ankersprache.
 
     faster-whisper nimmt bei multilingual=True die beste Erkennung UNGEPRUEFT
-    (faster_whisper/transcribe.py:1192) — eine Schwelle gibt es dort nicht.
+    (faster-whisper 1.2.1: faster_whisper.transcribe.WhisperModel.generate_segments) — eine Schwelle gibt es dort nicht.
     `language_detection_threshold` gilt nur der einmaligen Erkennung am Anfang, nicht der
     pro Fenster. Gemessen an einem echten Beitrag meldete die Erkennung ueber dem Abspann
     (keine Sprache) „Englisch" mit p=0.289 — dort ist ein Sprachwechsel sinnlos. Die Schwelle
@@ -204,7 +204,7 @@ def _opts(language, mehrsprachig=False):
     `mehrsprachig=True` setzt ZWEI Parameter, und die gehoeren untrennbar zusammen:
     `multilingual=True` laesst faster-whisper die Sprache pro 30-s-Fenster neu erkennen —
     aber ohne `condition_on_previous_text=False` bleibt das WIRKUNGSLOS. faster-whisper
-    setzt zwar den Tokenizer pro Fenster um (faster_whisper/transcribe.py:1197), setzt aber
+    setzt zwar den Tokenizer pro Fenster um (faster-whisper 1.2.1: faster_whisper.transcribe.WhisperModel.generate_segments), setzt aber
     `prompt_reset_since` nicht zurueck; der deutsche Vorlauf reist als Prompt mit und
     schlaegt das <|en|>-Token, worauf Whisper uebersetzt statt zu transkribieren.
     Gemessen an echtem Audio mit 40 s englischem Einschub, sonst gleiche Parameter:
@@ -704,7 +704,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
         Das ist in beiden Konfigurationen die Zahl von master, nur anders verteilt; bei den
         Schutz-Ausstiegen ist es ein Tausch (Schleife → Rueckruf), keine Vermehrung. `jobs.py`
         bucht zaehlend und mit Boden 0 (`buche_aktive`, `remove_base`), so heben sich die drei
-        sauber auf; `jobPhases.ts:252` raeumt nur eine Diarisierungsphase
+        sauber auf; `jobPhases.parseJobPhases` raeumt nur eine Diarisierungsphase
         und ist gegen das wiederholte `[done]` durch Optional-Chaining doppelt abgesichert.
 
         Den Rueckruf an `fut.result() is None` zu haengen ergaebe genau eine Zeile, wuerde aber
@@ -888,7 +888,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
                         #
                         # Der Klammerdruck von `cmd_diarize` bleibt wie er ist: im
                         # eigenstaendigen `correct run` raeumt sein `[done]` die
-                        # Diarisierungsphase in `jobPhases.ts:252`. `jobPhases.ts` hat fuer
+                        # Diarisierungsphase in `jobPhases.parseJobPhases`. `jobPhases.ts` hat fuer
                         # `[active]` gar keinen Zweig; das Weglassen hier aendert fuer den
                         # Parser nichts.
                         # `prep_single` liefert `bool` und MELDET seinen Fehlschlag nur als

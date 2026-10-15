@@ -1,0 +1,41 @@
+{
+  "test": "python -m pytest scripts/test_release_vorabpruefung.py -q",
+  "pfade": [
+    "scripts/release-vorabpruefung.sh",
+    "scripts/test_release_vorabpruefung.py",
+    ".github/workflows/release.yml"
+  ],
+  "env": {
+    "PYTHONUTF8": "1"
+  },
+  "mutationen": [
+    {
+      "id": "numeric-protected-spaces-ignored",
+      "datei": "scripts/release-vorabpruefung.sh",
+      "von": "      -e 's/&#(0*160|0*8239|[xX]0*[aA]0|[xX]0*202[fF]);/ /g' \\\n",
+      "nach": "",
+      "rot": [
+        "test_readme_verhindert_mutation_und_tagfreigabe"
+      ],
+      "gruen": [
+        "test_erfolg_erreicht_mutation_erst_nach_pruefung",
+        "test_manueller_tag_prueft_readme_ohne_sha_laufabfrage",
+        "test_testbau_braucht_keine_liveabfrage"
+      ]
+    },
+    {
+      "id": "plural-release-placeholder-ignored",
+      "datei": "scripts/release-vorabpruefung.sh",
+      "von": "Fassung(en)?",
+      "nach": "Fassung",
+      "rot": [
+        "test_readme_verhindert_mutation_und_tagfreigabe"
+      ],
+      "gruen": [
+        "test_erfolg_erreicht_mutation_erst_nach_pruefung",
+        "test_manueller_tag_prueft_readme_ohne_sha_laufabfrage",
+        "test_testbau_braucht_keine_liveabfrage"
+      ]
+    }
+  ]
+}

@@ -410,7 +410,7 @@ def test_einzeilig_ist_der_zwilling_von_transcribe_und_faltet_umbrueche():
     aneinanderhalten, sonst driften sie.
 
     Warum es hier zaehlt: seit #405 liest `jobPhases.ts` den correct-Dialekt AUCH in einem
-    Transkriptions-Job. `llm.py:292` uebernimmt bis zu 400 Zeichen rohen HTTP-Rumpf in die
+    Transkriptions-Job. `llm._request` uebernimmt bis zu 400 Zeichen rohen HTTP-Rumpf in die
     Fehlermeldung; ein Umbruch darin gibt Fremdtext den ZEILENANFANG, und daran haengen die
     praefixlosen Muster (`^apply:`, `^✗ FEHLT/ungueltig:`) sowie `jobs.py`s `[active]`/`[done]`.
     An einem echten Lauf gegen einen HTTP-500-Server gemessen: eine erfundene Aufnahme hing
@@ -525,7 +525,7 @@ def test_apply_missing_correction_returns_missing(project):
 def test_apply_verwirft_eine_korrektur_die_kein_segment_trifft(project, capsys, segment):
     """Die drei STILLSTEN Formen aus T-199 — sie luden sauber und wirkten trotzdem nie.
 
-    `edit_model.apply_correction` baut sein `by_id` gegen die int-ids des Rohs (edit_model.py:144).
+    `edit_model.apply_correction` baut sein `by_id` gegen die int-ids des Rohs (edit_model.apply_correction).
     Ein Modell, das `segment_id` schreibt, ids als Strings ausgibt oder Nummern erfindet,
     verliert damit die GANZE Korrektur einer Datei — und die alte Erfolgszeile zaehlte die
     Segmente der `edit.json`, nicht die angewandten Korrekturen, meldete also unveraendert
@@ -555,9 +555,9 @@ def test_apply_verwirft_eine_korrektur_die_kein_segment_trifft(project, capsys, 
 def test_apply_warnt_wenn_ein_getroffenes_segment_keinen_sprecher_hat(project, capsys):
     """Der TEUERSTE Fall aus T-199 — der einzige, der ein vollstaendig plausibles Dokument baut.
 
-    Ein fehlender `speaker` wird in `apply_correction` zu `""` (edit_model.py:156); `render_md`
-    tauft ihn auf "Befragte Person" (render_md.py:24) UND verschmilzt aufeinanderfolgende
-    gleiche Sprecher (:27). Aus Frage und Antwort wird ein Monolog, und nichts daran sieht
+    Ein fehlender `speaker` wird in `apply_correction` zu `""` (edit_model.apply_correction); `render_md`
+    tauft ihn auf "Befragte Person" (render_md.render_md) UND verschmilzt aufeinanderfolgende
+    gleiche Sprecher (ebenfalls `render_md.render_md`). Aus Frage und Antwort wird ein Monolog, und nichts daran sieht
     kaputt aus.
 
     Das Dokument entsteht bewusst TROTZDEM (Entscheidung Marcus 19.09.2026): eine zu 95 %
@@ -767,7 +767,7 @@ def test_apply_urteilt_NICHT_ueber_einen_unbekannten_basisnamen(project, feld):
 def test_apply_zaehlt_eine_doppelte_id_EINMAL_und_fasst_den_verlierer_nicht_an(project, capsys):
     """Gezaehlt wird ueber dieselbe Abbildung, die auch angewandt wird — sonst zweierlei.
 
-    `apply_correction` baut `by_id` mit last-wins (edit_model.py:144): bei doppelter id
+    `apply_correction` baut `by_id` mit last-wins (edit_model.apply_correction): bei doppelter id
     gewinnt der LETZTE Eintrag, die frueheren werden nie angefasst. Der erste Entwurf dieses
     Riegels lief stattdessen ueber die rohe Liste, und der gegnerische Review hat daraus zwei
     ausgefuehrte Befunde gemacht:
@@ -1816,12 +1816,13 @@ def test_cmd_run_fixiert_seinen_bereich_beim_start(project, monkeypatch, capsys,
       `active_bases`, nie `bases` — der BEREICH eines laufenden `correct run` sperrt das
       Loeschen also nicht (bewusst so, #80). Verschwindet die Roh-JSON einer fixierten Base
       und wird die Aufnahme gleichnamig neu hochgeladen, nimmt der Transkriptionslauf sie
-      (keine Roh-JSON) und `cmd_run` korrigiert sie trotzdem mit, sobald sie wieder da ist:
-      seine beiden Pruefungen (`:1252`, `:1314`) fragen nur nach Existenz. Der frueher hier
+      (keine Roh-JSON). Vor #523 korrigierte `correct.cmd_run` sie trotzdem mit, sobald
+      sie wieder da war: seine Pruefungen fragten nur nach Existenz. Heute bindet
+      `correct.cmd_run.unveraendert` die Aufnahme ueber `paths.kennung`. Der frueher hier
       stehende Satz „eine Base wandert nur in EINE Richtung" war damit falsch; der
       Issue-Kommentar zu #496 hat den Weg mit dem falschen Praedikat (`active_only=False`,
       also `retranscribe_file`) als geschlossen gemessen.
-    * **Es ist die SCHREIBmenge, nicht „der Lauf".** `_glossary` (`:816`) scannt selbst noch
+    * **Es ist die SCHREIBmenge, nicht „der Lauf".** `correct._glossary` scannt selbst noch
       einmal — davon haengt ab, welche `.raw.txt` es liest und fuer welche Basen es
       `[active]` bucht; folgenlos fuer das, was geschrieben wird, aber es ist ein zweiter
       Scan. `main` scannte nach dem Lauf ein drittes Mal fuer den Exitcode — seit #524 nicht
@@ -4117,7 +4118,7 @@ def test_glossar_os_fehler_ueberspringt_glossar_und_laeuft_weiter(monkeypatch, t
     assert "[active] A_fremd" in zeilen, _zeige(verlauf)  # Vorbedingung: gesperrt wurde ueberhaupt
     assert any(z.startswith("⚠ Glossar-Fehler (OSError)") for z in zeilen), _zeige(verlauf)
     # Weiterlauf bezeugt, nicht nur Nicht-Werfen: die ZAEHLERHALTIGE Endbilanz (Vorlage
-    # test_correct.py:812) — der Praefix allein griffe auch fuer 0/1, ein Lauf, der die
+    # test_correct.py::test_cmd_run_fixiert_seinen_bereich_beim_start) — der Praefix allein griffe auch fuer 0/1, ein Lauf, der die
     # Datei-Korrekturen ueberspringt, bliebe gruen. done=1 erfordert den True-Rueckruf
     # der gefaelschten correct_ai_single (Gegner-Review F1).
     assert "run: fertig — 1/1 Datei(en) korrigiert" in zeilen, _zeige(verlauf)

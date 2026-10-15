@@ -192,7 +192,7 @@ def buche_aktive(aktive: dict, line: str, gesehen: set | None = None,
         # der kommt ROH an (`safe_name` laesst Randleerzeichen durch). Fuer eine Datei
         # " Probe" war `" Probe" in {"Probe"}` False -- der 409-Riegel griff fuer diese
         # Namensklasse nie, still. `gesehen` (Frontend-Rueckweg; die Endurteil-Regexe faengt
-        # den Namen ROH aus der Zeile, `jobPhases.ts:348`) bucht schon seit #475 roh; jetzt
+        # den Namen ROH aus der Zeile, `jobPhases.parseJobPhases`) bucht schon seit #475 roh; jetzt
         # gilt fuer beide dasselbe Wort: der Schluessel ist der rohe Rest der Zeile. Die
         # Truthy-Pruefung spiegelt weiterhin die des Frontends (`if (b) gesehen.add(b)` auf
         # dem rohen `slice(9)`): ein Name aus lauter Leerzeichen ist dort wahr, hier auch.
@@ -1336,7 +1336,7 @@ def _bereinige_fehlerprozess(proc) -> tuple[list[str], bool]:
 def _kill_tree_native(proc):
     if os.name == "nt":
         # /T killt den ganzen Prozessbaum (python -> [claude.cmd] -> claude/node -> MCP-Kinder);
-        # ein blosses terminate() liesse den claude-Subtree verwaisen (vgl. correct.py:147-149).
+        # ein blosses terminate() liesse den claude-Subtree verwaisen (vgl. correct._run_claude).
         result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                                 capture_output=True, creationflags=_CREATE_NO_WINDOW)
         if result.returncode != 0:

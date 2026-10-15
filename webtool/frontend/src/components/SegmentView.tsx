@@ -41,9 +41,9 @@ export function SegmentView({ seg, active, onPlay, updateSegment, dimmen = false
   useLayoutEffect(() => { notizJetzt.current = seg.note }, [seg.note])
   const corrected = isCorrected(seg)
   const flags = FLAGS.filter(f => seg.flags[f.key])
-  const rawTokens = tokenizeUncertain(seg).map((t, i) => t.cls
+  const rawTokens = !corrected || showRaw ? tokenizeUncertain(seg).map((t, i) => t.cls
     ? <UncertainWord key={i} word={seg.words[i]} cls={t.cls} />
-    : <span key={i}>{t.text}</span>)
+    : <span key={i}>{t.text}</span>) : null
   const body = corrected ? seg.text : rawTokens
   const focusRing = 'focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 rounded-sm'
   const ring = aktiverTreffer ? 'ring-2 ring-inset ring-yellow-400 dark:ring-yellow-500'

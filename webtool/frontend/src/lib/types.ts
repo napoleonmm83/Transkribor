@@ -285,7 +285,7 @@ export type LoginState = {
   braucht_code?: boolean; fertig?: boolean; ok?: boolean; fehler?: string; ausgabe?: string;
 };
 export type Turn = { key: string; speaker: string; segments: Segment[] };
-export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe';
+export type FilePhase = 'diarize' | 'correct' | 'verify' | 'transcribe' | 'context' | 'audio';
 export type GlobalPhase = 'diarize' | 'prep' | 'glossary' | 'download';
 export type FileState = 'done' | 'skipped' | 'failed';
 /** Was eine Endurteil-Zeile ueber die PLATTE beweist: `raw` = `<base>.json` geschrieben,

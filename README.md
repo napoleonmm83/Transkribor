@@ -120,6 +120,9 @@ bis in den Export. Gespeichert wird von selbst. Ab 768 Pixel Fensterbreite brich
 Werkzeugleiste bei Bedarf um, damit Speicherstatus, Suche und die vollständigen
 Exportbeschriftungen sichtbar bleiben.
 
+**Ab `v0.59.1`** reagiert der Editor beim Abspielen langer Aufnahmen flüssiger;
+auch eine einzelne Textänderung baut nicht mehr alle unveränderten Abschnitte neu auf.
+
 Löschst du ein Projekt, entwertet Transkribor auch Speicherungen, die im geöffneten Editor
 noch unterwegs sind. Legst du später ein Projekt mit demselben Namen an, können Änderungen
 aus dem alten Editor dort nicht hineinrutschen; stattdessen wird der aktuelle Stand geladen.
@@ -247,6 +250,11 @@ allen Projekten. Bisher landetest du von einer geöffneten Aufnahme aus immer gl
 **Es wartet nicht auf dich.** Aufnahmen werden nacheinander abgehört, die Korrektur läuft
 danach für mehrere gleichzeitig, und mehrere Projekte laufen ohnehin nebeneinander — du
 kannst weiterarbeiten oder das Fenster zumachen.
+
+**Ab `v0.59.1`** siehst du auch während der Korrekturvorbereitung, ob Transkribor den
+Gesprächskontext prüft, auf die lokale Audioanalyse wartet, das Modell lädt oder bereits
+Ausschnitte erneut abhört. Bei den Ausschnitten zeigt die Anzeige, wie viele schon geprüft
+sind; andere Vorbereitungsschritte haben keinen erfundenen Prozentwert.
 
 Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
 **Ab `v0.50.1`** siehst du auch bei diesen Aufnahmen in der Liste, woran

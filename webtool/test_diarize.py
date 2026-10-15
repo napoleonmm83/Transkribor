@@ -111,7 +111,7 @@ def test_diarize_file_waehlt_num_speakers_ODER_min_speakers(monkeypatch):
     anderen Seite waere: es klemmte jede Datei OHNE Einstellung auf eine erfundene Zahl.
 
     Dass `num_speakers` ALLEIN steht, ist eine Klarheits-Entscheidung, keine Notwendigkeit:
-    pyannote wirft dabei NICHT (nachgemessen an 4.0.7 — `utils/diarization.py:58` ueberschreibt
+    pyannote wirft dabei NICHT (nachgemessen an 4.0.7 — `pyannote.audio 4.0.7: pyannote.audio.pipelines.utils.diarization.set_num_speakers` ueberschreibt
     `min_speakers` mit `num_speakers`), ein mitgeschicktes `min_speakers` waere schlicht
     wirkungslos. Der Test nagelt es trotzdem fest, damit am Aufrufort keine Grenze steht, die
     nichts tut."""

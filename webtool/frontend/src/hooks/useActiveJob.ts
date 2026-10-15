@@ -43,7 +43,7 @@ export const JobContext = createContext<Ctx | null>(null)
  *    Transkript gerade ersetzt, und die Korrektur arbeitet auf gleich veralteten Daten.
  *  - Kollidieren zwei TERMINALE Ausgaenge, gewinnt der schwerere (`RANG`). Hier stand ein
  *    `Object.assign`, also "der spaetere Job im Array" — und diese Reihenfolge ist nicht
- *    zufaellig, sondern systematisch die schlechte: `jobs.py:273` sortiert `active_for` nach
+ *    zufaellig, sondern systematisch die schlechte: `jobs.active_for` sortiert `active_for` nach
  *    `kind`, also `correct` vor `transcribe`, und `useProjektDaten` adoptiert in dieser
  *    Reihenfolge. Ein Transkriptionslauf druckte beim Start fuer JEDE bereits transkribierte
  *    Datei `skip (vorhanden)` — womit sein 'skipped' jedes 'failed' des parallelen
@@ -98,7 +98,7 @@ export function mergePhases(jobs: Job[]): JobPhases {
   //
   // `edit` schlaegt `raw` — und das ist hier ein TIE-BREAK, keine Regel wie in `terminal()`.
   // Dort entscheidet die Zeilenreihenfolge (die spaetere Zeile ist der frischere Beweis);
-  // ueber JOBS hinweg gibt es keine solche Ordnung, `jobs.py:273` sortiert nach `kind` und
+  // ueber JOBS hinweg gibt es keine solche Ordnung, `jobs.active_for` sortiert nach `kind` und
   // die Adoptionsreihenfolge sagt nichts ueber die Zeit. Der Fall ist praktisch unerreichbar:
   // ein Projektlauf fasst nur Aufnahmen OHNE `.json` an, kann also keinen `raw`-Beleg fuer
   // eine Datei erzeugen, die ein parallel laufender `correct`-Job gerade beschreibt; und der

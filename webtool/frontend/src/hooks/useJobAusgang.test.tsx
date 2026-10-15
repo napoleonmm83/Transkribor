@@ -67,7 +67,7 @@ describe('useJobAusgang (#376)', () => {
   })
 
   it('ein TEILfehlschlag meldet NICHT „fertig" — und nennt die Datei', async () => {
-    // Der Kern von #376. `correct.py:1064` wirft nur, wenn KEINE Datei gelang; eine von zweien
+    // Der Kern von #376. `correct.main` beendet den Prozess bei Totalausfall; eine von zweien
     // gescheitert heisst Exitcode 0 und damit Job-Status `done`. Vorher lief genau das als
     // „Korrigieren fertig" durch, und weil die Etiketten am laufenden Job haengen, verschwand
     // das rote „Fehler" in derselben Sekunde: wer nicht zusah, erfuhr es nie.
@@ -90,7 +90,7 @@ describe('useJobAusgang (#376)', () => {
     // TRAEGER IST EIN correct-LAUF, und das ist kein Geschmack. Bis #408 stand hier ein
     // transcribe-Lauf mit `skip (vorhanden)` — dessen Parser-Zweig ist mit dem Wegfall der
     // Druckform entfernt worden, womit die beiden Zeilen NICHTS mehr erzeugten: der Nenner
-    // war 2, ob `jobAusgang.ts:42` die uebersprungenen herausrechnet oder nicht. Der
+    // war 2, ob `jobAusgang.ausgang` die uebersprungenen herausrechnet oder nicht. Der
     // Waechter war blind, und zwar erst durch jene Reparatur (Negativkontrolle: dieselbe
     // Mutation ist auf dem Elterncommit rot). 'skipped' kommt heute aus `correct`s
     // `apply: SKIP …` („deine Handarbeit bleibt stehen") — genau das steht auch in der
@@ -106,7 +106,7 @@ describe('useJobAusgang (#376)', () => {
 
   it('ein URL-Import mit toten Videos meldet NICHT „fertig" (#376/B1)', async () => {
     // Der Import kennt keine Basisnamen (die Datei entsteht erst beim Laden), also gibt es
-    // nie einen perBase-Eintrag — und `fetch.py:576` wirft nur, wenn GAR nichts geladen
+    // nie einen perBase-Eintrag — und `fetch.main` wirft nur, wenn GAR nichts geladen
     // wurde. Ohne die Bilanzzeile meldete dieser Lauf glatten Erfolg. Der Fehlschlag war
     // vorher unsichtbar; ihn als Erfolg zu BEHAUPTEN waere schlimmer.
     vi.mocked(api.getJob).mockResolvedValue({ status: 'done', kind: 'fetch',

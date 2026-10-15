@@ -112,8 +112,8 @@ const GRUND_FRIST_MS = 3000
  * Die drei Zeilen, die am ehesten den Grund tragen.
  *
  * Bevorzugt Zeilen, die sich selbst als Fehler bezeichnen: der URL-Import druckt seine
- * `[fetch] FEHLER <url>: …` beliebig weit oben und danach jeden Erfolg plus die Bilanz
- * (`fetch.py:455/458/575`) — die blanken letzten drei Zeilen zeigten dort auf die geglueckten
+ * `[fetch] FEHLER <url>: …` beliebig weit oben und danach jeden Erfolg (`fetch.download_one`)
+ * plus die Bilanz (`fetch.main`) — die blanken letzten drei Zeilen zeigten dort auf die geglueckten
  * Downloads statt auf den Grund. Findet sich keine solche Zeile, bleibt es beim Ende des
  * Protokolls (der Transkriptionslauf endet mit seinem Wurf, dort ist das richtig).
  */

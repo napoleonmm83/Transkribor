@@ -1,0 +1,24 @@
+{
+  "test": "npm --prefix webtool/frontend test -- src/components/Waveform.test.tsx",
+  "pfade": [
+    "webtool/frontend/src/components/Waveform.tsx",
+    "webtool/frontend/src/components/Waveform.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "empty-media-error-hidden",
+      "datei": "webtool/frontend/src/components/Waveform.tsx",
+      "von": "setMediaError(error.message || 'Keine weiteren Angaben')",
+      "nach": "setMediaError(error.message)",
+      "rot": [
+        "shows empty media error as an alert and disables controls"
+      ],
+      "gruen": [
+        "preserves a nonempty MediaError diagnostic",
+        "never starts a stored URL before peaks arrive and reports supplied duration",
+        "preserves local blob preview with onBereit",
+        "clears media error when recording URL changes"
+      ]
+    }
+  ]
+}

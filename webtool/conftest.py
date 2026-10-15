@@ -53,7 +53,10 @@ Eine dritte Grenze ist seit dem Bot-Review GESCHLOSSEN: ein `monkeypatch.undo()`
 **BEIDE** Riegel zurueck, weil alle Fixtures eines Tests dieselbe `MonkeyPatch`-Instanz
 teilen — nach `undo()` war `subprocess.Popen` wieder das Original (gemessen; hier stand zuerst
 „entwertet (a), nicht (b)", falsch, gefunden vom gegnerischen Pruefer).
-`test_transcribe.py:664/677/688` rufen `undo()` mitten im Test. Deshalb haengen beide Riegel
+`test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` und die MIX_SCHWELLE-Einlese-Tests
+(`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
+in `test_transcribe.py` rufen `undo()` mitten im Test.
+Deshalb haengen beide Riegel
 jetzt an EIGENEN `pytest.MonkeyPatch.context()`-Instanzen, die ein Test-`undo()` nicht
 erreicht (`test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch`).
 
@@ -63,7 +66,7 @@ erreicht (`test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch`).
   laesst die `.env` gegen einen gesetzten Wert gewinnen. Das entwertet **(a)**, und **(b)**
   faengt es trotzdem ab — das ist der zweite Grund fuer die Wache.
 * `testpaths` umfasst auch `build/` und `scripts/`; dorthin reicht diese Datei nicht. Und dort
-  LIEGT ein pip-Weg — `scripts/osv_freeze.py:93` ruft `pip install --dry-run --report`; er
+  LIEGT ein pip-Weg — `scripts/osv_freeze.py::_pip_report` ruft `pip install --dry-run --report`; er
   wird von `test_osv_freeze.py` heute nur nicht erreicht. Die tragfaehige Aussage ist also
   „kein Test dort erreicht heute pip", nicht „dort liegt kein pip-Weg" (auch das der
   gegnerische Pruefer). `scripts/weg_benchmark.py` setzt den Schalter ohnehin selbst. Eine
@@ -94,7 +97,7 @@ _PIP_VERBEN = {"install", "uninstall"}
 def _ist_pip_installation(kommando) -> bool:
     """Wuerde dieses Kommando Pakete in die venv schreiben?
 
-    Die Form, um die es wirklich geht, ist `ytdlp_update.py:958`:
+    Die Form, um die es wirklich geht, ist `ytdlp_update.aktualisiere`:
     `[sys.executable, "-m", "pip", "install", "-U", …, "yt-dlp[default]"]`. Eine Zeichenkette
     (`shell=True`) wird zerlegt, sonst rutschte sie am Listenvergleich vorbei.
 
@@ -145,8 +148,10 @@ def _mit_executable(args, executable):
 
 
 # Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests:
-# alle Fixtures eines Tests teilen sich sonst dieselbe Instanz, und `test_transcribe.py:664/
-# 677/688` rufen `monkeypatch.undo()` mitten im Test — gemessen nahm das Schalter UND Wache
+# alle Fixtures eines Tests teilen sich sonst dieselbe Instanz, und
+# `test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` sowie die MIX_SCHWELLE-Einlese-Tests
+# (`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
+# in `test_transcribe.py` rufen `monkeypatch.undo()` mitten im Test — gemessen nahm das Schalter UND Wache
 # mit, `subprocess.Popen` war danach das Original (CodeRabbit-Bot, Major, PR #529). Ein
 # pip-Aufruf hinter so einem `undo()` liefe ins Echte. `test_die_wache_ueberlebt_ein_undo_des_
 # test_monkeypatch` haelt das fest.
@@ -185,7 +190,7 @@ def _kein_echtes_pip():
 
     **Die Wache ist eine KLASSE, keine Funktion — das ist der teuerste Punkt hier.** Der erste
     Entwurf setzte eine Funktion an die Stelle von `subprocess.Popen`, und damit bricht jeder
-    Code, der davon ERBT: `yt_dlp/utils/_utils.py:842` macht `class Popen(subprocess.Popen)`
+    Code, der davon ERBT: `yt-dlp 2026.8.19: yt_dlp.utils._utils.Popen` macht `class Popen(subprocess.Popen)`
     beim Import, und der stirbt dann mit `TypeError: function() argument 'code' must be code,
     not str`. Heute traf das keinen Test (alle `test_fetch.py`-Stellen ersetzen
     `_importiere_yt_dlp`, ein Modulkopf-Import existiert nicht — daher 1201 gruen), aber jeder

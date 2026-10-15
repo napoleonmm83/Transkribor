@@ -1,0 +1,136 @@
+{
+  "test": "python -m pytest scripts/test_mutation.py scripts/test_mutationsplaene.py -q",
+  "pfade": [
+    "scripts/mutation.py",
+    "scripts/test_mutation.py",
+    "scripts/test_mutationsplaene.py",
+    "scripts/testlauf.mjs",
+    "webtool/frontend/package.json"
+  ],
+  "mutationen": [
+    {
+      "id": "MN1 Direkter Node-Testlauf wird abgewiesen",
+      "datei": "scripts/mutation.py",
+      "von": "if teile[1] == \"--test\":",
+      "nach": "if False:",
+      "rot": [
+        "test_node_vorlauf_nimmt_direkten_testlauf",
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN2 Jeder Node-Skriptpfad gilt als Wrapper",
+      "datei": "scripts/mutation.py",
+      "von": "return (laufordner / teile[1]).resolve() == wrapper and wrapper.is_file()",
+      "nach": "return True",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar",
+        "test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN3 Fehlender Wrapper wird akzeptiert",
+      "datei": "scripts/mutation.py",
+      "von": "return (laufordner / teile[1]).resolve() == wrapper and wrapper.is_file()",
+      "nach": "return (laufordner / teile[1]).resolve() == wrapper",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN4 Node im npm-Skript wird ignoriert",
+      "datei": "scripts/mutation.py",
+      "von": "or _node_testlaeufer(lauf, wurzel, paket.parent)",
+      "nach": "or False",
+      "rot": [
+        "test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN8 node --watch wird angenommen",
+      "datei": "scripts/mutation.py",
+      "von": "if any(t.startswith(\"--watch\") for t in teile):",
+      "nach": "if False:",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN9 Planwaechter prueft node-Testpfade nicht",
+      "datei": "scripts/test_mutationsplaene.py",
+      "von": "and not (wurzel / teil).exists():",
+      "nach": "and False:",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN6 Nulltest-Riegel entfaellt",
+      "datei": "scripts/mutation.py",
+      "von": "if not _lief_mindestens_ein_test(aus0):",
+      "nach": "if False:",
+      "rot": [
+        "test_node_vorlauf_verwirft_null_tests",
+        "test_node_vorlauf_mit_echtem_kindprozess"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN7 Planwaechter lehnt direktes Node ab",
+      "datei": "scripts/test_mutationsplaene.py",
+      "von": "if mutation._node_testlaeufer(teile, wurzel, wurzel):",
+      "nach": "if False:",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar",
+        "test_echter_electron_testlauf_ist_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN10 npm-Anhang --watch wird angenommen",
+      "datei": "scripts/mutation.py",
+      "von": "if any(t.startswith(\"--watch\") for t in teile[3:]):  # auch `npm … -- --watch`",
+      "nach": "if False:",
+      "rot": [
+        "test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN11 Optionswert gilt als Testpfad",
+      "datei": "scripts/test_mutationsplaene.py",
+      "von": "if not teil.startswith(\"-\") and vorige not in mit_wert \\",
+      "nach": "if not teil.startswith(\"-\") \\",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    }
+  ]
+}

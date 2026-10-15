@@ -232,8 +232,10 @@ jobs:
       - run: npm ci --no-audit --fund=false
         working-directory: webtool/frontend
 
-      - run: npm run test:lint
-        working-directory: webtool/frontend
+      # Die Selbsttests des Riegels (scripts/oxlint_riegel.test.mjs) faehrt `npm test` mit.
+      # Dass sie dort wirklich eingesammelt werden ("0 Tests = rot"), bewacht hier kein
+      # eigener Schritt mehr, sondern indirekt der Job Mutationsproben (Plan
+      # scripts/mutationen/oxlint-riegel.json: ein vitest-Filter ohne Treffer endet rc 2).
       - run: npm run lint:ci
         working-directory: webtool/frontend
 
@@ -348,7 +350,7 @@ jobs:
   # Kosten: alle drei zusammen 1 s auf ubuntu (Lauf 33567187248); release.yml beziffert
   # Windows/Git Bash mit 1–5 s plus 2,4 s fuer fassung.test.sh.
   #
-  # Was sie pruefen, ist in allen VIER Faellen dasselbe: Logik, die ueber Versionsnummern,
+  # Was sie pruefen, ist dasselbe: Logik, die ueber Versionsnummern,
   # Release-Text und den Update-Feed entscheidet — und all das holt nach dem Veroeffentlichen
   # niemand zurueck. (Seit #536 sind es vier statt drei; `macos-mindest.sh` braucht als einziges
   # `node` — der Job installiert es nicht, die Runner-Images bringen es mit.)
@@ -379,6 +381,7 @@ jobs:
       # macos-mindest.sh schreibt in die latest-mac.yml, die der Mac-Updater liest — dieselbe
       # Klasse wie die drei darueber: was es entscheidet, holt nach dem Release niemand zurueck.
       - run: bash scripts/macos-mindest.test.sh
+      - run: bash scripts/release-vorabpruefung.test.sh
 
   # Bis einschliesslich #543 (ruff 0.16.5 -> 0.16.6) pflegte Renovate die Fassung eines
   # Werkzeugs, das NIRGENDS lief: nicht hier, nicht im pre-commit-Hook (6 Zeilen, kein ruff),

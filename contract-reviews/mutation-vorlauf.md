@@ -1,5 +1,14 @@
 # Vertragsprüfung: Mutationsvorlauf
 
+> **Nachtrag #659 (2026-10-15):** Neben Pytest und npm gilt auch ein direkter
+> `node --test …`-Lauf oder der Wrapper `node scripts/testlauf.mjs …` (auch als
+> Ziel eines npm-Skripts) als Testlauf; `--watch` wird abgewiesen (auch als
+> angehängtes npm-Argument). Die genannten Testpfade prüft der Wächter nur bei
+> direkten Node-Kommandos, nicht im Rumpf eines npm-Skripts. **Grenze:** node:test zählt eine getroffene
+> Datei selbst als Test. Ein `--test-name-pattern` ohne Treffer oder eine Datei
+> ohne `test()` besteht deshalb den Vorlauf, anders als Pytest. Die volle Serie
+> bleibt in dem Fall rot, nennt aber die falsche Ursache (Folge-Issue).
+
 Trace: `2026-09-23--t219-mutations-vorlauf`
 
 ## Vertrag

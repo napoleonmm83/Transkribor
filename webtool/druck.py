@@ -40,7 +40,7 @@ EIN GEMEINSAMES LOCK BRAUCHT ES NICHT, und das ist gemessen, nicht geschlossen (
 ruht auf drei Stufen, von denen uns nur die erste gehoert: (1) die Huelle macht aus jeder Zeile
 EINEN `TextIOWrapper.write`, (2) unter `-u` ist der Binaerlayer roh, also ist das EIN `os.write`
 der ganzen Zeile, (3) ein Pipe-Schreibvorgang bis `PIPE_BUF` ist atomar. Gegenprobe mit
-16 Threads x 500 Zeilen durch einen Elternprozess mit den Bedingungen aus `jobs.py:341-345`::
+16 Threads x 500 Zeilen durch einen Elternprozess mit den Bedingungen aus `jobs._run_proc`::
 
     ohne Huelle:  8000 erwartet | gut 1622 | KAPUTT 2575 | leer 3803
     mit  Huelle:  8000 erwartet | gut 8000 | KAPUTT    0 | leer    0
@@ -53,8 +53,8 @@ GRENZEN, benannt statt verschwiegen:
 
 * **`PIPE_BUF`.** Atomar ist ein Pipe-Schreibvorgang nur bis 4096 Byte (Linux). Die laengste
   BEKANNTE Zeile ist `[scope]` mit allen Basisnamen, und die ist unkritisch: sie wird
-  gedruckt, bevor ein zweiter Thread laeuft (`transcribe.py:504` vor `:587`, `correct.py:1240`
-  vor `:1356`). Was NICHT gemessen ist: Fehlerzeilen mit eingebetteter Ausnahme (`{e}`) — die
+  in `transcribe.transcribe_project` und `correct.cmd_run` gedruckt, bevor deren
+  `ThreadPoolExecutor` startet. Was NICHT gemessen ist: Fehlerzeilen mit eingebetteter Ausnahme (`{e}`) — die
   laufen sehr wohl neben Poolthreads, und ihre Laenge haengt an fremdem Text.
 * **stderr — geschlossen seit #481, Restgrenze benannt.** Bis #481 mischte `jobs.py` es per
   `stderr=STDOUT` in dieselbe Pipe: der faster-whisper-Fortschrittsbalken
@@ -132,7 +132,7 @@ class Zeilenweise:
         # `buffer` ist der eine Sonderfall: wer ihn holt, schreibt an der Huelle VORBEI und
         # ueberholte damit eine zurueckgehaltene Teilzeile. Der Weg ist nicht theoretisch --
         # `yt_dlp.utils.write_string` nimmt genau ihn, und `YoutubeDL` laeuft in-process
-        # (`fetch.py:449/456`), gebaut NACH der Umhuellung in `fetch.main`. Heute folgenlos
+        # (`fetch.download_one`), gebaut NACH der Umhuellung in `fetch.main`. Heute folgenlos
         # (`_ydl_opts` setzt quiet/no_warnings/noprogress, `fetch.main` ist einthreadig) --
         # aber das ist Konfiguration, nicht Konstruktion. Vor der Herausgabe wird deshalb
         # geleert; danach gibt es nichts mehr zu ueberholen.

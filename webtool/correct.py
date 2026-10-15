@@ -99,7 +99,7 @@ def _einzeilig(text) -> str:
     einem Job der Art `correct`. Seit die Korrektur INNERHALB des Transkriptions-Jobs laeuft
     und dort gelesen wird, gilt fuer diese Druckstellen dieselbe Regel wie fuer die in
     `transcribe.py`. Gemessen an einem echten Lauf gegen einen HTTP-500-Server: `llm.py`
-    uebernimmt bis zu 400 Zeichen rohen Antwortrumpf in die Fehlermeldung (`llm.py:292`),
+    uebernimmt bis zu 400 Zeichen rohen Antwortrumpf in die Fehlermeldung (`llm._request`),
     Umbrueche inklusive — eine erfundene Aufnahme hing danach bis Jobende im Spinner, und
     eine eingeschleuste `apply: … -> edit.json`-Zeile meldete eine fremde Aufnahme als
     fertig.
@@ -482,8 +482,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 continue
             # VOR dem ersten Schreibzugriff, nicht erst vor „→ Diarisiere …" (#444). Zwischen der
             # Audio-Pruefung und der alten Stelle liegt `os.remove(dpath)` — und im eigenstaendigen
-            # `correct run` ist die Aufnahme hier wirklich frei: `[scope]` fuellt `bases`, NICHT
-            # `active_bases` (`jobs.py:308-311`), und die Menge startet leer (`jobs.py:116`). Ein
+            # `correct run` ist die Aufnahme hier wirklich frei: `[scope]` fuellt `bases`
+            # (`jobs._run_proc`), NICHT `active_bases` (`jobs.buche_aktive`), und die Menge startet leer (`jobs._start_kanonisch`). Ein
             # `DELETE` in diesem Fenster wird also nicht abgewiesen, und die Diarisierung schreibt
             # danach ein Sidecar fuer eine geloeschte Aufnahme — dieselbe Waise wie in
             # `cmd_run.one()`, nur mit anderem Suffix. Im gestaffelten Lauf ist es folgenlos
@@ -685,7 +685,7 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
     # FRAGE des Interviewers steht danach als Satz der befragten Person im Export, bei Exit 0.
     #
     # Gezaehlt wird ueber DIESELBE Abbildung, die `apply_correction` benutzt — `by_id`, letzter
-    # Eintrag je id gewinnt (`edit_model.py:144`). Der erste Entwurf lief stattdessen ueber die
+    # Eintrag je id gewinnt (`edit_model.apply_correction`). Der erste Entwurf lief stattdessen ueber die
     # rohe Liste, und der gegnerische Review hat daraus zwei Befunde ausgefuehrt:
     #
     # 1. Eine DUBLETTE mit kaputtem `speaker` im UEBERSCHRIEBENEN Eintrag
@@ -794,7 +794,7 @@ def cmd_apply(project: str, base: str, force: bool = False, *,
     # Sie ist eingerueckt wie die uebrigen Nebenzeilen dieses Moduls — aber die EINRUECKUNG ist
     # nicht der Grund, warum `jobPhases.ts` sie durchlaesst; hier stand das zuerst, und der
     # gegnerische Review hat es widerlegt: der Parser schneidet `^ {0,2}` als ERSTES weg
-    # (`jobPhases.ts:231`). Harmlos ist die Zeile, weil keine der fuenf `^apply:`-Regexe auf
+    # (`jobPhases.parseJobPhases`). Harmlos ist die Zeile, weil keine der fuenf `^apply:`-Regexe auf
     # `WARNUNG` passt — das misst der Vertragstest (Eintrag `art: 'ignoriert'`), nicht der
     # Einzug. Wer hier eine Zeile ergaenzt, verlaesst sich also auf den Vertragstest.
     if ohne_sprecher:
@@ -1636,6 +1636,15 @@ def _correct_one(base: str, tagged: str, target: str, gjson: str, context: str, 
     print(f"⏱ {base}{part}: Korrektur {dt_korrektur:.0f}s{wie}", flush=True)
 
 
+def _correction_stage(base: str, stage: str, completed: int | None = None,
+                      total: int | None = None) -> None:
+    """Exact recording identity and measured work; JSON keeps foreign text on one line."""
+    event: dict[str, str | int] = {"base": base, "stage": stage}
+    if completed is not None and total is not None:
+        event.update(completed=completed, total=total)
+    print(f"[correction-stage] {json.dumps(event, ensure_ascii=True)}", flush=True)
+
+
 def _recording_evidence(project: str, base: str, gjson: str, context: str,
                         *, ziel: str, mehrsprachig: bool, force: bool = False) -> str:
     from . import correction_audio, correction_context
@@ -1653,6 +1662,7 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
         def ask_analysis(prompt, files, output):
             _ask_llm(prompt, files, output, cfg=cfg)
 
+        _correction_stage(base, "context")
         sections.append(correction_context.prepare(raw_path, tagged, inputs, ask_analysis, force=force))
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"  ⚠ {label}: Kontextanalyse nicht verfügbar — {_einzeilig(exc)}", flush=True)
@@ -1661,7 +1671,10 @@ def _recording_evidence(project: str, base: str, gjson: str, context: str,
         options = correction_audio.AudioOptions(
             os.environ.get("WHISPER_MODEL") or cfg["whisper_model"],
             raw.get("language"), mehrsprachig)
-        result = correction_audio.retry_cached(_audio_path(project, base), raw_path, options)
+        result = correction_audio.retry_cached(
+            _audio_path(project, base), raw_path, options,
+            progress=lambda stage, completed=None, total=None:
+                _correction_stage(base, stage, completed, total))
         print(f"  Lokale Zweiterkennung: {label} — {_einzeilig(result['message'])}", flush=True)
         if result["candidates"]:
             sections.append("Lokale ASR-Zweitmeinungen mit Ausschnittzeiten (unbestätigte Textkandidaten, "
@@ -2204,7 +2217,7 @@ def cmd_run(project: str, base: str = None, force: bool = False, verify: bool = 
             # GETRAGENER PREIS: eine korrigierte Datei meldet `[done]` dreimal — aus
             # `cmd_diarize`, aus `correct_ai_single`s `finally` und hier. `jobs.buche_aktive`
             # bucht zaehlend mit Boden 0 (siehe ihr Docstring), die drei heben sich sauber
-            # auf, und `jobPhases.ts:252` raeumt per Optional-Chaining nur eine
+            # auf, und `jobPhases.parseJobPhases` raeumt per Optional-Chaining nur eine
             # DIARISIERUNGSphase — die ist zu diesem Zeitpunkt laengst weg.
             if gemeldet:
                 print(f"[done] {b}", flush=True)

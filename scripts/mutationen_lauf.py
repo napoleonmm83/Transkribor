@@ -59,7 +59,7 @@ GLOBALE_PFADE = (
     "webtool/frontend/package.json",
     "webtool/frontend/package-lock.json",
     # Die gemeinsame Testhuelle des Frontends. Sie steht in keinem `pfade`, traegt aber
-    # Zusicherungen mehrerer Suiten — `Sidebar.test.tsx:4` holt `Huelle` von hier. Eine
+    # Zusicherungen mehrerer Suiten — `Sidebar.test.tsx (Huelle-Import)` holt `Huelle` von hier. Eine
     # Aenderung daran kann einen Waechter entwerten, ohne eine seiner Dateien anzufassen
     # (Befund des kalten Diff-Lesers).
     "webtool/frontend/src/lib/testHuelle.tsx",

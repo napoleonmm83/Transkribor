@@ -1,10 +1,9 @@
-# geprueft 60 Dateien
+# geprueft 93 Dateien
 docs/bugsink/test_envelope_sammler.py:arg-type
 docs/bugsink/test_envelope_sammler.py:union-attr
 docs/bugsink/test_envelope_sammler.py:union-attr
 tools/diar_eval.py:no-any-return
 tools/diar_eval.py:no-any-return
-webtool/app.py:arg-type
 webtool/app.py:assignment
 webtool/app.py:return-value
 webtool/app.py:var-annotated
@@ -29,7 +28,6 @@ webtool/diarize.py:union-attr
 webtool/diarize.py:union-attr
 webtool/diarize.py:var-annotated
 webtool/diarize.py:var-annotated
-webtool/jobs.py:assignment
 webtool/jobs.py:assignment
 webtool/jobs.py:assignment
 webtool/jobs.py:var-annotated

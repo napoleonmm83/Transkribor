@@ -4,6 +4,26 @@ import { describePhases, parseJobPhases , imBereich, zugelassen, laufOrdnung, wa
 // Meldung daraus weiterhin „fertig" sagt (#405 + #376).
 import { ausgang } from './jobAusgang'
 
+it('bewahrt Transkriptionserfolg in der Abschlussbilanz nach Vorbereitung und geschützter Handarbeit', () => {
+  const p = parseJobPhases('transcribe', [
+    '[scope] A\tB', '[Demo] fertig A: 5s, 2 Segmente, ', '[Demo] fertig B: 5s, 2 Segmente, ',
+    '[correction-stage] {"base":"A","stage":"context"}',
+    'apply: SKIP A (waehrend des Laufs handbearbeitet; --force zum Ueberschreiben)',
+    'apply: FEHLT B.correction.json - erst Korrektur-Workflow laufen lassen',
+  ])
+  expect(p.perBase.A).toBe('done')
+  expect(ausgang({ status: 'done', phases: p })).toEqual({ art: 'teil', misslungen: ['B'], versucht: 2 })
+})
+
+it('überträgt zurückgestellten Transkriptionserfolg nicht auf eine neue gleichnamige Aufnahme', () => {
+  const p = parseJobPhases('transcribe', [
+    '[scope] A', '[Demo] fertig A: 5s, 2 Segmente, ',
+    '[correction-stage] {"base":"A","stage":"context"}', '[scope+] A',
+    'apply: SKIP A (human_edited=true; --force zum Ueberschreiben)',
+  ])
+  expect(p.perBase.A).toBe('skipped')
+})
+
 describe('parseJobPhases — correct', () => {
   it('aktive Datei + Phase, sequentiell', () => {
     const p = parseJobPhases('correct', [
@@ -59,7 +79,7 @@ describe('parseJobPhases — correct', () => {
       'A: 300 Segmente → 2 Blöcke',
       '→ Korrigiere A · Block 1/2 …', '⏱ A · Block 1/2: Korrektur 82s, Verify 61s',
       '✓ A · Block 1/2 fertig',
-      // Die ECHTE Form (correct.py:1421), in EINEM Literal. Hier stand bis #564 eine Fassung
+      // Die ECHTE Form (correct.cmd_run), in EINEM Literal. Hier stand bis #564 eine Fassung
       // mit `diarisieren · vorbereiten · glossar · korrigieren`, die es seit #399 (`da647e1`)
       // nicht mehr gibt — und sie war ausserdem auf zwei Literale mit `+` verteilt, womit die
       // Ernte zwei halbe Zeilen sah. Beides behoben; die Zusicherung darunter ist unberuehrt,
@@ -140,7 +160,7 @@ describe('parseJobPhases — correct', () => {
   })
   it('ein RESUME-Lauf legt keinen Eintrag ohne Phase an (#347)', () => {
     // Der Riegel `if (active[base])` in `blockDone`, gemessen am ECHTEN Strom statt an einer
-    // gebauten Sequenz: `correct.py:1062` druckt im Wiederaufnahme-Zweig `↷ … schon vorhanden`
+    // gebauten Sequenz: `correct._correct_file` druckt im Wiederaufnahme-Zweig `↷ … schon vorhanden`
     // und danach `✓ … fertig`, ruft aber `_correct_one` NICHT — es gibt also KEINE
     // `→ Korrigiere`-Zeile, die `active` anlegt. Ohne den Riegel entstuende hier ein Eintrag
     // aus `pct`/`detail` OHNE `phase`: die Pille beschriftete ihn mit `PHASE_LABEL[undefined]`,
@@ -148,8 +168,8 @@ describe('parseJobPhases — correct', () => {
     // fragt — die Vorbereiten-Phase verschwaende also mit.
     //
     // Die erste Fassung dieses Tests haengte eine Blockzeile hinter `apply:`. Das ist
-    // AEQUIVALENT gedacht und im Strom unerreichbar: `cmd_run` sammelt alle Bloecke, bevor
-    // `cmd_apply` laeuft (correct.py:1343). Ein Waechter auf einer Sequenz, die kein Drucker
+    // AEQUIVALENT gedacht und im Strom unerreichbar: `correct.correct_ai_single` laesst
+    // `_correct_file` alle Bloecke EINER Datei sammeln, bevor es `cmd_apply` ruft. Ein Waechter auf einer Sequenz, die kein Drucker
     // erzeugt, deckt den Fall nicht, den er decken soll — gefunden vom kalten Plan-Reviewer.
     const p = parseJobPhases('correct', [
       'prep: 1 Datei(en) getaggt in /t',
@@ -614,7 +634,7 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
 
   it('ein Basisname, der SELBST auf `(N Sprecher)` endet, wird an der Bereichszeile gerettet', () => {
     // Von Subagent (M1) UND CodeRabbit-CLI unabhängig gefunden. Aus der Zeile allein ist der
-    // Fall NICHT entscheidbar — `correct.py:298-300` hängt den Zusatz an, beide Lesarten
+    // Fall NICHT entscheidbar — `correct.cmd_diarize` hängt den Zusatz an, beide Lesarten
     // ergeben dieselben Bytes. Die zweite Quelle ist `[scope]` mit den echten Basisnamen.
     const p = parseJobPhases('correct', [
       '[scope] Runde 2 (3 Sprecher)',
@@ -693,7 +713,7 @@ describe('parseJobPhases — Druckformen, die der Parser nicht kannte (#374)', (
   it('`apply: FEHLT {base}.json` beendet die Datei — sonst meldet der Lauf ERFOLG', () => {
     // Codex-Befund [high] am Bündel, nachgemessen und bestätigt. Ungelesen war diese Zeile
     // nicht bloss ein hängender Spinner: `cmd_apply` gibt "missing" zurück, `correct_ai_single`
-    // verwirft den Wert (correct.py:1041 `cmd_apply(...)`, :1042 `return True`), und ohne
+    // verwarf den Wert (in `correct.correct_ai_single` nach `cmd_apply(...)`), und ohne
     // perBase-Eintrag findet `ausgang()` kein `misslungen` und keine `bilanz` — der Lauf meldete
     // {art:'erfolg'} über eine edit.json, die nie geschrieben wurde.
     const p = parseJobPhases('correct', [
@@ -1533,7 +1553,7 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     // (2) `apply:` hat geschrieben — die Korrektur ist durch.
     expect(korrekturSchlange(roh(['apply: A -> edit.json']), 'transcribe')).toEqual({})
     // (3) Sie ist gescheitert — es kommt keine Korrektur mehr. BEIDE Wege, denn nur der
-    // zweite ist der Korrektur-Fehlerpfad (`jobPhases.ts:286`): mit dem allgemeinen
+    // zweite ist der Korrektur-Fehlerpfad (`jobPhases.parseJobPhases`): mit dem allgemeinen
     // FEHLER-Zweig allein bliebe der Test gruen, wenn die Erkennung von
     // `Autocorrect-Fehler bei` ausfiele. (CodeRabbit-CLI am PR.)
     expect(korrekturSchlange(roh(['[Demo] FEHLER A: kein Anbieter']), 'transcribe')).toEqual({})
@@ -1551,5 +1571,106 @@ describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () =
     // A steht mit drin, obwohl es gerade LAEUFT — so gewollt seit K3: es liegt vor B, und
     // seine eigene Pille zeigt ohnehin die Phase, nicht den Wartetext.
     expect(warteKarte(p, 'correct')).toEqual({ A: { art: 'correct', vor: 0 }, B: { art: 'correct', vor: 1 } })
+  })
+})
+
+describe('structured correction preparation', () => {
+  const line = (base: string, stage: string, extra = {}) =>
+    '[correction-stage] ' + JSON.stringify({ base, stage, ...extra })
+  const contextA = line('A', 'context')
+  const malformedCounts = line('A', 'audio-recognize', { completed: 13, total: 12 })
+  const bogus = line('A', 'bogus')
+  it('replaces transcription done and carries combined pipeline through apply', () => {
+    const start = ['[scope] A', '[Demo] fertig A: 5s, 2 Segmente, ', contextA]
+    const p = parseJobPhases('transcribe', start)
+    expect(p.active.A).toEqual({ phase: 'context' })
+    expect(p.perBase.A).toBeUndefined()
+    expect(p.erreicht?.A).toBe('raw')
+    expect(parseJobPhases('transcribe', [...start, '→ Korrigiere A …']).active.A.phase).toBe('correct')
+    expect(parseJobPhases('transcribe', [...start, '→ Verifiziere A (Treue gegen Roh) …']).active.A.phase).toBe('verify')
+    const end = parseJobPhases('transcribe', [...start, 'apply: A -> edit.json'])
+    expect(end.active).toEqual({})
+    expect(end.perBase.A).toBe('done')
+  })
+  it('keeps exact names, parallel stages and real processed clip count', () => {
+    const base = ' A · Block 1/2 — [scope] B '
+    const scopeLine = '[scope] '+base+'\tB'
+    const contextLine = line(base, 'context')
+    const audioLine = line('B', 'audio-recognize', { completed: 2, total: 12 })
+    const p = parseJobPhases('correct', [scopeLine, contextLine, audioLine])
+    expect(p.active[base]).toEqual({ phase: 'context' })
+    expect(p.active.B).toEqual({ phase: 'audio', detail: '2/12 Ausschnitte', pct: 17 })
+    expect(p.global).toBeNull()
+  })
+  it('gates kinds, deleted and unscoped bases; malformed progress stays indeterminate', () => {
+    expect(parseJobPhases('fetch', [contextA]).active).toEqual({})
+    expect(parseJobPhases('correct', ['[scope] B', contextA]).active).toEqual({})
+    expect(parseJobPhases('correct', ['[scope] A', contextA], undefined, ['A']).active).toEqual({})
+    expect(parseJobPhases('correct', [malformedCounts]).active.A)
+      .toEqual({ phase: 'audio' })
+    expect(parseJobPhases('correct', ['[correction-stage] broken', bogus]).active).toEqual({})
+  })
+  it('preserves failures and clears stale glossary while preparation is active', () => {
+    const p = parseJobPhases('correct', ['[scope] A', '✗ Fehler bei A: kaputt — überspringe',
+      '→ Glossar (gemeinsame Namen/Begriffe) …', contextA])
+    expect(p.perBase.A).toBe('failed')
+    expect(p.global).toBeNull()
+  })
+})
+
+
+describe('raw transcript replacement ends only the old active work', () => {
+  const stage = (base: string, phase: string) => '[correction-stage] ' + JSON.stringify({ base, stage: phase })
+  const skip = (base: string) => '↷ SKIP ' + base + ' (Roh-Transkript waehrend des Laufs ausgetauscht)'
+
+  it.each(['context', 'audio-model'])('clears %s preparation without judging the replacement', phase => {
+    const base = ' Interview (Teil 1) '
+    const scopeLine = '[scope] ' + base + '\tB'
+    const lines = [scopeLine, stage(base, phase), stage('B', 'context')]
+    const before = parseJobPhases('correct', lines)
+    expect(before.active[base]).toBeDefined()
+    const finished = [...lines, skip(base), '[done] ' + base]
+    const after = parseJobPhases('correct', finished)
+    expect(after.active[base]).toBeUndefined()
+    expect(after.active.B).toEqual(before.active.B)
+    expect(after.perBase).toEqual(before.perBase)
+    expect(after.erreicht).toEqual(before.erreicht)
+  })
+
+  it.each(['failed', 'raw', 'edit'])('keeps existing %s verdicts and evidence unchanged', prior => {
+    const earlier = prior === 'failed' ? '✗ Fehler bei A: kaputt — überspringe'
+      : prior === 'raw' ? '[Demo] fertig A: 4 Segmente' : 'apply: A -> edit.json geschrieben'
+    const scopeLine = '[scope] A\tB'
+    const lines = [scopeLine, earlier, stage('A', 'context'), stage('B', 'audio-model')]
+    const before = parseJobPhases('transcribe', lines)
+    if (prior === 'failed') expect(before.perBase.A).toBe('failed')
+    else expect(before.erreicht?.A).toBe(prior)
+    const finished = [...lines, skip('A')]
+    const after = parseJobPhases('transcribe', finished)
+    expect(after.active.A).toBeUndefined()
+    expect(after.active.B).toEqual(before.active.B)
+    expect(after.perBase).toEqual(before.perBase)
+    expect(after.erreicht).toEqual(before.erreicht)
+  })
+
+  it('clears old block progress and only the matching transcription cursor', () => {
+    const abandoned = skip('A')
+    const correction = parseJobPhases('correct', ['A: 540 Segmente → 4 Blöcke à max. 150',
+      '→ Korrigiere A · Block 1/4 …', '✓ A · Block 1/4 fertig', abandoned, '→ Korrigiere A …'])
+    expect(correction.active.A).toEqual({ phase: 'correct' })
+    const cleared = parseJobPhases('transcribe', ['[Demo] -> transkribiere A …', abandoned, '50%|'])
+    expect(cleared.active.A).toBeUndefined()
+    const preparing = stage('A', 'context')
+    const parallel = parseJobPhases('transcribe', [preparing,
+      '[Demo] -> transkribiere B …', abandoned, '50%|'])
+    expect(parallel.active.B.pct).toBe(50)
+  })
+
+  it('does not turn an unrelated nested done into a preparation outcome', () => {
+    const preparing = stage('A', 'context')
+    const abandoned = skip('A')
+    expect(parseJobPhases('correct', [preparing, '[done] A']).active.A)
+      .toEqual({ phase: 'context' })
+    expect(parseJobPhases('correct', [abandoned]).perBase).toEqual({})
   })
 })

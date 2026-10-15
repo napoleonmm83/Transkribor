@@ -34,6 +34,19 @@ const get = <T>(u: string): Promise<T> => fetch(u).then(jn<T>)
 export function audioUrl(project: string, base: string) {
   return `/api/projects/${enc(project)}/audio/${enc(base)}`
 }
+export type WaveformData = { peaks: number[][]; duration: number }
+
+export async function getWaveform(url: string, signal: AbortSignal): Promise<WaveformData> {
+  const data = await jn<WaveformData>(await fetch(`${url}/waveform`, { signal }))
+  if (!Number.isFinite(data.duration) || data.duration <= 0 ||
+      !Array.isArray(data.peaks) || data.peaks.length !== 1 ||
+      !Array.isArray(data.peaks[0]) || !data.peaks[0].length || data.peaks[0].length > 2000 ||
+      data.peaks[0].some(p => !Number.isFinite(p))) {
+    throw new Error('Ungültige Wellenform')
+  }
+  return data
+}
+
 export async function listProjects(): Promise<Project[]> {
   return (await jn<{ projects: Project[] }>(await fetch('/api/projects'))).projects
 }

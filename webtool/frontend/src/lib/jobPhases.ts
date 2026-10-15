@@ -1,6 +1,7 @@
 import type { Erreicht, FilePhase, FileState, FileWork, GlobalPhase, JobPhases, Warten } from './types'
 
 export const PHASE_LABEL: Record<FilePhase, string> = {
+  context: 'Gesprächskontext vorbereiten', audio: 'Lokale Zweiterkennung',
   diarize: 'Diarisieren', correct: 'Korrigieren', verify: 'Verifizieren', transcribe: 'Transkribieren',
 }
 export const GLOBAL_LABEL: Record<GlobalPhase, string> = {
@@ -45,6 +46,9 @@ export function parseJobPhases(kind: string, lines: string[],
   // Vorbestehend (der kalte Diff-Leser fand es an diesem PR), hier mitgenommen, weil dieselben
   // Zeilen angefasst wurden und die neue Karte die Angriffsflaeche sonst vergroessert haette.
   const perBase: Record<string, FileState> = Object.create(null)
+  // Vorbereitung versteckt den Transkriptionserfolg nur waehrend der Arbeit.
+  // Die Abschlussbilanz braucht ihn weiterhin, auch wenn Handarbeit die Korrektur stoppt.
+  const vorherDone = new Set<string>()
   const active: Record<string, FileWork> = Object.create(null)
   // Blocknummern statt Zaehler: ein wiederverwendeter Block meldet '↷ schon vorhanden' UND
   // '✓ fertig' (correct.py faellt nach dem Reuse in dieselbe Pruefung) — ein ++ zaehlte ihn
@@ -142,6 +146,7 @@ export function parseJobPhases(kind: string, lines: string[],
     // AUCH OHNE neue Datei — der Server reaktiviert (discard), das folgende `skip (Audio
     // nicht mehr vorhanden)` bucht ganz normal 'failed' (Vorverhalten).
     if (ungueltig.has(base)) {
+      vorherDone.delete(base)
       delete active[base]
       delete blocks[base]
       if (cursor === base) cursor = null
@@ -172,7 +177,8 @@ export function parseJobPhases(kind: string, lines: string[],
     // geaendert, `npx vitest run` ⇒ 826 von 826 gruen. Wer das Argument pruefen will, mutiert
     // genau diese Zeile; wer `RANG` um zwei Zustaende GLEICHEN Rangs erweitert, macht den
     // Mutanten damit nicht-aequivalent und braucht dann einen Test.
-    if (!(base in perBase) || RANG[state] >= RANG[perBase[base]]) perBase[base] = state
+    const vorher = perBase[base] ?? (vorherDone.has(base) ? 'done' : undefined)
+    perBase[base] = !vorher || RANG[state] >= RANG[vorher] ? state : vorher
     // Der Beleg folgt NICHT dem RANG: er sagt, was auf der Platte liegt, nicht wie der Lauf
     // ausging. Er folgt der ZEILENREIHENFOLGE — die spaetere Zeile ist der frischere Beweis.
     //
@@ -359,6 +365,37 @@ export function parseJobPhases(kind: string, lines: string[],
     // den keine Mutation rot bekommt, sieht aus wie Schutz und ist keiner.
     if (kind !== 'correct' && kind !== 'transcribe') continue
 
+    // Preparation begins a new correction attempt; retain raw evidence and real errors.
+    if (l.startsWith('[correction-stage] ')) {
+      try {
+        const event = JSON.parse(l.slice('[correction-stage] '.length))
+        if (!event || typeof event !== 'object' || typeof event.base !== 'string' || !event.base
+            || ungueltig.has(event.base)
+            || (scope && !scope.has(event.base) && !gesehen.has(event.base))) continue
+        const detail: Record<string, string | undefined> = {
+          context: undefined, 'audio-wait': 'wartet auf lokalen Slot',
+          'audio-model': 'Modell laden', 'audio-decode': 'Audio vorbereiten',
+          'audio-recognize': undefined,
+        }
+        if (typeof event.stage !== 'string' || !Object.hasOwn(detail, event.stage)) continue
+        const work: FileWork = { phase: event.stage === 'context' ? 'context' : 'audio' }
+        if (detail[event.stage]) work.detail = detail[event.stage]
+        if (event.stage === 'audio-recognize' && Number.isSafeInteger(event.completed)
+            && Number.isSafeInteger(event.total) && event.total > 0
+            && event.completed >= 0 && event.completed <= event.total) {
+          work.detail = `${event.completed}/${event.total} Ausschnitte`
+          work.pct = Math.round(event.completed / event.total * 100)
+        }
+        if (perBase[event.base] === 'done') {
+          vorherDone.add(event.base)
+          delete perBase[event.base]
+        }
+        active[event.base] = work
+        global = null
+      } catch { /* Malformed status is not evidence of progress. */ }
+      continue
+    }
+
     // `(.+?)` + optionaler Zusatz: correct.py haengt seit #264 ` ({n} Sprecher)` an, das gierige
     // `(.+)` verschluckte ihn -> Schluessel "Timeline 13 (5 Sprecher)". Beide Verbraucher schlagen
     // mit dem EXAKTEN Basisnamen nach (ProjectWorkspace, Sidebar), die Phase war damit bei jeder
@@ -367,20 +404,20 @@ export function parseJobPhases(kind: string, lines: string[],
     // "Runde 2 (3 Sprecher)" heisst, wird OHNE gesetzte Sprecherzahl zu "Runde 2" gekuerzt.
     // Vorher war dieser Fall richtig — getragen, weil der Name absurd und der Normalfall haeufig ist.
     // Aufgeloest wird die Zweideutigkeit an der BEREICHSZEILE, nicht an der Zeile selbst.
-    // Aus der Zeile allein geht es nicht: `correct.py:298-300` haengt den Zusatz nur an, also
+    // Aus der Zeile allein geht es nicht: `correct.cmd_diarize` haengt den Zusatz nur an, also
     // entsteht `→ Diarisiere Runde 2 (3 Sprecher) …` Byte fuer Byte gleich aus base="Runde 2"
     // mit Zahl 3 UND aus base="Runde 2 (3 Sprecher)" ohne Zahl. Der naheliegende Vorschlag
     // (Name und Zahl in getrennte Felder ziehen) scheitert genau daran — die Zahl steht nicht
     // getrennt IN der Zeile, sie ist von ihr nicht unterscheidbar.
-    // `[scope]` fuehrt die ECHTEN Basisnamen (`correct.py:1072`, tab-getrennt) und steht vor
+    // `[scope]` fuehrt die ECHTEN Basisnamen (`correct.cmd_run`, tab-getrennt) und steht vor
     // jeder Diarisiere-Zeile. Steht der VOLLE Text darin, ist er der Name; sonst gilt die
     // gekuerzte Form. Ohne Bereichszeile (`scope === undefined`) bleibt alles wie bisher —
     // dieselbe Rueckfallrichtung wie in `terminal()`.
     // Der Zweig heilt damit auch die Paarung mit `[done] {base}`: das druckt den ROHEN Namen,
     // traf den gekuerzten Schluessel also nicht und liess den Spinner stehen.
-    // NICHT genommen, obwohl naeher dran: `correct.py:299` druckt eine Zeile vorher
+    // NICHT genommen, obwohl naeher dran: `correct.cmd_diarize` druckt eine Zeile vorher
     // `[active] {base}` mit dem rohen Namen, also eine eindeutige Quelle ganz ohne `[scope]`.
-    // Sie wird aber auch in der KORREKTURphase gedruckt (`correct.py:1017`) — ihre Bedeutung
+    // Sie wird aber auch in der KORREKTURphase gedruckt (`correct.correct_ai_single`) — ihre Bedeutung
     // wechselt ueber den Lauf, und sie zu lesen hiesse, Zustand zwischen Zeilen mitzufuehren
     // und auf ihre Reihenfolge zu wetten. `scope` ist eine Menge und braucht beides nicht.
     // Ungemessen; wer sie doch nehmen will, misst zuerst.
@@ -443,6 +480,12 @@ export function parseJobPhases(kind: string, lines: string[],
     else if ((m = l.match(/^apply: SKIP (.+) \((?:human_edited=|waehrend des Laufs |\1\.edit\.json nicht lesbar: )/)))
       terminal(m[1], 'skipped', 'edit')
     else if ((m = l.match(/^↷ SKIP (.+) \(human_edited=/))) terminal(m[1], 'skipped', 'edit')
+    // Die Quelle wurde ersetzt: alte Arbeit endet, ein Urteil ueber die neue fehlt.
+    else if ((m = l.match(/^↷ SKIP (.+) \(Roh-Transkript waehrend des Laufs ausgetauscht\)$/))) {
+      delete active[m[1]]
+      delete blocks[m[1]]
+      if (cursor === m[1]) cursor = null
+    }
     // Der Zwilling MUSS vor der Zeile darunter stehen. Er ist der spezifischere Ausdruck
     // (voller Grundtext, $-verankert); andersherum riesse die kuerzere Regex einen Basisnamen
     // auseinander, der selbst auf `.correction` endet.
@@ -605,6 +648,7 @@ export function parseJobPhases(kind: string, lines: string[],
         // verdraengt, und die Reaktivierung der Unterdrueckung geschah ohnehin
         // SERVERSEITIG beim Eintreffen der Marke.
         if (scope.has(b)) {
+          vorherDone.delete(b)
           delete perBase[b]
           delete erreicht[b]
           delete active[b]

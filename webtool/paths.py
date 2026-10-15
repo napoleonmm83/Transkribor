@@ -46,13 +46,13 @@ def safe_aufnahmename(name: str) -> str:
 
 
 # Abgeleitet aus den KONSUMENTEN des Zeilenstroms, nicht geraten: jobs.py parst
-# scope/scope+/active/done (Präfix-Konstanten jobs.py:31-41), jobPhases.ts ausserdem
-# fetch (:163-188, dort mit eigenem Warnkommentar zum gleichnamigen Projekt). NICHT
+# scope/scope+/active/done (Präfix-Konstanten jobs.SCOPE_PREFIX / SCOPE_ADD_PREFIX / ACTIVE_PREFIX / DONE_PREFIX), jobPhases.ts ausserdem
+# fetch (`jobPhases.parseJobPhases`, mit eigenem Warnkommentar zum gleichnamigen Projekt) und correction-stage. NICHT
 # reserviert sind die nur druckenden Marken ohne Parse-Zweig (autocorrect, ytdlp,
 # sperre). Wer beim Parser eine Marke dazubaut, nimmt das Wort hier mit — und
 # umgekehrt. Exakt und kleingeschrieben: die Parser matchen case-sensitiv, ein
 # Projekt "Active" kollidiert mit der Marke "[active] " nicht.
-RESERVIERTE_NAMEN = {"scope", "scope+", "active", "done", "fetch"}
+RESERVIERTE_NAMEN = {"scope", "scope+", "active", "done", "fetch", "correction-stage"}
 
 
 def sicherer_projektname(roh: str) -> str:

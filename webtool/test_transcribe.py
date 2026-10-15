@@ -2047,7 +2047,7 @@ def test_geschuetzte_datei_faerbt_den_lauf_NICHT_rot(monkeypatch, tmp_path, caps
     assert "Korrektur:" not in out, out
 
     # FRISCHES Projekt fuer den `main()`-Durchgang. „SchutzDemo" ist oben durchgelaufen; ein
-    # zweiter Lauf darueber stiege bei „nichts zu tun" aus (transcribe.py:502-509), noch bevor
+    # zweiter Lauf darueber stiege bei „nichts zu tun" aus (transcribe.transcribe_project), noch bevor
     # die Bilanzrechnung erreicht waere — die Zusicherung darunter bliebe dann auch bei
     # kaputtem Zaehler gruen. Genau diese Falle steht in `test_totalausfall_…` als Warnung, und
     # genau hier war sie nicht befolgt (CodeRabbit-Bot am PR).
@@ -2373,7 +2373,7 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     """Der Standardpfad — und der Test, der in der ersten Fassung dieses Fixes FEHLTE.
 
     `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei wirklich anfasst, ein eigenes
-    `[active]`/`[done]`-Paar (`correct.py:325` und `:334`/`:356`/`:364`/`:368`; seine vier
+    `[active]`/`[done]`-Paar (`correct.cmd_diarize`; seine vier
     stillen Ausstiege drucken beides nicht und sind damit unschaedlich). Bei ihm heisst `[done]` „dieser Schritt ist fertig",
     `jobs.py` liest aber „der Lauf ist mit der Datei fertig" und verwirft sie aus
     `active_bases`. Die Aufnahme war damit frei, waehrend sie noch in der Poolschlange auf
@@ -2402,7 +2402,7 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
         for b in (only_bases or []):
             print(f"[active] {b}", flush=True)
             print(f"→ Diarisiere {b} …", flush=True)
-            print(f"[done] {b}", flush=True)         # <- gibt frei, correct.py:356
+            print(f"[done] {b}", flush=True)         # <- gibt frei, correct.cmd_diarize
         return len(only_bases or [])
 
     def prep_wie_echt(project, b, **kw):
@@ -2411,13 +2411,13 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
         return True
 
     def korrektur_wie_echt(project, b, **kw):
-        print(f"[active] {b}", flush=True)           # correct.py:1076
+        print(f"[active] {b}", flush=True)           # correct.correct_ai_single
         if b == "S1":
             # Deterministisch statt per Uhr: S1 haelt den einzigen Arbeiter besetzt, bis S2
             # die Vorbereitung durch hat und in der Schlange steht.
             assert s2_vorbereitet.wait(10), "Vorbedingung: S2 erreichte die Schlange nicht"
         print(f"apply: {b} -> edit.json + md (1 Segmente)", flush=True)
-        print(f"[done] {b}", flush=True)             # correct.py:1117 (finally)
+        print(f"[done] {b}", flush=True)             # correct.correct_ai_single (finally)
         return True
 
     monkeypatch.setattr(correct, "cmd_diarize", diarize_wie_echt)
@@ -2475,8 +2475,9 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
 # Die zwei Riegel aus `webtool/conftest.py`: kein Testlauf startet echtes pip.
 #
 # Sie stehen HIER, weil diese Datei den Anlass traegt: `_lauf_projekt` war die Vorrichtung
-# ohne den Schalter, und zwei Tests weiter oben (`:864`, `:1685`) setzen ihn seit dem
-# Bot-Befund an PR #493 von Hand. Eine eigene `test_conftest.py` waere die sauberere
+# ohne den Schalter; die manuellen Schalter-Setzungen der Tests dieser Datei seit dem
+# Bot-Befund an PR #493 sind jetzt abgesichert: den Schalter setzt die autouse-Fixture
+# `_wegwerf_projektwurzel` (`webtool/conftest.py`), `_kein_echtes_pip` ist nur die Wache. Eine eigene `test_conftest.py` waere die sauberere
 # Ablage und ein vierter Ort fuer dieselbe Sache — bewusst nicht gebaut.
 # --------------------------------------------------------------------------------------
 
@@ -2530,7 +2531,7 @@ def test_conftest_faengt_auch_den_weg_ab_den_der_schalter_nicht_deckt():
 def test_die_wache_bleibt_eine_klasse_und_laesst_sich_beerben():
     """Was die Wache NEU erlauben koennte: sie steht an der Stelle von `subprocess.Popen`.
 
-    `yt_dlp/utils/_utils.py:842` macht `class Popen(subprocess.Popen)` — beim IMPORT, also
+    `yt-dlp 2026.8.19: yt_dlp.utils._utils.Popen` macht `class Popen(subprocess.Popen)` — beim IMPORT, also
     lange bevor jemand einen Prozess startet. Als Funktion an dieser Stelle bricht das mit
     `TypeError: function() argument 'code' must be code, not str`, und zwar **nur dort, wo
     yt-dlp installiert ist**: in der CI gaebe es stattdessen `ImportError` und der Fall bliebe
@@ -2566,7 +2567,9 @@ def test_die_wache_nimmt_das_kommando_auch_als_schluesselwort():
 def test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch(monkeypatch):
     """Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests.
 
-    `test_transcribe.py:664/677/688` rufen `monkeypatch.undo()` mitten im Test. Hingen die
+    `test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` und die MIX_SCHWELLE-Einlese-Tests
+    (`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
+    rufen `monkeypatch.undo()` mitten im Test. Hingen die
     autouse-Fixtures am selben Objekt, naehme das `undo()` Schalter UND Wache mit — gemessen
     mit `monkeypatch` als Fixture-Parameter: `subprocess.Popen` war danach das Original, und
     ein pip-Aufruf dahinter liefe ins Echte (CodeRabbit-Bot, Major, PR #529). Die
