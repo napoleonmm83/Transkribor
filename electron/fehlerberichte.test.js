@@ -409,6 +409,18 @@ test('optionen: der Integrationsfilter ist eine ERLAUBNISLISTE — Unbekanntes b
   }
 })
 
+// Ab @sentry/electron 8 haengt der Server-Client `SpanStreaming` NACH dem Integrationsfilter an,
+// solange `traceLifecycle` nicht 'static' ist — gemessen am gepackten Envelope (sdk.integrations,
+// 15.10.2026). Der Filter allein haelt die Erlaubnisliste dann nicht mehr.
+test('optionen: traceLifecycle static, damit SpanStreaming nicht am Filter vorbei kommt', () => {
+  const an = fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx: welt(true).ctx })
+  assert.strictEqual(an.traceLifecycle, 'static')
+  // Sensor gegen ein SDK-Update: die Bedingung, die 'static' auswertet, muss es noch geben.
+  const client = path.join(__dirname, '..', 'node_modules', '@sentry', 'core', 'build', 'cjs', 'server-runtime-client.js')
+  assert.ok(fs.readFileSync(client, 'utf8').includes('options.traceLifecycle !== "static"'),
+    'SDK wertet traceLifecycle anders aus — Envelope neu messen')
+})
+
 test('optionen: ipcMode wird durchgereicht, ohne Angabe bleibt die SDK-Vorgabe unberuehrt', () => {
   const ctx = welt(true).ctx
   assert.strictEqual(fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx, ipcMode: 1 }).ipcMode, 1)

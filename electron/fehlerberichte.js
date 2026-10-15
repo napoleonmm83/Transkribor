@@ -313,6 +313,9 @@ function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
     beforeBreadcrumb: () => null,
     ...(ipcMode !== undefined ? { ipcMode } : {}),
     integrations: vorgaben => vorgaben.filter(i => ERLAUBT.includes(i.name)),
+    // Ab SDK 8 haengt der Server-Client `SpanStreaming` NACH dem Filter oben an, solange dieser
+    // Wert nicht 'static' ist (@sentry/core server-runtime-client.js) — gemessen am Envelope.
+    traceLifecycle: 'static',
     beforeSend: beforeSend(ctx),
     // Der Transport ist ein OFFLINE-Transport mit Warteschlange auf Platte: ein Ereignis, das
     // bei AN ohne Netz erfasst wurde, ginge nach einem spaeteren AUS beim naechsten Start

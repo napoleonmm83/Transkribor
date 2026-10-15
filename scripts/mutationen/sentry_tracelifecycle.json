@@ -1,0 +1,18 @@
+{
+  "test": "node scripts/testlauf.mjs electron/fehlerberichte.test.js",
+  "pfade": [
+    "electron/fehlerberichte.js",
+    "electron/fehlerberichte.test.js"
+  ],
+  "mutationen": [
+    {
+      "id": "ST1 traceLifecycle static fehlt",
+      "datei": "electron/fehlerberichte.js",
+      "von": "    traceLifecycle: 'static',",
+      "nach": "",
+      "rot": [
+        "optionen: traceLifecycle static, damit SpanStreaming nicht am Filter vorbei kommt"
+      ]
+    }
+  ]
+}
