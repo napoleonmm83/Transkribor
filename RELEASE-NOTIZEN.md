@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Modelle lassen sich unter Windows auch mit der neuen Hugging-Face-Bibliothek herunterladen; nach dem Update erscheint dafür einmalig die Einrichtungsseite.
+
 ## v0.59.2 — 2026-10-15
 
 **Behoben**
