@@ -100,7 +100,9 @@ const LoadedWaveform = forwardRef<WaveHandle, WaveProps & { data?: WaveformData 
     // Start it after readiness/error subscriptions, never in the constructor.
     useEffect(() => {
       if (!wavesurfer) return
-      wavesurfer.getMediaElement().preload = 'metadata'
+      // wavesurfer 8: null nur beim WebAudio-Backend, das wir nicht nutzen.
+      const media = wavesurfer.getMediaElement()
+      if (media) media.preload = 'metadata'
       void wavesurfer.load(url, data?.peaks, data?.duration).catch(() => {
         // The error event above presents load failures to the user.
       })
