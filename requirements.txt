@@ -7,11 +7,9 @@ faster-whisper
 # faster-whisper 1.2.1 verwendet metadata_errors; PyAV 19 entfernte dieses Argument.
 av>=11,<19
 # NeMo und faster-whisper laden Modelle über den Hub. Windows-TLS konfiguriert dessen
-# öffentliche set_client_factory-API; sie ist ab 1.x vorhanden, 2.x nutzt einen anderen
-# HTTP-Client. Die Grenze hält die gezielte Zertifikatsprüfung ausführbar.
-huggingface-hub>=1.0,<2.0
-# webtool/hf_tls.py baut den Hub-Client selbst; daher direkt statt nur transitiv.
-httpx
+# öffentliche set_client_factory-API; sie ist ab 1.x vorhanden. hf_tls baut den Client aus
+# der Klasse der Hub-Sitzung (1.x httpx, 2.x httpx2) und braucht kein eigenes httpx (#679).
+huggingface-hub>=1.0,<3.0
 # Nur fuer den GGML-Modell-Download in webtool/whispercpp.py: python.org-Python nutzt
 # auf macOS nicht die System-Keychain, urllib scheitert dort sonst mit
 # CERTIFICATE_VERIFY_FAILED. Kaeme transitiv ohnehin herein — worauf man sich

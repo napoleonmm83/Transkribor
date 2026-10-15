@@ -1,0 +1,28 @@
+{
+  "test": "python -m pytest webtool/test_hf_tls.py -q",
+  "pfade": [
+    "webtool/hf_tls.py",
+    "webtool/test_hf_tls.py"
+  ],
+  "mutationen": [
+    {
+      "id": "679-1 fest verdrahtetes httpx.Client statt der Klasse der Hub-Sitzung",
+      "datei": "webtool/hf_tls.py",
+      "von": "        client_class = type(original)",
+      "nach": "        client_class = __import__(\"httpx\").Client  # 679-1",
+      "rot": [
+        "test_windows_uses_system_context_and_preserves_hub_client_contract"
+      ]
+    },
+    {
+      "id": "679-2 fremde Klasse auch gegen den echten Hub",
+      "datei": "webtool/hf_tls.py",
+      "von": "        client_class = type(original)",
+      "nach": "        client_class = type(\"Fremd\", (type(original),), {})  # 679-2",
+      "rot": [
+        "test_windows_uses_system_context_and_preserves_hub_client_contract",
+        "test_factory_builds_the_installed_hub_client_class"
+      ]
+    }
+  ]
+}
