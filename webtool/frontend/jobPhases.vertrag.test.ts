@@ -632,7 +632,7 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'ignoriert', beispiel: '[Demo] Korrektur: 3 von 5 Datei(en) korrigiert',
     notiz: 'Bilanz der angehaengten Korrektur je Projekt (#417). GETRAGENE GRENZE: ein TEILausfall '
       + '(3 von 5) bleibt damit gruen — die Zeile nennt ihn, gelesen wird sie nicht. Sie in '
-      + 'phases.bilanz zu ziehen ginge, macht aber die in jobAusgang.ts:51 benannte Reihenfolge '
+      + 'phases.bilanz zu ziehen ginge, macht aber die in jobAusgang.ausgang benannte Reihenfolge '
       + 'scharf (perBase schlaegt Bilanz, und ein transcribe-Lauf kann BEIDES haben) — das ist '
       + 'eine eigene Entscheidung, sie steht als #421',
   },
@@ -1287,7 +1287,7 @@ const FREMDZEILE = /^\s*\d{1,3}%\|/
  *
  *  Seit #567 sind ZWEI Eintraege der Sorte (4) weg, weil ihre Fixturen repariert wurden:
  *  `prep: 1 Datei(en) vorbereitet` traegt jetzt `getaggt in {tdir}` (correct.cmd_prep),
- *  `[fetch] geladen: {}` jetzt `[fetch] fertig {base}` (fetch.main — die Zeile JE Download;
+ *  `[fetch] geladen: {}` jetzt `[fetch] fertig {base}` (fetch.download_one — die Zeile JE Download;
  *  die Endbilanz in `fetch.main` war nie gemeint). Beide Tests blieben gruen: der eine prueft
  *  `global === 'prep'` am Praefix, der andere, dass der Grund auf die FEHLER-Zeile zeigt und
  *  nicht auf die Erfolge danach — und `[fetch] fertig {}` IST die echte Erfolgszeile.
@@ -1589,7 +1589,7 @@ export function ohneKommentare(quelle: string): string {
  *  Sie liegen ALLE in dieser Datei, und das ist kein Zufall: sie ist die einzige, die
  *  Fixturen UND die Maschinerie der Wache enthaelt. In den fuenf anderen Dateien ist jedes
  *  Array und jeder push, den der Selektor durchlaesst, eine Fixture — gemessen, und die
- *  einzige `push`-Stelle dort (`useOsFortschritt.test.tsx (melden-Mock)`, `meldungen.push(titel)`)
+ *  einzige `push`-Stelle dort (`useOsFortschritt.test.tsx (MeldungAttrappe)`,`meldungen.push(titel)`)
  *  faellt am Selektor heraus, weil ihr Argument keine Zeichenkette ist.
  *
  *  OPT-OUT und nicht Opt-in, und die Richtung entscheidet: ein vergessener Eintrag hier macht

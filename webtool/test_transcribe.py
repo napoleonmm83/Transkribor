@@ -2373,7 +2373,7 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
     """Der Standardpfad — und der Test, der in der ersten Fassung dieses Fixes FEHLTE.
 
     `cmd_diarize` druckt auf jedem Pfad, auf dem es die Datei wirklich anfasst, ein eigenes
-    `[active]`/`[done]`-Paar (`correct.cmd_diarize`, einschliesslich dessen `finally`; seine vier
+    `[active]`/`[done]`-Paar (`correct.cmd_diarize`; seine vier
     stillen Ausstiege drucken beides nicht und sind damit unschaedlich). Bei ihm heisst `[done]` „dieser Schritt ist fertig",
     `jobs.py` liest aber „der Lauf ist mit der Datei fertig" und verwirft sie aus
     `active_bases`. Die Aufnahme war damit frei, waehrend sie noch in der Poolschlange auf
@@ -2411,13 +2411,13 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
         return True
 
     def korrektur_wie_echt(project, b, **kw):
-        print(f"[active] {b}", flush=True)           # correct.cmd_run
+        print(f"[active] {b}", flush=True)           # correct.correct_ai_single
         if b == "S1":
             # Deterministisch statt per Uhr: S1 haelt den einzigen Arbeiter besetzt, bis S2
             # die Vorbereitung durch hat und in der Schlange steht.
             assert s2_vorbereitet.wait(10), "Vorbedingung: S2 erreichte die Schlange nicht"
         print(f"apply: {b} -> edit.json + md (1 Segmente)", flush=True)
-        print(f"[done] {b}", flush=True)             # correct.cmd_run (finally)
+        print(f"[done] {b}", flush=True)             # correct.correct_ai_single (finally)
         return True
 
     monkeypatch.setattr(correct, "cmd_diarize", diarize_wie_echt)
@@ -2476,7 +2476,8 @@ def test_aufnahme_bleibt_bis_zum_ende_der_korrektur_gesperrt(monkeypatch, tmp_pa
 #
 # Sie stehen HIER, weil diese Datei den Anlass traegt: `_lauf_projekt` war die Vorrichtung
 # ohne den Schalter; die manuellen Schalter-Setzungen der Tests dieser Datei seit dem
-# Bot-Befund an PR #493 sind jetzt durch `_kein_echtes_pip` abgesichert. Eine eigene `test_conftest.py` waere die sauberere
+# Bot-Befund an PR #493 sind jetzt abgesichert: den Schalter setzt die autouse-Fixture
+# `_wegwerf_projektwurzel` (`webtool/conftest.py`), `_kein_echtes_pip` ist nur die Wache. Eine eigene `test_conftest.py` waere die sauberere
 # Ablage und ein vierter Ort fuer dieselbe Sache — bewusst nicht gebaut.
 # --------------------------------------------------------------------------------------
 
@@ -2566,7 +2567,9 @@ def test_die_wache_nimmt_das_kommando_auch_als_schluesselwort():
 def test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch(monkeypatch):
     """Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests.
 
-    Die `_Sprachschwelle`-Tests in `test_transcribe.py` rufen `monkeypatch.undo()` mitten im Test. Hingen die
+    `test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` und die MIX_SCHWELLE-Einlese-Tests
+    (`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
+    rufen `monkeypatch.undo()` mitten im Test. Hingen die
     autouse-Fixtures am selben Objekt, naehme das `undo()` Schalter UND Wache mit — gemessen
     mit `monkeypatch` als Fixture-Parameter: `subprocess.Popen` war danach das Original, und
     ein pip-Aufruf dahinter liefe ins Echte (CodeRabbit-Bot, Major, PR #529). Die

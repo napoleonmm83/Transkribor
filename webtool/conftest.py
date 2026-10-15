@@ -53,7 +53,9 @@ Eine dritte Grenze ist seit dem Bot-Review GESCHLOSSEN: ein `monkeypatch.undo()`
 **BEIDE** Riegel zurueck, weil alle Fixtures eines Tests dieselbe `MonkeyPatch`-Instanz
 teilen — nach `undo()` war `subprocess.Popen` wieder das Original (gemessen; hier stand zuerst
 „entwertet (a), nicht (b)", falsch, gefunden vom gegnerischen Pruefer).
-Die `_Sprachschwelle`-Tests in `test_transcribe.py` rufen `undo()` mitten im Test.
+`test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` und die MIX_SCHWELLE-Einlese-Tests
+(`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
+in `test_transcribe.py` rufen `undo()` mitten im Test.
 Deshalb haengen beide Riegel
 jetzt an EIGENEN `pytest.MonkeyPatch.context()`-Instanzen, die ein Test-`undo()` nicht
 erreicht (`test_die_wache_ueberlebt_ein_undo_des_test_monkeypatch`).
@@ -146,7 +148,9 @@ def _mit_executable(args, executable):
 
 
 # Beide Riegel haengen an EIGENEN `MonkeyPatch`-Kontexten, nicht am `monkeypatch` des Tests:
-# alle Fixtures eines Tests teilen sich sonst dieselbe Instanz, und die `_Sprachschwelle`-Tests
+# alle Fixtures eines Tests teilen sich sonst dieselbe Instanz, und
+# `test_vorgabeschwelle_laesst_echtes_interview_englisch_durch` sowie die MIX_SCHWELLE-Einlese-Tests
+# (`test_schwelle_lehnt_nicht_endliche_werte_ab`, `test_schwelle_klemmt_werte_ausserhalb_der_spanne`)
 # in `test_transcribe.py` rufen `monkeypatch.undo()` mitten im Test — gemessen nahm das Schalter UND Wache
 # mit, `subprocess.Popen` war danach das Original (CodeRabbit-Bot, Major, PR #529). Ein
 # pip-Aufruf hinter so einem `undo()` liefe ins Echte. `test_die_wache_ueberlebt_ein_undo_des_
