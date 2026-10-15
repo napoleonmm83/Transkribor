@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.59.2 — 2026-10-15
+
 **Behoben**
 - Viele abgewiesene Anfragen einer Sorte verdrängen im Protokoll der Desktop-App nicht mehr die erste abgewiesene Anfrage einer anderen Sorte.
 
