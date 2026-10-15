@@ -375,7 +375,7 @@ test('optionen: ohne DSN ist das SDK aus, mit DSN an — und die Vorgaben stehen
   assert.strictEqual(an.release, 'transkribor@1.2.3')
   assert.strictEqual(an.environment, 'dev')
   assert.strictEqual(fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx }).environment, 'gepackt')
-  assert.strictEqual(an.sendDefaultPii, false)
+  assert.deepStrictEqual(an.dataCollection, { userInfo: false })
   assert.ok(an.maxValueLength >= bericht.MAX_ZEILE, 'eine Fehlermeldung in Zeilenlaenge kommt ganz an (maxValueLength kuerzt message/value, nicht extra)')
   assert.strictEqual(an.beforeBreadcrumb({ category: 'console' }), null)
   assert.strictEqual(typeof an.beforeSend, 'function')
@@ -393,7 +393,7 @@ test('optionen: auch der Offline-Transport liest den Schalter — beim Ablegen u
 
 test('optionen: der Integrationsfilter ist eine ERLAUBNISLISTE — Unbekanntes bleibt draussen', () => {
   const an = fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx: welt(true).ctx })
-  // Die gemessene Vorgabe-Liste des gepackten 7.18.0 (sdk.integrations im Envelope) plus zwei
+  // Die gemessene Vorgabe-Liste des gepackten 7.18.0 und 8.2.0 (sdk.integrations im Envelope) plus zwei
   // Namen, die es je nach Node-Version oder SDK-Update geben kann: beide muessen draussen bleiben.
   const vorgaben = ['ElectronContext', 'ChildProcess', 'OnUncaughtException', 'AdditionalContext',
     'GpuContext', 'EventFilters', 'FunctionToString', 'LinkedErrors', 'OnUnhandledRejection',
@@ -419,6 +419,23 @@ test('optionen: traceLifecycle static, damit SpanStreaming nicht am Filter vorbe
   const client = path.join(__dirname, '..', 'node_modules', '@sentry', 'core', 'build', 'cjs', 'server-runtime-client.js')
   assert.ok(fs.readFileSync(client, 'utf8').includes('options.traceLifecycle !== "static"'),
     'SDK wertet traceLifecycle anders aus — Envelope neu messen')
+})
+
+// Der Umschlag, den das ECHTE installierte SDK aus `optionen()` baut — nicht die Optionswerte.
+// Ab SDK 8 waren beide Optionspruefungen gruen, waehrend der Umschlag `SpanStreaming` trug und
+// `infer_ip: "auto"` (sendDefaultPii gibt es dort nicht mehr; Review zu PR #664, gemessen).
+test('Umschlag des echten SDK: nur erlaubte Integrationen, keine IP-Ableitung, kein Lade-Hook', () => {
+  const { spawnSync } = require('node:child_process')
+  const lauf = spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'sentry_umschlag_probe.cjs')],
+    { encoding: 'utf8', timeout: 30000 })
+  assert.strictEqual(lauf.status, 0, `Probe gescheitert: ${lauf.stderr}`)
+  const aus = JSON.parse(lauf.stdout)
+  assert.strictEqual(aus.ereignisse.length, 1, 'Positivkontrolle: genau ein Ereignis kam beim Transport an')
+  const [e] = aus.ereignisse
+  assert.deepStrictEqual([...e.sdk.integrations].sort(), [...fb.ERLAUBT].sort())
+  assert.strictEqual(e.sdk.settings?.infer_ip, 'never', 'der Server darf die IP nicht ableiten')
+  assert.strictEqual(e.server_name, null, 'der Rechnername ist PII')
+  assert.strictEqual(aus.lade_hook, false, 'kein prozessweiter Lade-Hook des SDK')
 })
 
 test('optionen: ipcMode wird durchgereicht, ohne Angabe bleibt die SDK-Vorgabe unberuehrt', () => {

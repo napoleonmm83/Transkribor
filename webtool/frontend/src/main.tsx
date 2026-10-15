@@ -38,7 +38,9 @@ if ('__SENTRY_IPC__' in window) {
       ],
       // Keine Sitzungen: die Liste oben enthaelt keine browserSessionIntegration. Ein
       // `autoSessionTracking: false` stand hier und kennt das installierte SDK gar nicht.
-      sendDefaultPii: false,
+      // `sendDefaultPii` kennt SDK 8 nicht mehr; wirksam ist der Schalter im Hauptprozess
+      // (electron/fehlerberichte.js), hier steht er, damit niemand der toten Option glaubt.
+      dataCollection: { userInfo: false },
       beforeBreadcrumb: () => null,
     })
   }).catch(e => console.error('Renderer-Fehlerberichte konnten nicht gestartet werden', e))

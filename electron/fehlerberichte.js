@@ -33,7 +33,7 @@ const RENDERER_GRENZEN = Object.freeze({ bytes: 64 * 1024, werte: 5, frames: 50,
  * Node >= 19 installiert das SDK die Async-Variante unter anderem Namen, und im gepackten
  * Envelope stand sie in `sdk.integrations` (gegnerisches Review). Eine Verbotsliste veraltet
  * mit jedem SDK-Update still; eine Erlaubnisliste laesst Neues erst durch, wenn jemand es
- * hier eintraegt. Gemessene Vorgabe-Liste des 7.18.0 im gepackten Lauf, minus die eine:
+ * hier eintraegt. Gemessene Vorgabe-Liste im gepackten Lauf (7.18.0, unveraendert in 8.2.0), minus die eine:
  *   ElectronContext, Context, AdditionalContext, GpuContext  Geraet, OS, App, GPU — kein Nutzertext
  *   OnUncaughtException, OnUnhandledRejection               der Zweck
  *   ChildProcess                                             Electrons eigene Kindprozesse (GPU, Utility)
@@ -305,7 +305,12 @@ function optionen({ dsn, version, gepackt, ctx, ipcMode }) {
     enabled: !!dsn,
     release: `transkribor@${version}`,
     environment: gepackt ? 'gepackt' : 'dev',
-    sendDefaultPii: false,
+    // Ab SDK 8 gibt es `sendDefaultPii` nicht mehr; ohne diesen Schalter setzt main/sdk.js
+    // `userInfo` auf true, und jeder Umschlag bittet den Server per `infer_ip: "auto"`, die
+    // IP abzuleiten (Review zu PR #664, gemessen; der Umschlag-Test haelt es fest).
+    dataCollection: { userInfo: false },
+    // Der NodeClient haengt sonst einen prozessweiten Lade-Hook ein, auch bei AUS und ohne DSN.
+    enableRuntimeChannelInjection: false,
     // Die Electron-SDK erzwingt das selbst (main/sdk.js, NACH dem userOptions-Spread) — der
     // Rechnername ist PII. Die Zeile hier haelt, falls die Vorgabe mit einem Upgrade kippt.
     includeServerName: false,
