@@ -8,9 +8,6 @@ webtool/app.py:assignment
 webtool/app.py:return-value
 webtool/app.py:var-annotated
 webtool/app.py:var-annotated
-webtool/auth.py:arg-type
-webtool/auth.py:attr-defined
-webtool/auth.py:attr-defined
 webtool/auth.py:operator
 webtool/auth.py:union-attr
 webtool/correct.py:assignment
