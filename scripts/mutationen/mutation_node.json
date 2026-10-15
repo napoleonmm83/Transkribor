@@ -107,6 +107,30 @@
       "gruen": [
         "test_pytest_gruener_lauf_gilt_als_testlauf"
       ]
+    },
+    {
+      "id": "MN10 npm-Anhang --watch wird angenommen",
+      "datei": "scripts/mutation.py",
+      "von": "if any(t.startswith(\"--watch\") for t in teile[3:]):  # auch `npm … -- --watch`",
+      "nach": "if False:",
+      "rot": [
+        "test_npm_node_wrapper_wird_relativ_zum_paket_aufgeloest"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
+    },
+    {
+      "id": "MN11 Optionswert gilt als Testpfad",
+      "datei": "scripts/test_mutationsplaene.py",
+      "von": "if not teil.startswith(\"-\") and vorige not in mit_wert \\",
+      "nach": "if not teil.startswith(\"-\") \\",
+      "rot": [
+        "test_node_testkommandos_sind_lokal_startbar"
+      ],
+      "gruen": [
+        "test_pytest_gruener_lauf_gilt_als_testlauf"
+      ]
     }
   ]
 }
