@@ -33,7 +33,8 @@ const RENDERER_GRENZEN = Object.freeze({ bytes: 64 * 1024, werte: 5, frames: 50,
  * Node >= 19 installiert das SDK die Async-Variante unter anderem Namen, und im gepackten
  * Envelope stand sie in `sdk.integrations` (gegnerisches Review). Eine Verbotsliste veraltet
  * mit jedem SDK-Update still; eine Erlaubnisliste laesst Neues erst durch, wenn jemand es
- * hier eintraegt. Gemessene Vorgabe-Liste im gepackten Lauf (7.18.0, unveraendert in 8.2.0), minus die eine:
+ * hier eintraegt. Gemessene Vorgabe-Liste des 7.18.0 im gepackten Lauf (unter 8.2.0 traegt der Umschlag
+ * genau ERLAUBT, siehe Umschlag-Test), minus die eine:
  *   ElectronContext, Context, AdditionalContext, GpuContext  Geraet, OS, App, GPU — kein Nutzertext
  *   OnUncaughtException, OnUnhandledRejection               der Zweck
  *   ChildProcess                                             Electrons eigene Kindprozesse (GPU, Utility)

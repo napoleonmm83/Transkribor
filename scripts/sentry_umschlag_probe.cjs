@@ -28,6 +28,14 @@ const electron = {
 }
 const laden = Module._load
 Module._load = function (anfrage, ...rest) { return anfrage === 'electron' ? electron : laden.call(this, anfrage, ...rest) }
+// Lade-Hooks mitschneiden, nicht nur die interne Marke lesen: die Marke kann ein SDK-Update
+// umbenennen oder spaeter setzen (Review Runde 2). VOR dem require — das SDK kopiert den
+// node:module-Namensraum beim Laden.
+const hookAufrufe = []
+for (const name of ['register', 'registerHooks']) {
+  const echt = Module[name]
+  if (typeof echt === 'function') Module[name] = function (...a) { hookAufrufe.push(name); return echt.apply(this, a) }
+}
 
 const Sentry = require('@sentry/electron/main')
 const fb = require(path.join(wurzel, 'electron', 'fehlerberichte'))
@@ -49,6 +57,8 @@ Sentry.flush(3000).finally(() => {
     umschlaege: gesammelt.length,
     ereignisse: ereignisse.map(e => ({ sdk: e.sdk, user: e.user ?? null, server_name: e.server_name ?? null })),
     lade_hook: globalThis.__SENTRY_ORCHESTRION__ != null,
+    hook_aufrufe: hookAufrufe,
+    rechnername_im_ereignis: ereignisse.some(e => JSON.stringify(e).includes(os.hostname())),
   }))
   process.exit(0)
 })

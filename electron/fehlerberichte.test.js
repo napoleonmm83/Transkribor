@@ -393,7 +393,7 @@ test('optionen: auch der Offline-Transport liest den Schalter — beim Ablegen u
 
 test('optionen: der Integrationsfilter ist eine ERLAUBNISLISTE — Unbekanntes bleibt draussen', () => {
   const an = fb.optionen({ dsn: 'x', version: '1', gepackt: true, ctx: welt(true).ctx })
-  // Die gemessene Vorgabe-Liste des gepackten 7.18.0 und 8.2.0 (sdk.integrations im Envelope) plus zwei
+  // Die gemessene Vorgabe-Liste des gepackten 7.18.0 (sdk.integrations im Envelope) plus zwei
   // Namen, die es je nach Node-Version oder SDK-Update geben kann: beide muessen draussen bleiben.
   const vorgaben = ['ElectronContext', 'ChildProcess', 'OnUncaughtException', 'AdditionalContext',
     'GpuContext', 'EventFilters', 'FunctionToString', 'LinkedErrors', 'OnUnhandledRejection',
@@ -435,7 +435,9 @@ test('Umschlag des echten SDK: nur erlaubte Integrationen, keine IP-Ableitung, k
   assert.deepStrictEqual([...e.sdk.integrations].sort(), [...fb.ERLAUBT].sort())
   assert.strictEqual(e.sdk.settings?.infer_ip, 'never', 'der Server darf die IP nicht ableiten')
   assert.strictEqual(e.server_name, null, 'der Rechnername ist PII')
-  assert.strictEqual(aus.lade_hook, false, 'kein prozessweiter Lade-Hook des SDK')
+  assert.strictEqual(aus.lade_hook, false, 'kein prozessweiter Lade-Hook des SDK (Marke)')
+  assert.deepStrictEqual(aus.hook_aufrufe, [], 'kein Module.register/registerHooks (Aufruf)')
+  assert.strictEqual(aus.rechnername_im_ereignis, false, 'der Rechnername steht in keinem Feld')
 })
 
 test('optionen: ipcMode wird durchgereicht, ohne Angabe bleibt die SDK-Vorgabe unberuehrt', () => {
