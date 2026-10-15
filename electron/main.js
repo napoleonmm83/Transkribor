@@ -162,8 +162,8 @@ function abweisungProtokollieren(url, was = 'Externer Link', grund, eigen) {
     protokoll.schreiben(was + ' abgewiesen (' + grund + '): ' + String(url).slice(0, 200))
   } else if (!unterdrueckungGemeldet) {
     unterdrueckungGemeldet = true
-    // Der Fehlerbericht behaelt nur die juengste Abweisungszeile (#506).
-    // Auch diese muss deshalb Art, Grund und gekapptes Ziel tragen.
+    // Der Fehlerbericht behaelt je Gruppe nur die juengste Zeile — eine Detailzeile und diese
+    // Schlusszeile (bericht.js, #506, #520). Auch diese muss deshalb Art, Grund und Ziel tragen.
     protokoll.schreiben(`Weitere Abweisungen werden nicht mehr protokolliert, ausser reservierten Erstmeldungen (Deckel: ${ABWEISUNGEN_MAX} je Stunde, davon bis zu ${RESERVEN.length} fuer Erstmeldungen reserviert; die naechste war: ${was}, ${grund}, ${String(url).slice(0, 200)})`)
   }
 }
@@ -455,7 +455,10 @@ function fenster() {
       abweisungProtokollieren(eigen ? art : `${art} von ${nurHerkunft(wer)}`,
         'Berechtigungspruefung',
         eigen ? 'nicht in der Weissliste' : angaben?.requestingUrl ? 'fremde Herkunft' : 'ohne Seitenangabe',
-        eigen)
+        // Fuer die RESERVE (#520) zaehlt ein Unterrahmen-Start mit eigener Eltern-Herkunft als
+        // eigen — sonst naehme er die Reserve, die eine spaetere fremde Pruefung braucht.
+        eigen || (!angaben?.requestingUrl &&
+          eigeneHerkunft(herkunft, [pathToFileURL(SETUP_HTML).href, backend.url()])))
     }
     return erlaubt
   })

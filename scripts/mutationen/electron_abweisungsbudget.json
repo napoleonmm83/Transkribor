@@ -1,9 +1,10 @@
 {
-  "test": "node scripts/testlauf.mjs electron/main.test.js",
+  "test": "node scripts/testlauf.mjs electron/main.test.js electron/bericht.test.js",
   "pfade": [
     "electron/main.js",
     "electron/main.test.js",
-    "electron/bericht.js"
+    "electron/bericht.js",
+    "electron/bericht.test.js"
   ],
   "mutationen": [
     {
@@ -48,7 +49,34 @@
       "von": "if (k >= 0 && ++gezaehlt[k] > ABWEISUNGEN_IM_BERICHT) continue",
       "nach": "if (k >= 0 && ++gezaehlt[0] > ABWEISUNGEN_IM_BERICHT) continue",
       "rot": [
-        "echte Budgetzeilen lassen den Fehler im Bericht neben genau einer Abweisung stehen (#520)"
+        "echte Budgetzeilen lassen den Fehler im Bericht neben einer Detail- und einer Schlusszeile stehen (#520)"
+      ]
+    },
+    {
+      "id": "EA6 Art als Template-Literal ist fuer den Aufrufer-Sensor unpruefbar",
+      "datei": "electron/main.js",
+      "von": "      'Eingebettete Ansicht', 'webview ist in dieser App nicht vorgesehen')",
+      "nach": "      `Eingebettete Ansicht`, 'webview ist in dieser App nicht vorgesehen')",
+      "rot": [
+        "jeder Aufrufer von abweisungProtokollieren hat eine Reserve in ABWEISUNGSARTEN (#520)"
+      ]
+    },
+    {
+      "id": "EA7 Unterrahmen-Start mit eigener Eltern-Herkunft gilt als fremd",
+      "datei": "electron/main.js",
+      "von": "        eigen || (!angaben?.requestingUrl &&",
+      "nach": "        eigen || (false &&",
+      "rot": [
+        "eigene Abweisungen verbrauchen die Reserve einer fremden Herkunft nicht (#520)"
+      ]
+    },
+    {
+      "id": "EA8 Schlussmuster greift nicht, die Detailregel faengt die Schlusszeile",
+      "datei": "electron/bericht.js",
+      "von": "/^(?:\\[[^\\]]*\\] )?Weitere Abweisungen werden nicht mehr protokolliert/,",
+      "nach": "/^(?:\\[[^\\]]*\\] )?NIEMALS/,",
+      "rot": [
+        "die Schlusszeile behaelt ihren Platz, auch wenn ihre URL wie eine Detailzeile aussieht (#520)"
       ]
     }
   ]

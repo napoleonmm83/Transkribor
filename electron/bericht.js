@@ -10,9 +10,11 @@ const AUSSORTIEREN = [
   /\bPATH\s*:/,
   / - "(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS) [^"]*" [23]\d\d/,
 ]
+// Die Schlusszeile ZUERST und am Zeilenanfang (nach dem Zeitstempel) verankert: sie traegt die
+// rohe Ziel-URL, und die darf den Text des Detailmusters enthalten (#520, Kalt-Review).
 const ABWEISUNG = [
+  /^(?:\[[^\]]*\] )?Weitere Abweisungen werden nicht mehr protokolliert/,
   / abgewiesen \([^)]*\): /,
-  /Weitere Abweisungen werden nicht mehr protokolliert/,
 ]
 const ABWEISUNGEN_IM_BERICHT = 1
 const PFAD_AB_SCHEMA = /(^|[^A-Za-z0-9+.\-/\\])file:[\/\\]{1,3}.*/i

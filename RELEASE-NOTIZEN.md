@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Das Protokoll der Desktop-App hält die erste abgewiesene Anfrage jeder Sorte pro Stunde fest, auch wenn kurz vorher viele Anfragen einer anderen Sorte abgewiesen wurden.
+- Viele abgewiesene Anfragen einer Sorte verdrängen im Protokoll der Desktop-App nicht mehr die erste abgewiesene Anfrage einer anderen Sorte.
 
 ## v0.59.1 — 2026-10-15
 
