@@ -59,3 +59,11 @@ test('Kopf nennt Fassung, Plattform und Verpackung', () => {
   assert.ok(aus.join(' ').includes('win32 x64'))
   assert.ok(aus.join(' ').includes('true'))
 })
+test('die Schlusszeile behaelt ihren Platz, auch wenn ihre URL wie eine Detailzeile aussieht (#520)', () => {
+  // Die Schlusszeile traegt die rohe Ziel-URL; ein opakes `javascript:`-Ziel darf Leerzeichen und
+  // damit den Text des Detailmusters enthalten. Echte Zeilen tragen den Zeitstempel davor.
+  const schluss = '[2026-10-15T13:00:01.000Z] Weitere Abweisungen werden nicht mehr protokolliert, ausser reservierten Erstmeldungen (Deckel: 20 je Stunde; die naechste war: Externer Link, Schema nicht erlaubt, javascript:a abgewiesen (b): c)'
+  const detail = '[2026-10-15T13:00:02.000Z] Berechtigung abgewiesen (nicht in der Weissliste): media'
+  const aus = letzteZeilen(['[2026-10-15T13:00:00.000Z] FEHLER echt', schluss, detail].join('\n'))
+  assert.deepEqual(aus, ['[2026-10-15T13:00:00.000Z] FEHLER echt', schluss, detail])
+})

@@ -699,9 +699,9 @@ test('eine Linkflut laesst Reserven frei und meldet die Unterdrueckung einmal (#
   assert.strictEqual(abgewiesen.length, 13, 'sieben Erstmeldungen anderer Arten und Herkuenfte bleiben reserviert')
   const schluss = w.protokollzeilen.filter(z => z.startsWith('Weitere Abweisungen'))
   assert.strictEqual(schluss.length, 1, 'die Unterdrueckung wird EINMAL angesagt, nicht 30-mal')
-  // Sie muss den Vorgang mitnennen (#506): `bericht.letzteZeilen` laesst genau EINE Zeile
-  // dieser Gruppe in die Fehlermail, und im Flutfall ist das GENAU diese. Ohne Art, Grund und
-  // Ziel schickt der Nutzer eine Zeile ab, aus der sich nichts rekonstruieren laesst.
+  // Sie muss den Vorgang mitnennen (#506): `bericht.letzteZeilen` laesst EINE Detail- und EINE
+  // Schlusszeile in die Fehlermail (#520); im Flutfall ist die Schlusszeile die einzige mit dem
+  // Grund der Unterdrueckung. Ohne Art, Grund und Ziel liesse sich daraus nichts rekonstruieren.
   assert.match(schluss[0], /die naechste war: Externer Link, Schema nicht erlaubt, file:\/\/\/x13/)
 })
 
@@ -1216,6 +1216,13 @@ test('eigene Abweisungen verbrauchen die Reserve einer fremden Herkunft nicht (#
   pruefungFragen(w, 'media', fremd, 'https://boese.example')
   assert.strictEqual(w.protokollzeilen.length, vorher + 1, 'die fremde Pruefung nach Start und Flut bleibt sichtbar')
   assert.match(w.protokollzeilen.at(-1), /^Berechtigungspruefung abgewiesen \(fremde Herkunft\): media von https:\/\/boese\.example/)
+  // Unterrahmen-Start: ohne Seitenangabe, mit der Herkunft des EIGENEN Elterns — zaehlt als eigen.
+  const u = await laden()
+  pruefungFragen(u, 'media', { requestingUrl: '', isMainFrame: false }, 'http://127.0.0.1:8000/')
+  for (let i = 0; i < 21; i++) u.oeffnenHandler({ url: 'file:///flut' + i })
+  vorher = u.protokollzeilen.length
+  pruefungFragen(u, 'geolocation', fremd, 'https://boese.example')
+  assert.strictEqual(u.protokollzeilen.length, vorher + 1, 'der eigene Unterrahmen-Start nimmt die fremde Reserve nicht')
   // Anfrageweg: eine EIGENE Flut darf die erste fremde Anfrage nicht verschlucken.
   const v = await laden()
   for (let i = 0; i < 21; i++) berechtigungFragen(v, 'media')
@@ -1242,8 +1249,18 @@ test('jeder Aufrufer von abweisungProtokollieren hat eine Reserve in ABWEISUNGSA
       else if (c === ',' && tiefe === 0) { argument++; continue }
       if (argument === 1) zweites += c
     }
-    aufrufe.push(...[...zweites.matchAll(/'([^']+)'/g)].map(t => t[1]))
+    const literale = [...zweites.matchAll(/'([^']+)'/g)].map(t => t[1])
+    // Nur einfache Literale, ggf. per Ternaer gewaehlt: eine Variable, ein Template oder doppelte
+    // Anfuehrungszeichen saehe dieser Sensor nicht — dann soll er rot sein statt blind.
+    assert.ok(literale.length > 0 && /^[\s\w?:]*$/.test(zweites.replace(/'[^']*'/g, '')),
+      `unpruefbare Art im Aufruf: ${zweites.trim()}`)
+    aufrufe.push(...literale)
   }
+  // Kein Alias: jede Nennung ist die Definition oder ein direkter Aufruf.
+  const code = quelle.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const nennungen = (code.match(/\babweisungProtokollieren\b/g) || []).length
+  assert.strictEqual(nennungen, [...code.matchAll(/\babweisungProtokollieren\(/g)].length,
+    'abweisungProtokollieren wird ohne Aufrufklammer genannt (Alias?)')
   assert.ok(aufrufe.length >= 6, `Positivkontrolle: mindestens sechs Aufrufer erkannt, gefunden ${aufrufe.length}`)
   for (const was of aufrufe) assert.ok(arten.has(was), `${was} hat keine Reserve`)
   assert.deepStrictEqual([...arten].sort(), [...new Set(aufrufe)].sort(), 'keine Reserve ohne Aufrufer')
@@ -1275,7 +1292,7 @@ test('ein neues Stundenfenster erneuert Gesamtbudget, Reserven und Schlussmeldun
   } finally { performance.now = echt }
 })
 
-test('echte Budgetzeilen lassen den Fehler im Bericht neben genau einer Abweisung stehen (#520)', async () => {
+test('echte Budgetzeilen lassen den Fehler im Bericht neben einer Detail- und einer Schlusszeile stehen (#520)', async () => {
   const w = await laden()
   const { letzteZeilen } = require('./bericht')
   for (let i = 0; i < 30; i++) w.oeffnenHandler({ url: 'javascript:flut' + i })
