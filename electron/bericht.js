@@ -37,9 +37,12 @@ function letzteZeilen(text, n = ZEILEN) {
   const alle = String(text || '').split(/\r?\n/)
     .filter(z => z.trim() !== '' && !AUSSORTIEREN.some(r => r.test(z)))
   const gewaehlt = []
-  let abweisungen = 0
+  // Je Muster ein eigener Zaehler: seit #520 kann nach der Schlusszeile noch eine reservierte
+  // Detailzeile kommen, und die wuerde sie sonst als juengste Abweisung aus dem Bericht verdraengen.
+  const gezaehlt = ABWEISUNG.map(() => 0)
   for (let i = alle.length - 1; i >= 0 && gewaehlt.length < n; i--) {
-    if (ABWEISUNG.some(r => r.test(alle[i])) && ++abweisungen > ABWEISUNGEN_IM_BERICHT) continue
+    const k = ABWEISUNG.findIndex(r => r.test(alle[i]))
+    if (k >= 0 && ++gezaehlt[k] > ABWEISUNGEN_IM_BERICHT) continue
     gewaehlt.push(alle[i])
   }
   return gewaehlt.reverse().map(z => z.replace(PFAD_AB_SCHEMA, PFAD_ERSATZ))
