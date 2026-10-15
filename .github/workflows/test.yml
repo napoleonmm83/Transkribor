@@ -632,7 +632,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: webtool/frontend/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            webtool/frontend/package-lock.json
 
       # Dieselben zwei Zeilen wie im Job `Python`: die Plaene unter webtool/ fahren dessen
       # Suite, und die braucht fastapi & Co. Mit nur der dev-Gruppe faenden sie null Tests
@@ -644,6 +646,13 @@ jobs:
       # driftet. Gegen eine 20-Minuten-Serie sind 15 s nichts.
       - run: npm ci --no-audit --fund=false
         working-directory: webtool/frontend
+      # Auch die WURZEL: der Plan sentry_tracelifecycle faehrt das echte @sentry/electron in
+      # einem Kindprozess (PR #664). Ohne Root-node_modules waere schon die Positivkontrolle rot
+      # (Kalt-Review, gemessen an einem git-archive-Baum: 3 von 41 rot). Die Electron-Binaerdatei
+      # braucht kein Test — sie attrappieren `electron` —, also kein Download.
+      - run: npm ci --no-audit --fund=false
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       # Der Browser gehoert seit Buendel D dazu: zwei Plaene fahren ihre Waechter im
       # echten Chromium (buendel-d-515-kontrast-reflow_e2e, dialog-schliesskreuz_e2e).
       # Ohne ihn faellt nicht eine Mutation um, sondern die POSITIVKONTROLLE — alle zehn
