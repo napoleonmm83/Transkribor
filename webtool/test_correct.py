@@ -4118,7 +4118,7 @@ def test_glossar_os_fehler_ueberspringt_glossar_und_laeuft_weiter(monkeypatch, t
     assert "[active] A_fremd" in zeilen, _zeige(verlauf)  # Vorbedingung: gesperrt wurde ueberhaupt
     assert any(z.startswith("⚠ Glossar-Fehler (OSError)") for z in zeilen), _zeige(verlauf)
     # Weiterlauf bezeugt, nicht nur Nicht-Werfen: die ZAEHLERHALTIGE Endbilanz (Vorlage
-    # test_correct.py::test_run_full_flow) — der Praefix allein griffe auch fuer 0/1, ein Lauf, der die
+    # test_correct.py::test_cmd_run_fixiert_seinen_bereich_beim_start) — der Praefix allein griffe auch fuer 0/1, ein Lauf, der die
     # Datei-Korrekturen ueberspringt, bliebe gruen. done=1 erfordert den True-Rueckruf
     # der gefaelschten correct_ai_single (Gegner-Review F1).
     assert "run: fertig — 1/1 Datei(en) korrigiert" in zeilen, _zeige(verlauf)

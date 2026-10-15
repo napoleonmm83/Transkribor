@@ -482,8 +482,8 @@ def cmd_diarize(project: str, only_bases: list = None) -> int:
                 continue
             # VOR dem ersten Schreibzugriff, nicht erst vor „→ Diarisiere …" (#444). Zwischen der
             # Audio-Pruefung und der alten Stelle liegt `os.remove(dpath)` — und im eigenstaendigen
-            # `correct run` ist die Aufnahme hier wirklich frei: `[scope]` fuellt `bases`, NICHT
-            # `active_bases` (`jobs.buche_aktive`), und die Menge startet leer (`jobs._start_kanonisch`). Ein
+            # `correct run` ist die Aufnahme hier wirklich frei: `[scope]` fuellt `bases`
+            # (`jobs._run_proc`), NICHT `active_bases` (`jobs.buche_aktive`), und die Menge startet leer (`jobs._start_kanonisch`). Ein
             # `DELETE` in diesem Fenster wird also nicht abgewiesen, und die Diarisierung schreibt
             # danach ein Sidecar fuer eine geloeschte Aufnahme — dieselbe Waise wie in
             # `cmd_run.one()`, nur mit anderem Suffix. Im gestaffelten Lauf ist es folgenlos

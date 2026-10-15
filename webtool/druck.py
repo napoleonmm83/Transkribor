@@ -132,7 +132,7 @@ class Zeilenweise:
         # `buffer` ist der eine Sonderfall: wer ihn holt, schreibt an der Huelle VORBEI und
         # ueberholte damit eine zurueckgehaltene Teilzeile. Der Weg ist nicht theoretisch --
         # `yt_dlp.utils.write_string` nimmt genau ihn, und `YoutubeDL` laeuft in-process
-        # (`fetch.main`), gebaut NACH der Umhuellung in `fetch.main`. Heute folgenlos
+        # (`fetch.download_one`), gebaut NACH der Umhuellung in `fetch.main`. Heute folgenlos
         # (`_ydl_opts` setzt quiet/no_warnings/noprogress, `fetch.main` ist einthreadig) --
         # aber das ist Konfiguration, nicht Konstruktion. Vor der Herausgabe wird deshalb
         # geleert; danach gibt es nichts mehr zu ueberholen.
