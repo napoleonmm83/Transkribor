@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.59.1 — 2026-10-15
+
 **Behoben**
 - Audiofehler erscheinen auch ohne technische Fehlermeldung; die Wiedergabeknöpfe bleiben dabei gesperrt.
 - Der Editor reagiert beim Abspielen und Bearbeiten langer Aufnahmen flüssiger.
