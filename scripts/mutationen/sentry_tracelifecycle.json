@@ -2,7 +2,8 @@
   "test": "node scripts/testlauf.mjs electron/fehlerberichte.test.js",
   "pfade": [
     "electron/fehlerberichte.js",
-    "electron/fehlerberichte.test.js"
+    "electron/fehlerberichte.test.js",
+    "scripts/sentry_umschlag_probe.cjs"
   ],
   "mutationen": [
     {
@@ -11,7 +12,26 @@
       "von": "    traceLifecycle: 'static',",
       "nach": "",
       "rot": [
-        "optionen: traceLifecycle static, damit SpanStreaming nicht am Filter vorbei kommt"
+        "optionen: traceLifecycle static, damit SpanStreaming nicht am Filter vorbei kommt",
+        "Umschlag des echten SDK: nur erlaubte Integrationen, keine IP-Ableitung, kein Lade-Hook"
+      ]
+    },
+    {
+      "id": "ST2 userInfo nicht abgeschaltet",
+      "datei": "electron/fehlerberichte.js",
+      "von": "    dataCollection: { userInfo: false },",
+      "nach": "",
+      "rot": [
+        "Umschlag des echten SDK: nur erlaubte Integrationen, keine IP-Ableitung, kein Lade-Hook"
+      ]
+    },
+    {
+      "id": "ST3 Lade-Hook nicht abgeschaltet",
+      "datei": "electron/fehlerberichte.js",
+      "von": "    enableRuntimeChannelInjection: false,",
+      "nach": "",
+      "rot": [
+        "Umschlag des echten SDK: nur erlaubte Integrationen, keine IP-Ableitung, kein Lade-Hook"
       ]
     }
   ]

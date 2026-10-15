@@ -1319,7 +1319,7 @@ test('das SDK wird VOR whenReady initialisiert und ist ohne DSN aus', async () =
   assert.strictEqual(w.sentryOptionen.enabled, false, 'die package.json des Repos traegt keinen DSN')
   assert.strictEqual(w.sentryOptionen.release, 'transkribor@9.9.9')
   assert.strictEqual(w.sentryOptionen.environment, 'dev')
-  assert.strictEqual(w.sentryOptionen.sendDefaultPii, false)
+  assert.deepStrictEqual(w.sentryOptionen.dataCollection, { userInfo: false })
 })
 
 test('der Hauptprozess oeffnet KEIN Systemfenster mehr — und schreibt vor der Antwort nichts', async () => {
