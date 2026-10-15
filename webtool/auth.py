@@ -29,6 +29,7 @@ import re
 import subprocess
 import threading
 import time
+from typing import Any
 
 from . import llm
 from .jobs import _CREATE_NO_WINDOW, _kill_tree, _popen_kwargs
@@ -67,7 +68,7 @@ STATUS_TIMEOUT = 30       # s; die Statusabfrage ist ein lokaler Aufruf, der sof
 LOGIN_TIMEOUT = 600       # s; danach gilt der Versuch als abgelaufen und wird abgeraeumt
 
 _lock = threading.Lock()
-_lauf = None              # genau EIN Anmeldeversuch zugleich — mehr ergibt fuer einen
+_lauf: dict[str, Any] | None = None  # genau EIN Anmeldeversuch zugleich — mehr ergibt fuer einen
                           # lokalen Einzelnutzer keinen Sinn und macht den Zustand mehrdeutig
 
 

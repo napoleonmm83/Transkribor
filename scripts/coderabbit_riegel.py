@@ -157,6 +157,7 @@ def kontingent_erschoepft(lage: Lage) -> dict | None:
     Absichtlich eng: nur `rerun_with_use_credits`. Eine unbekannte Handlungsaufforderung ist
     kein bekannter Ausfall und faellt weiter in die 2 (rot).
     """
+    e: dict
     for e in reversed(lage.ereignisse):
         if e.get("type") == "action_required" and e.get("action") == "rerun_with_use_credits":
             return e
