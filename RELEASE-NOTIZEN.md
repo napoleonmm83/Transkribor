@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Modelle lassen sich unter Windows auch mit der neuen Hugging-Face-Bibliothek herunterladen; nach dem Update erscheint dafür einmalig die Einrichtungsseite.
+- Neu hochgeladene Dateien übernehmen wieder die Projekteinstellung „Enthält weitere Sprachen“, auch bei frisch eingerichteter Umgebung.
 
 ## v0.59.2 — 2026-10-15
 
