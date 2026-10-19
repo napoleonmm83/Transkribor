@@ -922,6 +922,71 @@ def test_projektalias_wird_vor_umbenennung_abgewiesen(client, tmp_path, monkeypa
     assert edit_pfad.read_bytes() == vorher
 
 
+def test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.part1.correction.json", "S1.diar.json"):
+        (tdir / name).write_text(json.dumps({"base": "S1", "segments": []}), encoding="utf-8")
+
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"}).status_code == 200
+    response = client.post("/api/projects/Demo/files/Carol/rename", json={"name": "Carola"})
+
+    assert response.status_code == 200, response.text
+    for name in ("Carola.correction.json", "Carola.part1.correction.json", "Carola.diar.json"):
+        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Carola"
+    assert json.loads((tdir / "Carola.diar.json").read_text(encoding="utf-8"))["audio"] == "Carola.mp3"
+    # Loeschen geht durch dieselbe Zuordnungspruefung
+    assert client.delete("/api/projects/Demo/files/Carola").status_code == 200
+
+
+def test_altlast_mit_verwaistem_base_sperrt_nicht_mehr(client, tmp_path):
+    # #685: vor #686 umbenannt — im Feld steht ein Name, zu dem es keine Aufnahme mehr gibt.
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.diar.json"):
+        (tdir / name).write_text(json.dumps({"base": "Weg"}), encoding="utf-8")
+
+    response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
+
+    assert response.status_code == 200, response.text
+    # Der fremde Name bleibt: sonst machte das Umbenennen eine von cmd_apply abgelehnte
+    # Korrektur zur eigenen (Review zu #685).
+    for name in ("Carol.correction.json", "Carol.diar.json"):
+        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Weg"
+    assert client.delete("/api/projects/Demo/files/Carol").status_code == 200
+
+
+def test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "Andere.raw.txt").write_text("x", encoding="utf-8")
+    (tdir / "S1.correction.json").write_text(json.dumps({"base": "Andere"}), encoding="utf-8")
+
+    response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
+
+    assert response.status_code == 409
+    assert "'Andere'" in response.json()["detail"]
+    assert (tdir / "S1.correction.json").exists()
+
+
+def test_umbenennen_verjuengt_sidecars_nicht(client, tmp_path):
+    # correct.py verwirft Sidecars, die aelter sind als die Roh-JSON — das muss halten.
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.diar.json"):
+        pfad = tdir / name
+        pfad.write_text(json.dumps({"base": "S1"}), encoding="utf-8")
+        os.utime(pfad, (1_000_000, 1_000_000))
+
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"}).status_code == 200
+
+    for name in ("Neu.correction.json", "Neu.diar.json"):
+        assert os.stat(tdir / name).st_mtime == 1_000_000
+
+
+def test_rohjson_einer_aufnahme_namens_diar_bleibt_unberuehrt(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    roh = (tdir / "S1.json").read_bytes()
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "B.diar"}).status_code == 200
+    assert (tdir / "B.diar.json").read_bytes() == roh
+
+
 def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
     assert client.get("/api/projects/Demo/files/S1").status_code == 200
     lock_root = tmp_path / ".transkribor-project-locks"

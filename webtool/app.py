@@ -1374,9 +1374,15 @@ def _transkript_gehoert_zu(pfad: str, base: str, bekannte_basen: set[str]) -> bo
         if dokument_base is not None and not isinstance(dokument_base, str):
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
-        if isinstance(dokument_base, str) and paths.namensform(dokument_base) != paths.namensform(base):
+        # Fremd ist nur ein Name, den eine ANDERE vorhandene Aufnahme traegt. Ein Name ohne
+        # Aufnahme ist meist der Rest eines Umbenennens vor #686 (#685); er bleibt beim
+        # Umbenennen unveraendert stehen, damit cmd_apply eine fremde Korrektur weiter abweist.
+        if (isinstance(dokument_base, str)
+                and paths.namensform(dokument_base) != paths.namensform(base)
+                and paths.namensform(dokument_base) in bekannte_basen):
             raise HTTPException(status_code=409,
-                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name} "
+                                       f"(gehoert laut Inhalt zu {dokument_base!r})")
         if name.endswith(".edit.json") and not isinstance(dokument_base, str) and not ist_roh:
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
@@ -1865,6 +1871,36 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         audio = find_audio(project, neu)
         _doc_felder(_edit_path(project, neu), base=neu,
                     audio=os.path.basename(audio) if audio else "")
+        # Korrekturen und Sprechertrennung tragen `base` ebenfalls; mit dem alten Namen
+        # darin weist `_transkript_gehoert_zu` jedes weitere Umbenennen, Loeschen und
+        # Neu-Transkribieren mit 409 ab.
+        # Geprueft wird die ENDUNG (`rest`), nicht der Zielname: eine Aufnahme namens
+        # `B.diar` hat sonst ihre Roh-JSON `B.diar.json` hier mitgetroffen.
+        # Die mtime bleibt stehen: correct.py vergleicht sie mit der Roh-JSON, um
+        # veraltete Sidecars zu verwerfen — ein Umbenennen darf sie nicht verjuengen.
+        for p, ziel in paare:
+            rest = os.path.basename(p)[len(base):]
+            if rest.endswith(".correction.json"):
+                felder = {"base": neu}
+            elif rest == ".diar.json":
+                felder = {"base": neu, "audio": os.path.basename(audio) if audio else ""}
+            else:
+                continue
+            try:
+                st = os.stat(ziel)
+                bisher = _json_objekt(ziel).get("base")
+            except (OSError, ValueError):
+                continue
+            # Nur den EIGENEN Namen umschreiben. Ein verwaister fremder Name (#685) bleibt
+            # stehen: sonst wuerde eine von cmd_apply als fremd abgelehnte Korrektur durch
+            # das Umbenennen zur eigenen und beim naechsten Lauf uebernommen.
+            if isinstance(bisher, str) and paths.namensform(bisher) != paths.namensform(base):
+                print(f"↷ {os.path.basename(ziel)}: base \"{bisher}\" bleibt (verwaist)",
+                      flush=True)
+                continue
+            _doc_felder(ziel, **felder)
+            with suppress(OSError):
+                os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #

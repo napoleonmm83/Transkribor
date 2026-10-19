@@ -1,0 +1,72 @@
+{
+  "test": "python -m pytest webtool/test_api.py -q -k \"zweimal_umbenennen or verjuengt or namens_diar or altlast or vorhandenen_anderen\"",
+  "pfade": [
+    "webtool/app.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "685-1 verwaister Name sperrt weiter wie vor #685",
+      "datei": "webtool/app.py",
+      "von": "                and paths.namensform(dokument_base) in bekannte_basen):",
+      "nach": "                ):  # 685-1",
+      "rot": [
+        "test_altlast_mit_verwaistem_base_sperrt_nicht_mehr"
+      ]
+    },
+    {
+      "id": "685-2 Name einer vorhandenen anderen Aufnahme wird durchgelassen",
+      "datei": "webtool/app.py",
+      "von": "                and paths.namensform(dokument_base) in bekannte_basen):",
+      "nach": "                and False):  # 685-2",
+      "rot": [
+        "test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter"
+      ]
+    },
+    {
+      "id": "685-3 Umbenennen macht einen verwaisten fremden Namen zum eigenen",
+      "datei": "webtool/app.py",
+      "von": "            if isinstance(bisher, str) and paths.namensform(bisher) != paths.namensform(base):",
+      "nach": "            if False:  # 685-3",
+      "rot": [
+        "test_altlast_mit_verwaistem_base_sperrt_nicht_mehr"
+      ]
+    },
+    {
+      "id": "rename-1 base in correction.json wird nicht nachgezogen",
+      "datei": "webtool/app.py",
+      "von": "            if rest.endswith(\".correction.json\"):",
+      "nach": "            if False:  # rename-1",
+      "rot": [
+        "test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen"
+      ]
+    },
+    {
+      "id": "rename-2 base in diar.json wird nicht nachgezogen",
+      "datei": "webtool/app.py",
+      "von": "            elif rest == \".diar.json\":",
+      "nach": "            elif False:  # rename-2",
+      "rot": [
+        "test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen"
+      ]
+    },
+    {
+      "id": "rename-3 Umbenennen verjuengt die mtime der Sidecars",
+      "datei": "webtool/app.py",
+      "von": "                os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))",
+      "nach": "                pass  # rename-3",
+      "rot": [
+        "test_umbenennen_verjuengt_sidecars_nicht"
+      ]
+    },
+    {
+      "id": "rename-4 Auswahl ueber den Zielnamen trifft die Roh-JSON",
+      "datei": "webtool/app.py",
+      "von": "            elif rest == \".diar.json\":",
+      "nach": "            elif ziel.endswith(\".diar.json\"):  # rename-4",
+      "rot": [
+        "test_rohjson_einer_aufnahme_namens_diar_bleibt_unberuehrt"
+      ]
+    }
+  ]
+}
