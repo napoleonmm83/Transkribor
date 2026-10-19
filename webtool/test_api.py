@@ -4158,6 +4158,20 @@ def test_upload_ohne_feld_erbt_das_projekt(client, tmp_projekt, audio_datei):
     assert projekt.datei_mehrsprachig(tmp_projekt, r.json()["base"]) is True
 
 
+def test_upload_mit_falsch_abwaehlen_und_unsinn_abweisen(client, tmp_projekt, audio_datei):
+    """Seit #687 kommt das Feld als Text an und wird selbst ausgewertet: "false" muss ein
+    echtes False bleiben, Unsinn darf keine Datei anlegen."""
+    client.put(f"/api/projects/{tmp_projekt}/einstellungen", json={"mehrsprachig": True})
+    r = client.post(f"/api/projects/{tmp_projekt}/audio",
+                    files={"file": audio_datei}, data={"mehrsprachig": "false"})
+    from webtool import projekt
+    assert projekt.datei_mehrsprachig(tmp_projekt, r.json()["base"]) is False
+    r = client.post(f"/api/projects/{tmp_projekt}/audio",
+                    files={"file": ("Zwei.mp3", b"x")}, data={"mehrsprachig": "vielleicht"})
+    assert r.status_code == 422
+    assert not os.path.exists(os.path.join(paths.audio_dir(tmp_projekt), "Zwei.mp3"))
+
+
 def test_fetch_reicht_mehrsprachig_als_env_durch(client, tmp_projekt, monkeypatch):
     """fetch.py kennt den Basisnamen erst nach dem Download — die Einstellung reist deshalb
     als Env mit, wie schon TRANSKRIBOR_FETCH_SPRACHE."""
