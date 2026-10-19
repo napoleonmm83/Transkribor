@@ -938,6 +938,30 @@ def test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen(client, tmp_path)
     assert client.delete("/api/projects/Demo/files/Carola").status_code == 200
 
 
+def test_altlast_mit_verwaistem_base_wird_beim_umbenennen_geheilt(client, tmp_path):
+    # #685: vor #686 umbenannt — im Feld steht ein Name, zu dem es keine Aufnahme mehr gibt.
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.diar.json"):
+        (tdir / name).write_text(json.dumps({"base": "Weg"}), encoding="utf-8")
+
+    response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
+
+    assert response.status_code == 200, response.text
+    for name in ("Carol.correction.json", "Carol.diar.json"):
+        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Carol"
+
+
+def test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    (tdir / "Andere.raw.txt").write_text("x", encoding="utf-8")
+    (tdir / "S1.correction.json").write_text(json.dumps({"base": "Andere"}), encoding="utf-8")
+
+    response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
+
+    assert response.status_code == 409
+    assert (tdir / "S1.correction.json").exists()
+
+
 def test_umbenennen_verjuengt_sidecars_nicht(client, tmp_path):
     # correct.py verwirft Sidecars, die aelter sind als die Roh-JSON — das muss halten.
     tdir = tmp_path / "Demo" / "transkripte"

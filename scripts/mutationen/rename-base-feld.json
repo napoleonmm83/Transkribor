@@ -1,10 +1,28 @@
 {
-  "test": "python -m pytest webtool/test_api.py -q -k \"zweimal_umbenennen or verjuengt or namens_diar\"",
+  "test": "python -m pytest webtool/test_api.py -q -k \"zweimal_umbenennen or verjuengt or namens_diar or altlast or vorhandenen_anderen\"",
   "pfade": [
     "webtool/app.py",
     "webtool/test_api.py"
   ],
   "mutationen": [
+    {
+      "id": "685-1 verwaister Name sperrt weiter wie vor #685",
+      "datei": "webtool/app.py",
+      "von": "                and paths.namensform(dokument_base) in bekannte_basen):",
+      "nach": "                ):  # 685-1",
+      "rot": [
+        "test_altlast_mit_verwaistem_base_wird_beim_umbenennen_geheilt"
+      ]
+    },
+    {
+      "id": "685-2 Name einer vorhandenen anderen Aufnahme wird durchgelassen",
+      "datei": "webtool/app.py",
+      "von": "                and paths.namensform(dokument_base) in bekannte_basen):",
+      "nach": "                and False):  # 685-2",
+      "rot": [
+        "test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter"
+      ]
+    },
     {
       "id": "rename-1 base in correction.json wird nicht nachgezogen",
       "datei": "webtool/app.py",

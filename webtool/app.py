@@ -1374,7 +1374,11 @@ def _transkript_gehoert_zu(pfad: str, base: str, bekannte_basen: set[str]) -> bo
         if dokument_base is not None and not isinstance(dokument_base, str):
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
-        if isinstance(dokument_base, str) and paths.namensform(dokument_base) != paths.namensform(base):
+        # Fremd ist nur ein Name, den eine ANDERE vorhandene Aufnahme traegt. Ein Name ohne
+        # Aufnahme ist der Rest eines Umbenennens vor #686 und wird dort geheilt (#685).
+        if (isinstance(dokument_base, str)
+                and paths.namensform(dokument_base) != paths.namensform(base)
+                and paths.namensform(dokument_base) in bekannte_basen):
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
         if name.endswith(".edit.json") and not isinstance(dokument_base, str) and not ist_roh:
