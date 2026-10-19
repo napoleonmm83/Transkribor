@@ -2798,7 +2798,7 @@ def cancel_job(job_id: str):
 @app.post("/api/projects/{project}/audio")
 def upload_audio(project: str, file: UploadFile = File(...), sprache: str | None = Form(None),
                  mehrsprachig: str | None = Form(None), sprecher: int | None = Form(None)):
-    # Als Text annehmen: fastapi >= 0.148 liest ein FEHLENDES bool-Formfeld als nicht
+    # Als Text annehmen: fastapi >= 0.147 liest ein FEHLENDES bool-Formfeld als nicht
     # angehaktes Kaestchen (False) und schriebe so einen Datei-Override fest (#687).
     if mehrsprachig is not None:
         try:
