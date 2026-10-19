@@ -922,6 +922,21 @@ def test_projektalias_wird_vor_umbenennung_abgewiesen(client, tmp_path, monkeypa
     assert edit_pfad.read_bytes() == vorher
 
 
+def test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.part1.correction.json", "S1.diar.json"):
+        (tdir / name).write_text(json.dumps({"base": "S1", "segments": []}), encoding="utf-8")
+
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"}).status_code == 200
+    response = client.post("/api/projects/Demo/files/Carol/rename", json={"name": "Carola"})
+
+    assert response.status_code == 200, response.text
+    for name in ("Carola.correction.json", "Carola.part1.correction.json", "Carola.diar.json"):
+        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Carola"
+    # Loeschen geht durch dieselbe Zuordnungspruefung
+    assert client.delete("/api/projects/Demo/files/Carola").status_code == 200
+
+
 def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
     assert client.get("/api/projects/Demo/files/S1").status_code == 200
     lock_root = tmp_path / ".transkribor-project-locks"

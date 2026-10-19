@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Modelle lassen sich unter Windows auch mit der neuen Hugging-Face-Bibliothek herunterladen; nach dem Update erscheint dafür einmalig die Einrichtungsseite.
+- Eine Aufnahme lässt sich nach dem Umbenennen erneut umbenennen, löschen und neu transkribieren, statt mit „nicht eindeutig zuordenbar“ abgewiesen zu werden.
 
 ## v0.59.2 — 2026-10-15
 

@@ -1865,6 +1865,14 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         audio = find_audio(project, neu)
         _doc_felder(_edit_path(project, neu), base=neu,
                     audio=os.path.basename(audio) if audio else "")
+        # Korrekturen und Sprechertrennung tragen `base` ebenfalls; mit dem alten Namen
+        # darin weist `_transkript_gehoert_zu` jedes weitere Umbenennen, Loeschen und
+        # Neu-Transkribieren mit 409 ab.
+        for _, ziel in paare:
+            if ziel.endswith(".correction.json"):
+                _doc_felder(ziel, base=neu)
+            elif ziel.endswith(".diar.json"):
+                _doc_felder(ziel, base=neu, audio=os.path.basename(audio) if audio else "")
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #
