@@ -938,7 +938,7 @@ def test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen(client, tmp_path)
     assert client.delete("/api/projects/Demo/files/Carola").status_code == 200
 
 
-def test_altlast_mit_verwaistem_base_wird_beim_umbenennen_geheilt(client, tmp_path):
+def test_altlast_mit_verwaistem_base_sperrt_nicht_mehr(client, tmp_path):
     # #685: vor #686 umbenannt — im Feld steht ein Name, zu dem es keine Aufnahme mehr gibt.
     tdir = tmp_path / "Demo" / "transkripte"
     for name in ("S1.correction.json", "S1.diar.json"):
@@ -947,8 +947,11 @@ def test_altlast_mit_verwaistem_base_wird_beim_umbenennen_geheilt(client, tmp_pa
     response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
 
     assert response.status_code == 200, response.text
+    # Der fremde Name bleibt: sonst machte das Umbenennen eine von cmd_apply abgelehnte
+    # Korrektur zur eigenen (Review zu #685).
     for name in ("Carol.correction.json", "Carol.diar.json"):
-        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Carol"
+        assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Weg"
+    assert client.delete("/api/projects/Demo/files/Carol").status_code == 200
 
 
 def test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter(client, tmp_path):
@@ -959,6 +962,7 @@ def test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter(client, tmp_path)
     response = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Carol"})
 
     assert response.status_code == 409
+    assert "'Andere'" in response.json()["detail"]
     assert (tdir / "S1.correction.json").exists()
 
 

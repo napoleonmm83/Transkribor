@@ -1375,12 +1375,14 @@ def _transkript_gehoert_zu(pfad: str, base: str, bekannte_basen: set[str]) -> bo
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
         # Fremd ist nur ein Name, den eine ANDERE vorhandene Aufnahme traegt. Ein Name ohne
-        # Aufnahme ist der Rest eines Umbenennens vor #686 und wird dort geheilt (#685).
+        # Aufnahme ist meist der Rest eines Umbenennens vor #686 (#685); er bleibt beim
+        # Umbenennen unveraendert stehen, damit cmd_apply eine fremde Korrektur weiter abweist.
         if (isinstance(dokument_base, str)
                 and paths.namensform(dokument_base) != paths.namensform(base)
                 and paths.namensform(dokument_base) in bekannte_basen):
             raise HTTPException(status_code=409,
-                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
+                                detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name} "
+                                       f"(gehoert laut Inhalt zu {dokument_base!r})")
         if name.endswith(".edit.json") and not isinstance(dokument_base, str) and not ist_roh:
             raise HTTPException(status_code=409,
                                 detail=f"Transkriptdatei nicht eindeutig zuordenbar: {name}")
@@ -1886,7 +1888,15 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                 continue
             try:
                 st = os.stat(ziel)
-            except OSError:
+                bisher = _json_objekt(ziel).get("base")
+            except (OSError, ValueError):
+                continue
+            # Nur den EIGENEN Namen umschreiben. Ein verwaister fremder Name (#685) bleibt
+            # stehen: sonst wuerde eine von cmd_apply als fremd abgelehnte Korrektur durch
+            # das Umbenennen zur eigenen und beim naechsten Lauf uebernommen.
+            if isinstance(bisher, str) and paths.namensform(bisher) != paths.namensform(base):
+                print(f"↷ {os.path.basename(ziel)}: base \"{bisher}\" bleibt (verwaist)",
+                      flush=True)
                 continue
             _doc_felder(ziel, **felder)
             with suppress(OSError):

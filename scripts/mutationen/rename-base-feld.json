@@ -11,7 +11,7 @@
       "von": "                and paths.namensform(dokument_base) in bekannte_basen):",
       "nach": "                ):  # 685-1",
       "rot": [
-        "test_altlast_mit_verwaistem_base_wird_beim_umbenennen_geheilt"
+        "test_altlast_mit_verwaistem_base_sperrt_nicht_mehr"
       ]
     },
     {
@@ -21,6 +21,15 @@
       "nach": "                and False):  # 685-2",
       "rot": [
         "test_base_einer_vorhandenen_anderen_aufnahme_sperrt_weiter"
+      ]
+    },
+    {
+      "id": "685-3 Umbenennen macht einen verwaisten fremden Namen zum eigenen",
+      "datei": "webtool/app.py",
+      "von": "            if isinstance(bisher, str) and paths.namensform(bisher) != paths.namensform(base):",
+      "nach": "            if False:  # 685-3",
+      "rot": [
+        "test_altlast_mit_verwaistem_base_sperrt_nicht_mehr"
       ]
     },
     {
