@@ -4169,6 +4169,7 @@ def test_upload_mit_falsch_abwaehlen_und_unsinn_abweisen(client, tmp_projekt, au
     r = client.post(f"/api/projects/{tmp_projekt}/audio",
                     files={"file": ("Zwei.mp3", b"x")}, data={"mehrsprachig": "vielleicht"})
     assert r.status_code == 422
+    from webtool import paths
     assert not os.path.exists(os.path.join(paths.audio_dir(tmp_projekt), "Zwei.mp3"))
 
 
