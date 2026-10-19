@@ -1,0 +1,27 @@
+{
+  "test": "python -m pytest webtool/test_api.py -q -k \"upload_ohne_feld or upload_ohne_sprecherzahl or upload_schreibt_mehrsprachig or falsch_abwaehlen\"",
+  "pfade": [
+    "webtool/app.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "687-1 fehlendes Feld wird zu False",
+      "datei": "webtool/app.py",
+      "von": "    if mehrsprachig is not None:\n        try:",
+      "nach": "    if True:  # 687-1\n        try:",
+      "rot": [
+        "test_upload_ohne_feld_erbt_das_projekt"
+      ]
+    },
+    {
+      "id": "687-2 Text wird nicht ausgewertet",
+      "datei": "webtool/app.py",
+      "von": "            mehrsprachig = TypeAdapter(bool).validate_python(mehrsprachig)",
+      "nach": "            mehrsprachig = bool(mehrsprachig)  # 687-2",
+      "rot": [
+        "test_upload_mit_falsch_abwaehlen_und_unsinn_abweisen"
+      ]
+    }
+  ]
+}

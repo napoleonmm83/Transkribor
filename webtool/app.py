@@ -18,7 +18,7 @@ from av.error import FFmpegError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, StrictInt
+from pydantic import BaseModel, StrictInt, TypeAdapter, ValidationError
 
 from . import auth
 # `as _correct` ist PFLICHT, nicht Stil: weiter unten steht `def correct(project)` (der
@@ -2832,8 +2832,15 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/projects/{project}/audio")
-def upload_audio(project: str, file: UploadFile = File(...), sprache: str = Form(None),
-                 mehrsprachig: bool = Form(None), sprecher: int = Form(None)):
+def upload_audio(project: str, file: UploadFile = File(...), sprache: str | None = Form(None),
+                 mehrsprachig: str | None = Form(None), sprecher: int | None = Form(None)):
+    # Als Text annehmen: fastapi >= 0.147 liest ein FEHLENDES bool-Formfeld als nicht
+    # angehaktes Kaestchen (False) und schriebe so einen Datei-Override fest (#687).
+    if mehrsprachig is not None:
+        try:
+            mehrsprachig = TypeAdapter(bool).validate_python(mehrsprachig)
+        except ValidationError:
+            raise HTTPException(status_code=422, detail="mehrsprachig: kein Wahrheitswert") from None
     _validate(project)
     _sicherer_projektname(project)   # VOR makedirs: Upload legt sonst still ein Projekt an
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
