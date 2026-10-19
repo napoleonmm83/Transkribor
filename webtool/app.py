@@ -1868,11 +1868,25 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # Korrekturen und Sprechertrennung tragen `base` ebenfalls; mit dem alten Namen
         # darin weist `_transkript_gehoert_zu` jedes weitere Umbenennen, Loeschen und
         # Neu-Transkribieren mit 409 ab.
-        for _, ziel in paare:
-            if ziel.endswith(".correction.json"):
-                _doc_felder(ziel, base=neu)
-            elif ziel.endswith(".diar.json"):
-                _doc_felder(ziel, base=neu, audio=os.path.basename(audio) if audio else "")
+        # Geprueft wird die ENDUNG (`rest`), nicht der Zielname: eine Aufnahme namens
+        # `B.diar` hat sonst ihre Roh-JSON `B.diar.json` hier mitgetroffen.
+        # Die mtime bleibt stehen: correct.py vergleicht sie mit der Roh-JSON, um
+        # veraltete Sidecars zu verwerfen — ein Umbenennen darf sie nicht verjuengen.
+        for p, ziel in paare:
+            rest = os.path.basename(p)[len(base):]
+            if rest.endswith(".correction.json"):
+                felder = {"base": neu}
+            elif rest == ".diar.json":
+                felder = {"base": neu, "audio": os.path.basename(audio) if audio else ""}
+            else:
+                continue
+            try:
+                st = os.stat(ziel)
+            except OSError:
+                continue
+            _doc_felder(ziel, **felder)
+            with suppress(OSError):
+                os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #

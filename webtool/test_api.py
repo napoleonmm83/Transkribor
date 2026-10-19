@@ -933,8 +933,30 @@ def test_aufnahme_mit_korrektur_laesst_sich_zweimal_umbenennen(client, tmp_path)
     assert response.status_code == 200, response.text
     for name in ("Carola.correction.json", "Carola.part1.correction.json", "Carola.diar.json"):
         assert json.loads((tdir / name).read_text(encoding="utf-8"))["base"] == "Carola"
+    assert json.loads((tdir / "Carola.diar.json").read_text(encoding="utf-8"))["audio"] == "Carola.mp3"
     # Loeschen geht durch dieselbe Zuordnungspruefung
     assert client.delete("/api/projects/Demo/files/Carola").status_code == 200
+
+
+def test_umbenennen_verjuengt_sidecars_nicht(client, tmp_path):
+    # correct.py verwirft Sidecars, die aelter sind als die Roh-JSON — das muss halten.
+    tdir = tmp_path / "Demo" / "transkripte"
+    for name in ("S1.correction.json", "S1.diar.json"):
+        pfad = tdir / name
+        pfad.write_text(json.dumps({"base": "S1"}), encoding="utf-8")
+        os.utime(pfad, (1_000_000, 1_000_000))
+
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"}).status_code == 200
+
+    for name in ("Neu.correction.json", "Neu.diar.json"):
+        assert os.stat(tdir / name).st_mtime == 1_000_000
+
+
+def test_rohjson_einer_aufnahme_namens_diar_bleibt_unberuehrt(client, tmp_path):
+    tdir = tmp_path / "Demo" / "transkripte"
+    roh = (tdir / "S1.json").read_bytes()
+    assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "B.diar"}).status_code == 200
+    assert (tdir / "B.diar.json").read_bytes() == roh
 
 
 def test_interner_lifecycle_ordner_ist_kein_umbenennziel(client, tmp_path):
