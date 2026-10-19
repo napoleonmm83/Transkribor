@@ -2804,7 +2804,7 @@ def upload_audio(project: str, file: UploadFile = File(...), sprache: str | None
         try:
             mehrsprachig = TypeAdapter(bool).validate_python(mehrsprachig)
         except ValidationError:
-            raise HTTPException(status_code=422, detail="mehrsprachig: kein Wahrheitswert")
+            raise HTTPException(status_code=422, detail="mehrsprachig: kein Wahrheitswert") from None
     _validate(project)
     _sicherer_projektname(project)   # VOR makedirs: Upload legt sonst still ein Projekt an
     name = os.path.basename(file.filename or "")           # vom Browser mitgesendete Pfade entfernen
