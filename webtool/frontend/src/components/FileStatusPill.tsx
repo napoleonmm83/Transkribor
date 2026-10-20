@@ -199,7 +199,7 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
             {/* Bewusst kein Orb: hier wartet JEDE Datei des Bereichs, und je Orb liefe eine eigene
                 rAF-Schleife (Review zu thinking-orbs, B3). Der Orb gehoert der Arbeit, die laeuft. */}
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            <Loader2 className="size-3.5 shrink-0 motion-safe:animate-spin" aria-hidden="true" />
             {gLabel}
           </span>
         )

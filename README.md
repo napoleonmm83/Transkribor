@@ -234,7 +234,7 @@ der Leiste über deinen Aufnahmen und neben der gerade bearbeiteten Datei eine k
 Punkten, die je Arbeitsschritt anders aussieht: blau und wellenförmig beim Transkribieren,
 türkis mit verbundenen Punkten beim Trennen der Sprecher, violett beim Korrigieren und grün
 beim abschliessenden Prüfen. Hast du in deinem System „Bewegung reduzieren“ eingestellt, bewegt
-sie sich nicht. *(Ab der nächsten Fassung.)*
+sie sich nicht. *(Ab `v0.60.0`.)*
 
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
