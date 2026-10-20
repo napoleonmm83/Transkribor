@@ -1,8 +1,11 @@
 {
-  "test": "npm --prefix webtool/frontend test -- FileStatusPill",
+  "test": "npm --prefix webtool/frontend test -- FileStatusPill orb.test.ts",
   "pfade": [
     "webtool/frontend/src/components/ThinkingOrb.tsx",
-    "webtool/frontend/src/components/FileStatusPill.tsx"
+    "webtool/frontend/src/components/FileStatusPill.tsx",
+    "webtool/frontend/src/components/FileStatusPill.test.tsx",
+    "webtool/frontend/src/index.css",
+    "webtool/frontend/orb.test.ts"
   ],
   "mutationen": [
     {
@@ -18,6 +21,20 @@
       "von": "<ThinkingOrb phase={active} />",
       "nach": "<ThinkingOrb />",
       "rot": ["der Thinking Orb traegt die laufende Phase"]
+    },
+    {
+      "id": "orb-3 Phase ohne Farbregel",
+      "datei": "webtool/frontend/src/index.css",
+      "von": ".orb[data-phase=\"diarize\"]",
+      "nach": ".orb[data-phase=\"diarisieren\"]",
+      "rot": ["jede Phase hat eine Farbregel"]
+    },
+    {
+      "id": "orb-4 reduced-motion-Stopp fehlt",
+      "datei": "webtool/frontend/src/index.css",
+      "von": "  .orb, .orb::after { animation: none; }",
+      "nach": "",
+      "rot": ["die Orb-Regeln liegen in @layer components"]
     }
   ]
 }
