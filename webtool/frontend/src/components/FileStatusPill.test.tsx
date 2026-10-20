@@ -12,6 +12,10 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} active="verify" jobRunning />)
     expect(screen.getByText(/Verifizieren/)).toBeInTheDocument()
   })
+  it('der Thinking Orb traegt die laufende Phase (Farbe/Tempo haengen in index.css daran)', () => {
+    const { container } = render(<FileStatusPill file={f()} active="correct" jobRunning />)
+    expect(container.querySelector('.orb')?.getAttribute('data-phase')).toBe('correct')
+  })
   it('Prozent statt Ellipse, wenn der Job welche liefert', () => {
     render(<FileStatusPill file={f()} active="transcribe" pct={45} jobRunning />)
     expect(screen.getByText(/Transkribieren 45%/)).toBeInTheDocument()

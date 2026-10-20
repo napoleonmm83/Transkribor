@@ -1,4 +1,5 @@
-import { AudioLines, Check, Clock, FileText, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { AudioLines, Check, Clock, FileText, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ThinkingOrb } from './ThinkingOrb'
 import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile, Warten } from '@/lib/types'
 import { PHASE_LABEL, WARTE_LABEL } from '@/lib/jobPhases'
 
@@ -135,7 +136,7 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
         // tabular-nums am Elternteil statt einer <span> um die Zahl: gleiche Ziffernbreite,
         // aber der Text bleibt EIN Knoten — sonst zerfaellt "Korrigieren 45%" in zwei Stuecke.
         <span className="inline-flex items-center gap-1.5 text-xs font-medium tabular-nums text-primary">
-          <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          <ThinkingOrb phase={active} />
           {label}
         </span>
       )
@@ -196,7 +197,7 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
         const gLabel = GLOBAL_WAIT[globalPhase]
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+            <ThinkingOrb phase={globalPhase} />
             {gLabel}
           </span>
         )

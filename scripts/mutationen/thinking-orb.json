@@ -1,0 +1,23 @@
+{
+  "test": "npm --prefix webtool/frontend test -- FileStatusPill",
+  "pfade": [
+    "webtool/frontend/src/components/ThinkingOrb.tsx",
+    "webtool/frontend/src/components/FileStatusPill.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "orb-1 data-phase weggelassen",
+      "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
+      "von": "data-phase={phase ?? undefined}",
+      "nach": "data-phase={undefined}",
+      "rot": ["der Thinking Orb traegt die laufende Phase"]
+    },
+    {
+      "id": "orb-2 Pille reicht die Phase nicht durch",
+      "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+      "von": "<ThinkingOrb phase={active} />",
+      "nach": "<ThinkingOrb />",
+      "rot": ["der Thinking Orb traegt die laufende Phase"]
+    }
+  ]
+}
