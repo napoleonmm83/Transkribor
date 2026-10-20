@@ -347,6 +347,31 @@ a.blatt:hover, .blatt-klickbar:hover {
   pointer-events: none;
 }
 
+  /* Thinking Orb (`ThinkingOrb.tsx`): Farbe und Tempo je KI-Phase. Der Kern atmet, der Glanz
+     dreht als conic-gradient ueber denselben `@property`-Weg wie der Rahmen. IN der Schicht, damit
+     der ungeschichtete reduced-motion-Block unten gewinnt (ausserhalb schlug die spaetere
+     Animationsregel ihn, im Browser gemessen). Nur kuehle Farben: Bernstein/Rot sind belegt. */
+  .orb {
+    --orb-a: var(--primary); --orb-b: #A78BFA; --orb-tempo: 2.4s;
+    position: relative; display: inline-block; border-radius: 9999px;
+    background: radial-gradient(circle at 35% 30%, #fff8 0 12%, var(--orb-a) 45%, var(--orb-b) 100%);
+    box-shadow: 0 0 6px 0 color-mix(in oklab, var(--orb-a) 60%, transparent);
+    animation: orb-atmet var(--orb-tempo) ease-in-out infinite;
+  }
+  .orb::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    --orb-winkel: 0deg;
+    background: conic-gradient(from var(--orb-winkel), transparent 0 60%, #fff6 75%, transparent 90%);
+    animation: orb-wabert calc(var(--orb-tempo) * 1.5) linear infinite;
+  }
+  .orb[data-phase="transcribe"] { --orb-a: #3B82F6; --orb-b: #1E40AF; --orb-tempo: 3s; }
+  .orb[data-phase="diarize"]    { --orb-a: #22D3EE; --orb-b: #0E7490; --orb-tempo: 2.4s; }
+  .orb[data-phase="context"], .orb[data-phase="prep"], .orb[data-phase="glossary"]
+                                { --orb-a: #818CF8; --orb-b: #4338CA; --orb-tempo: 2.2s; }
+  .orb[data-phase="correct"]    { --orb-a: #A78BFA; --orb-b: #6D28D9; --orb-tempo: 1.4s; }
+  .orb[data-phase="verify"]     { --orb-a: #34D399; --orb-b: #047857; --orb-tempo: 1.8s; }
+  .orb[data-phase="audio"], .orb[data-phase="download"]
+                                { --orb-a: #94A3B8; --orb-b: #475569; --orb-tempo: 2.6s; }
 }  /* @layer components */
 
 @media (prefers-reduced-motion: reduce) {
@@ -363,29 +388,6 @@ a.blatt:hover, .blatt-klickbar:hover {
   .orb, .orb::after { animation: none; }
 }
 
-/* Thinking Orb (`ThinkingOrb.tsx`): Farbe und Tempo je KI-Phase. Der Kern atmet, der Glanz
-   dreht als conic-gradient ueber denselben `@property`-Weg wie der Rahmen oben. */
-.orb {
-  --orb-a: var(--primary); --orb-b: #A78BFA; --orb-tempo: 2.4s;
-  position: relative; display: inline-block; border-radius: 9999px;
-  background: radial-gradient(circle at 35% 30%, #fff8 0 12%, var(--orb-a) 45%, var(--orb-b) 100%);
-  box-shadow: 0 0 6px 0 color-mix(in oklab, var(--orb-a) 60%, transparent);
-  animation: orb-atmet var(--orb-tempo) ease-in-out infinite;
-}
-.orb::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  --orb-winkel: 0deg;
-  background: conic-gradient(from var(--orb-winkel), transparent 0 60%, #fff6 75%, transparent 90%);
-  animation: orb-wabert calc(var(--orb-tempo) * 1.5) linear infinite;
-}
-.orb[data-phase="transcribe"] { --orb-a: #3B82F6; --orb-b: #1E40AF; --orb-tempo: 3s; }
-.orb[data-phase="diarize"]    { --orb-a: #22D3EE; --orb-b: #0E7490; --orb-tempo: 2.4s; }
-.orb[data-phase="context"], .orb[data-phase="prep"], .orb[data-phase="glossary"]
-                              { --orb-a: #FBBF24; --orb-b: #B45309; --orb-tempo: 2.2s; }
-.orb[data-phase="correct"]    { --orb-a: #A78BFA; --orb-b: #6D28D9; --orb-tempo: 1.4s; }
-.orb[data-phase="verify"]     { --orb-a: #34D399; --orb-b: #047857; --orb-tempo: 1.8s; }
-.orb[data-phase="audio"], .orb[data-phase="download"]
-                              { --orb-a: #94A3B8; --orb-b: #475569; --orb-tempo: 2.6s; }
 @property --orb-winkel { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes orb-wabert { to { --orb-winkel: 360deg; } }
 @keyframes orb-atmet {
