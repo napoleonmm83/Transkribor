@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Neu**
-- Ein pulsierender Farbpunkt zeigt in der Laufleiste und neben der gerade bearbeiteten Aufnahme, woran die KI arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Farbe.
+- Eine animierte Punkt-Kugel zeigt in der Laufleiste und neben der gerade bearbeiteten Aufnahme, woran die KI arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Bewegung und Farbe.
 
 ## v0.59.3 — 2026-10-19
 

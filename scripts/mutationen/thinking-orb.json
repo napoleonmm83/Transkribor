@@ -1,11 +1,10 @@
 {
-  "test": "npm --prefix webtool/frontend test -- FileStatusPill orb.test.ts",
+  "test": "npm --prefix webtool/frontend test -- FileStatusPill ThinkingOrb",
   "pfade": [
     "webtool/frontend/src/components/ThinkingOrb.tsx",
+    "webtool/frontend/src/components/ThinkingOrb.test.tsx",
     "webtool/frontend/src/components/FileStatusPill.tsx",
-    "webtool/frontend/src/components/FileStatusPill.test.tsx",
-    "webtool/frontend/src/index.css",
-    "webtool/frontend/orb.test.ts"
+    "webtool/frontend/src/components/FileStatusPill.test.tsx"
   ],
   "mutationen": [
     {
@@ -23,18 +22,11 @@
       "rot": ["der Thinking Orb traegt die laufende Phase"]
     },
     {
-      "id": "orb-3 Phase ohne Farbregel",
-      "datei": "webtool/frontend/src/index.css",
-      "von": ".orb[data-phase=\"diarize\"]",
-      "nach": ".orb[data-phase=\"diarisieren\"]",
-      "rot": ["jede Phase hat eine Farbregel"]
-    },
-    {
-      "id": "orb-4 reduced-motion-Stopp fehlt",
-      "datei": "webtool/frontend/src/index.css",
-      "von": "  .orb, .orb::after { animation: none; }",
+      "id": "orb-3 Phase ohne Abbildung",
+      "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
+      "von": "  diarize: { state: 'connecting', color: '#0891B2' },\n",
       "nach": "",
-      "rot": ["die Orb-Regeln liegen in @layer components"]
+      "rot": ["jede Phase hat eine eigene Animation und Farbe"]
     }
   ]
 }
