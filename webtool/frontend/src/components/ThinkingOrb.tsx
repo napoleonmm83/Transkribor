@@ -1,4 +1,5 @@
 import { ThinkingOrb as Orb, type OrbState } from 'thinking-orbs'
+import { useTheme } from '@/hooks/useTheme'
 import type { FilePhase, GlobalPhase } from '@/lib/types'
 
 type Phase = FilePhase | GlobalPhase
@@ -17,14 +18,18 @@ export const ORB_PHASE: Record<Phase, { state: OrbState; color: string }> = {
   download: { state: 'searching', color: '#64748B' },
 }
 
-/** Animierte Punkt-Kugel aus `thinking-orbs` (Canvas; bremst bei „Bewegung reduzieren" selbst).
- *  Reine Dekoration — das Etikett daneben traegt die Aussage. 20 px ist die abgestimmte
- *  Inline-Groesse des Pakets; kleiner bietet es nicht. */
-export function ThinkingOrb({ phase }: { phase?: Phase | null; size?: 'sm' | 'md' }) {
+/** Animierte Punkt-Kugel aus `thinking-orbs` (Canvas; bei „Bewegung reduzieren" malt das Paket
+ *  ein Standbild). Reine Dekoration — das Etikett daneben traegt die Aussage. 20 px ist die
+ *  abgestimmte Inline-Groesse des Pakets; kleiner bietet es nicht.
+ *  `theme` kommt aus UNSEREM ThemeProvider: dessen `auto` kennt nur eine `dark`-Klasse und faellt
+ *  sonst aufs Betriebssystem zurueck — App hell bei OS dunkel ergaebe weisse Punkte auf Weiss.
+ *  Je Orb laeuft eine eigene rAF-Schleife; deshalb nur fuer Arbeit, die WIRKLICH laeuft. */
+export function ThinkingOrb({ phase }: { phase?: Phase | null }) {
+  const { theme } = useTheme()
   const p = phase ? ORB_PHASE[phase] : undefined
   return (
     <span aria-hidden="true" data-phase={phase ?? undefined} className="inline-flex shrink-0">
-      <Orb state={p?.state ?? 'working'} color={p?.color} size={20} />
+      <Orb state={p?.state ?? 'working'} color={p?.color} theme={theme} size={20} />
     </span>
   )
 }

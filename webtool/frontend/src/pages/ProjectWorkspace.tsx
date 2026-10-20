@@ -258,7 +258,7 @@ export function ProjectWorkspace() {
               className="flex items-center justify-between gap-3 rounded-lg border border-primary/25
                          bg-primary/5 px-3 py-2.5 text-sm">
               <span className="flex min-w-0 items-center gap-2">
-                <ThinkingOrb size="md" phase={Object.values(j.phases.active)[0]?.phase ?? j.phases.global} />
+                <ThinkingOrb phase={Object.values(j.phases.active)[0]?.phase ?? j.phases.global} />
                 <span className="min-w-0 truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
               </span>
               <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
