@@ -9,7 +9,8 @@ const orbProps = vi.fn()
 vi.mock('thinking-orbs', () => ({
   ThinkingOrb: (p: Record<string, unknown>) => { orbProps(p); return null },
 }))
-const { ThinkingOrb, ORB_PHASE } = await import('./ThinkingOrb')
+const { ThinkingOrb } = await import('./ThinkingOrb')
+const { ORB_PHASE } = await import('@/lib/orbPhasen')
 
 describe('ThinkingOrb', () => {
   it('jede Phase hat eine eigene Animation und Farbe', () => {

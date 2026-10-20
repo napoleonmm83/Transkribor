@@ -4,7 +4,8 @@
     "webtool/frontend/src/components/ThinkingOrb.tsx",
     "webtool/frontend/src/components/ThinkingOrb.test.tsx",
     "webtool/frontend/src/components/FileStatusPill.tsx",
-    "webtool/frontend/src/components/FileStatusPill.test.tsx"
+    "webtool/frontend/src/components/FileStatusPill.test.tsx",
+    "webtool/frontend/src/lib/orbPhasen.ts"
   ],
   "mutationen": [
     {
@@ -12,35 +13,45 @@
       "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
       "von": "data-phase={phase ?? undefined}",
       "nach": "data-phase={undefined}",
-      "rot": ["der Thinking Orb traegt die laufende Phase"]
+      "rot": [
+        "der Thinking Orb traegt die laufende Phase"
+      ]
     },
     {
       "id": "orb-2 Pille reicht die Phase nicht durch",
       "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
       "von": "<ThinkingOrb phase={active} />",
       "nach": "<ThinkingOrb />",
-      "rot": ["der Thinking Orb traegt die laufende Phase"]
+      "rot": [
+        "der Thinking Orb traegt die laufende Phase"
+      ]
     },
     {
       "id": "orb-4 Tabelle ignoriert",
       "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
       "von": "<Orb state={p?.state ?? 'working'} color={p?.color}",
       "nach": "<Orb state=\"working\"",
-      "rot": ["reicht Animation, Farbe und das App-Thema an den Orb weiter"]
+      "rot": [
+        "reicht Animation, Farbe und das App-Thema an den Orb weiter"
+      ]
     },
     {
       "id": "orb-5 App-Thema nicht durchgereicht",
       "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
       "von": " theme={theme} size={20}",
       "nach": " size={20}",
-      "rot": ["reicht Animation, Farbe und das App-Thema an den Orb weiter"]
+      "rot": [
+        "reicht Animation, Farbe und das App-Thema an den Orb weiter"
+      ]
     },
     {
       "id": "orb-3 Phase ohne Abbildung",
-      "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
+      "datei": "webtool/frontend/src/lib/orbPhasen.ts",
       "von": "  diarize: { state: 'connecting', color: '#0891B2' },\n",
       "nach": "",
-      "rot": ["jede Phase hat eine eigene Animation und Farbe"]
+      "rot": [
+        "jede Phase hat eine eigene Animation und Farbe"
+      ]
     }
   ]
 }
