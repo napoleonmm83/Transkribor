@@ -29,4 +29,10 @@ describe('ThinkingOrb', () => {
     expect(orbProps).toHaveBeenLastCalledWith(
       expect.objectContaining({ state: 'composing', color: '#8B5CF6', theme: 'light', size: 20 }))
   })
+  it('ohne Phase (Prozessstart) der neutrale working-Orb ohne Toenung', () => {
+    orbProps.mockClear()
+    render(<Ctx.Provider value={{ theme: 'dark', toggle: () => {} }}><ThinkingOrb phase={null} /></Ctx.Provider>)
+    expect(orbProps).toHaveBeenLastCalledWith(
+      expect.objectContaining({ state: 'working', color: undefined, theme: 'dark' }))
+  })
 })
