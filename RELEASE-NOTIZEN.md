@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.60.0 — 2026-10-20
+
 **Neu**
 - Eine animierte Punkt-Kugel zeigt in der Laufleiste und neben der gerade bearbeiteten Aufnahme, woran die KI arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Bewegung und Farbe.
 
