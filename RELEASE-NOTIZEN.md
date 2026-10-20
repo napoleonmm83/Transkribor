@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Ein pulsierender „Thinking Orb“ zeigt in der Laufleiste und neben jeder Aufnahme, woran die KI gerade arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Farbe.
+
 ## v0.59.3 — 2026-10-19
 
 **Behoben**

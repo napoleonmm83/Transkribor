@@ -229,6 +229,12 @@ Kommen mehr Projekte dazu, wechselt die Übersicht ab dem neunten wieder auf ein
 der letzten fünf; alle deine Projekte findest du dann jederzeit vollständig in der Seitenleiste.
 *(Ab `v0.49.0`.)*
 
+**Sehen, woran die KI gerade arbeitet.** Läuft eine Transkription oder Korrektur, pulsiert in
+der Leiste über deinen Aufnahmen und neben der gerade bearbeiteten Datei ein farbiger Punkt:
+blau beim Transkribieren, türkis beim Trennen der Sprecher, violett beim Korrigieren und grün
+beim abschliessenden Prüfen. Hast du in deinem System „Bewegung reduzieren“ eingestellt, steht
+der Punkt still und zeigt nur die Farbe. *(Ab der nächsten Fassung.)*
+
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
