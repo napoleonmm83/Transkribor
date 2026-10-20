@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Bot, ScanText, X, FileAudio, Loader2, Plus } from 'lucide-react'
+import { Bot, ScanText, X, FileAudio, Plus } from 'lucide-react'
 import { useProjekte, useDateien } from '@/hooks/useProjektDaten'
 import { useAiReady } from '@/hooks/useAiReady'
 import { mergePhases, useActiveJob, zeigtLauf } from '@/hooks/useActiveJob'
 import { DateiMenue } from '@/components/DateiMenue'
 import { FileStatusPill } from '@/components/FileStatusPill'
+import { ThinkingOrb } from '@/components/ThinkingOrb'
 import { ProjektMenue } from '@/components/ProjektMenue'
 import { PageHeader } from '@/components/PageHeader'
 import { MaterialDialog } from '@/components/MaterialDialog'
@@ -257,7 +258,7 @@ export function ProjectWorkspace() {
               className="flex items-center justify-between gap-3 rounded-lg border border-primary/25
                          bg-primary/5 px-3 py-2.5 text-sm">
               <span className="flex min-w-0 items-center gap-2">
-                <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden="true" />
+                <ThinkingOrb size="md" phase={j.phases.global ?? Object.values(j.phases.active)[0]?.phase} />
                 <span className="min-w-0 truncate">{describePhases(j.phases) || KIND_LABEL[j.kind] || 'läuft…'}</span>
               </span>
               <Button variant="ghost" size="sm" className="shrink-0" onClick={() => cancelJob(j.id)}>
