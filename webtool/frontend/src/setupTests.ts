@@ -8,3 +8,6 @@ expect.extend(matchers)
 // ponytail: jsdom lacks ResizeObserver/scrollIntoView; cmdk (SpeakerCombobox) needs stubs to mount.
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} }
 Element.prototype.scrollIntoView ??= () => {}
+// jsdom hat kein Canvas; thinking-orbs (ThinkingOrb) kommt mit null zurecht, ohne Attrappe
+// druckt jsdom je Orb ein „Not implemented: getContext".
+HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext
