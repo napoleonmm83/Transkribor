@@ -22,6 +22,20 @@
       "rot": ["der Thinking Orb traegt die laufende Phase"]
     },
     {
+      "id": "orb-4 Tabelle ignoriert",
+      "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
+      "von": "<Orb state={p?.state ?? 'working'} color={p?.color}",
+      "nach": "<Orb state=\"working\"",
+      "rot": ["reicht Animation, Farbe und das App-Thema an den Orb weiter"]
+    },
+    {
+      "id": "orb-5 App-Thema nicht durchgereicht",
+      "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
+      "von": " theme={theme} size={20}",
+      "nach": " size={20}",
+      "rot": ["reicht Animation, Farbe und das App-Thema an den Orb weiter"]
+    },
+    {
       "id": "orb-3 Phase ohne Abbildung",
       "datei": "webtool/frontend/src/components/ThinkingOrb.tsx",
       "von": "  diarize: { state: 'connecting', color: '#0891B2' },\n",

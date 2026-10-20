@@ -1,4 +1,4 @@
-import { AudioLines, Check, Clock, FileText, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { AudioLines, Check, Clock, FileText, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { ThinkingOrb } from './ThinkingOrb'
 import type { Erreicht, FilePhase, FileState, GlobalPhase, ProjectFile, Warten } from '@/lib/types'
 import { PHASE_LABEL, WARTE_LABEL } from '@/lib/jobPhases'
@@ -197,7 +197,9 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
         const gLabel = GLOBAL_WAIT[globalPhase]
         return (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
-            <ThinkingOrb phase={globalPhase} />
+            {/* Bewusst kein Orb: hier wartet JEDE Datei des Bereichs, und je Orb liefe eine eigene
+                rAF-Schleife (Review zu thinking-orbs, B3). Der Orb gehoert der Arbeit, die laeuft. */}
+            <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
             {gLabel}
           </span>
         )
