@@ -356,6 +356,26 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
     assert zeilen[-1] == "[Demo] Modell-Download beendet"
 
 
+def test_download_ohne_messbaren_zuwachs_meldet_keine_menge(monkeypatch, tmp_path, capsys):
+    """#699: hf_xet schreibt model.bin erst am Ende, der Ordner waechst nur um Bytes.
+    Minutenlang „0.00 GB" sah aus wie ein haengender Download; ohne Menge sagt die Pille
+    nur „wird heruntergeladen"."""
+    ordner = tmp_path / "models--Systran--faster-whisper-large-v3"
+    ordner.mkdir()
+    monkeypatch.setattr(transcribe, "_fehlendes_modell", lambda model: str(ordner))
+
+    def laden(model, device):
+        (ordner / "xet-merker").write_bytes(b"x" * 865)    # gemessener Zuwachs im Review
+        time.sleep(0.2)
+        return "modell"
+
+    monkeypatch.setattr(transcribe, "_modell", laden)
+    assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.02) == "modell"
+    assert capsys.readouterr().out.splitlines() == [
+        "[Demo] Modell large-v3 wird heruntergeladen (einmalig)",
+        "[Demo] Modell-Download beendet"]
+
+
 def test_gescheiterter_download_meldet_trotzdem_das_ende(monkeypatch, tmp_path, capsys):
     """Ohne die Abschlusszeile stuende die Pille nach einem Fehlschlag weiter auf
     „Modell wird heruntergeladen" (Review #693, F3)."""
