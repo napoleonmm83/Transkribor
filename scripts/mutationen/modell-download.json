@@ -60,6 +60,24 @@
       ]
     },
     {
+      "id": "699-1 Menge auch unter 0,01 GB gemeldet",
+      "datei": "transcribe.py",
+      "von": "            if neu < 5e6:\n                continue",
+      "nach": "            if False:  # 699-1\n                continue",
+      "rot": [
+        "test_download_ohne_messbaren_zuwachs_meldet_keine_menge"
+      ]
+    },
+    {
+      "id": "699-2 Schwelle verschluckt echte Mengen",
+      "datei": "transcribe.py",
+      "von": "            if neu < 5e6:",
+      "nach": "            if neu < 5e7:  # 699-2",
+      "rot": [
+        "test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge"
+      ]
+    },
+    {
       "id": "693-6 keine Abschlusszeile",
       "datei": "transcribe.py",
       "von": "        print(f\"[{name}] Modell-Download beendet\", flush=True)",

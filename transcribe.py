@@ -368,6 +368,10 @@ def _modell_mit_anzeige(name, model, device, takt=2.0):
     def melden():
         while not stopp.wait(takt):
             neu = max(0, _ordnergroesse(ordner) - basis)
+            # hf_xet schreibt model.bin erst am Ende (#699): „0.00 GB" sah aus wie ein
+            # Haenger, ohne Zeile sagt die Pille nur „wird heruntergeladen".
+            if neu < 5e6:
+                continue
             print(f"[{name}] Modell-Download: {neu / 1e9:.2f} GB", flush=True)
 
     faden = threading.Thread(target=melden, daemon=True)
