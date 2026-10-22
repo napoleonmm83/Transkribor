@@ -13,7 +13,7 @@ initial_prompt kostete er ganze Passagen, siehe _opts), sondern nur in die LLM-K
 
 Umgebungsvariablen: WHISPER_MODEL (default large-v3), WHISPER_LANG (default de).
 """
-import sys, os, json, glob, math, time, argparse, re
+import sys, os, json, glob, math, time, argparse, re, threading
 from shutil import which
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -304,6 +304,69 @@ def _modell(model, device):
                         compute_type="float16" if device == "cuda" else "int8")
 
 
+def _fehlendes_modell(model):
+    """Cache-Ordner eines noch nicht geladenen Whisper-Modells, sonst None (#693).
+
+    Gefragt wird faster-whisper selbst (`download_model(..., local_files_only=True)`), damit
+    hier keine zweite Fassung seiner Repo-Zuordnung entsteht. Nur `LocalEntryNotFoundError`
+    heisst „fehlt" — jede andere Ausnahme heisst „unbekannt", und dafuer kuendigt dieser Lauf
+    keinen Download an, den es vielleicht nicht gibt.
+    """
+    if os.path.isdir(model):
+        return None
+    try:                        # ohne die Pakete (CI-Laeufer) laedt auch `_modell` nichts
+        from faster_whisper.utils import _MODELS, download_model
+        from huggingface_hub import constants
+        from huggingface_hub.errors import LocalEntryNotFoundError
+    except ImportError:
+        return None
+    try:
+        download_model(model, local_files_only=True)
+        return None
+    except LocalEntryNotFoundError:
+        repo = _MODELS.get(model, model)
+        return os.path.join(constants.HF_HUB_CACHE, "models--" + repo.replace("/", "--"))
+    except Exception:
+        return None
+
+
+def _ordnergroesse(ordner):
+    gesamt = 0
+    for wurzel, _, dateien in os.walk(ordner):
+        for d in dateien:
+            try:
+                gesamt += os.path.getsize(os.path.join(wurzel, d))
+            except OSError:         # .incomplete wird waehrend des Zaehlens umbenannt
+                pass
+    return gesamt
+
+
+def _modell_mit_anzeige(name, model, device, takt=2.0):
+    """`_modell`, und waehrend eines Erst-Downloads alle `takt` s eine Mengenzeile (#693).
+
+    Vorher stand die Oberflaeche minutenlang auf „Wartet auf Transkription", und wer abbrach,
+    begann den Download von vorn. Gemessen wird die Groesse des Cache-Ordners samt
+    `.incomplete`-Dateien — das ist, was auf der Platte angekommen ist.
+    """
+    ordner = _fehlendes_modell(model)
+    if ordner is None:
+        return _modell(model, device)
+    print(f"[{name}] Modell {model} wird heruntergeladen (einmalig, ~3 GB)", flush=True)
+    stopp = threading.Event()
+
+    def melden():
+        while not stopp.wait(takt):
+            print(f"[{name}] Modell-Download: {_ordnergroesse(ordner) / 1e9:.2f} GB", flush=True)
+
+    faden = threading.Thread(target=melden, daemon=True)
+    faden.start()
+    try:
+        return _modell(model, device)
+    finally:
+        stopp.set()
+        faden.join()
+
+
 def _ergebnis(segmente, info):
     """(Segment-Generator, TranscriptionInfo) -> genau die dict-Form, die openai-whisper
     lieferte. `<base>.json` ist das Roh-Dokument, aus dem `edit_model.build_edit_doc` und
@@ -570,7 +633,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
 
     t_phase = time.monotonic()
     n_ok = audio_gesamt = 0
-    m = None if engine == "whisper.cpp" else _modell(model, device)
+    m = None if engine == "whisper.cpp" else _modell_mit_anzeige(name, model, device)
 
     ai_pool = None
     ai_futures = []      # (base, Future) — der Basisname wird fuer die Fehlerzeile gebraucht
@@ -824,7 +887,7 @@ def transcribe_project(name, model, language, only=None, autocorrect: bool = Fal
             try:
                 sprache, mehr = _datei_sprachwahl(proj_dir, base, language)
                 if m is None and _braucht_faster_whisper(engine, mehr):
-                    m = _modell(model, devicemod.pick_asr())
+                    m = _modell_mit_anzeige(name, model, devicemod.pick_asr())
                 result = _transkribiere_datei(m, engine, f, sprache, mehr, model)
                 dt = time.monotonic() - t0
                 result["luecken"] = luecken(result.get("segments") or [], result.get("duration"))

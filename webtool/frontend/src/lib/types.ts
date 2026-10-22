@@ -309,9 +309,13 @@ export type FileWork = { phase: FilePhase; pct?: number; detail?: string };
  *  `vor` ist eine MENGE, keine Position — der Korrekturlauf arbeitet mehrere Dateien
  *  gleichzeitig (`TRANSKRIBOR_PARALLEL`), „drei vor dieser" heisst dort drei Dateien, nicht
  *  drei Runden. */
-export type Warten = { art: 'transcribe' | 'correct'; vor: number };
+export type Warten = { art: 'transcribe' | 'correct'; vor: number;
+  /** #693: der Lauf laedt erst das Whisper-Modell; '' = angekuendigt, sonst z.B. "1,23 GB". */
+  modell?: string };
 export type JobPhases = {
   global: GlobalPhase | null;
+  /** #693: Stand des einmaligen Modell-Downloads eines Transkriptionslaufs, siehe `Warten.modell`. */
+  modellDownload?: string;
   /** Basisname -> globale Phase (z.B. glossary, prep), in der diese Datei gerade wartet. */
   globalPerBase?: Record<string, GlobalPhase>;
   scope?: Set<string>;

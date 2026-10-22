@@ -1380,6 +1380,26 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
     expect(warteKarte(parseJobPhases('transcribe', ['[Demo] -> transkribiere A …']), 'transcribe')).toEqual({})
     expect(warteKarte(parseJobPhases('fetch', ['[scope] A\tB']), 'fetch')).toEqual({})
   })
+
+  it('#693: ein laufender Modell-Download steht an jeder wartenden Aufnahme, mit Menge', () => {
+    const angekuendigt = parseJobPhases('transcribe', ['[scope] A\tB',
+      '[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)'])
+    expect(warteKarte(angekuendigt, 'transcribe').A).toEqual({ art: 'transcribe', vor: 0, modell: '' })
+    const laufend = parseJobPhases('transcribe', ['[scope] A\tB',
+      '[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)',
+      '[Demo] Modell-Download: 0.87 GB', '[Demo] Modell-Download: 1.5 GB'])
+    expect(warteKarte(laufend, 'transcribe').B).toEqual({ art: 'transcribe', vor: 1, modell: '1,50 GB' })
+  })
+
+  it('#693: mit der ersten Transkription ist der Download vorbei — und ohne Ankuendigung gab es keinen', () => {
+    const danach = parseJobPhases('transcribe', ['[scope] A\tB',
+      '[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)',
+      '[Demo] Modell-Download: 3.1 GB', '[Demo] -> transkribiere A …'])
+    expect(danach.modellDownload).toBeUndefined()
+    expect(warteKarte(danach, 'transcribe').B).toEqual({ art: 'transcribe', vor: 1 })
+    // Gegenprobe: ohne Download-Zeilen kein Feld — sonst stuende der Text bei jedem Lauf da.
+    expect(parseJobPhases('transcribe', ['[scope] A']).modellDownload).toBeUndefined()
+  })
 })
 
 describe('korrekturSchlange — die Wartezeit im gestaffelten Lauf (#442)', () => {

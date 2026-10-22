@@ -224,8 +224,11 @@ export function FileStatusPill({ file, active, pct, detail, state, erreicht, job
       // gewollte sichere Richtung: der URL-Import kennt keine Basisnamen, und ein Lauf ohne
       // `[scope]`-Zeile im Puffer hat keine Grundlage fuer eine Zahl. Lieber kein Wert als
       // ein geratener.
+      // #693: ein laufender Modell-Download ist die genauere Auskunft als die Schlangenposition.
       const wLabel = warten && mitText
-        ? WARTE_LABEL[warten.art] + (warten.vor > 0 ? ` · noch ${warten.vor} vor dieser` : '')
+        ? warten.modell !== undefined
+          ? `Modell wird heruntergeladen${warten.modell ? ` · ${warten.modell}` : '…'}`
+          : WARTE_LABEL[warten.art] + (warten.vor > 0 ? ` · noch ${warten.vor} vor dieser` : '')
         : 'In Warteschlange…'
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">

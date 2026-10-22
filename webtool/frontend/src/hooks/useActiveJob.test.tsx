@@ -487,6 +487,12 @@ describe('mergePhases', () => {
                               Z: { art: 'transcribe', vor: 2 } })
   })
 
+  it('#693: die Neu-Durchzaehlung behaelt den Stand des Modell-Downloads', () => {
+    const m = mergePhases([job('j1', 'transcribe',
+      { global: null, scope: new Set(['B', 'A']), active: {}, perBase: {}, modellDownload: '1,20 GB' })])
+    expect(m.warten?.B).toEqual({ art: 'transcribe', vor: 1, modell: '1,20 GB' })
+  })
+
   it('was in einem ANDEREN Job fertig wurde, faellt raus — und die Zahl wird neu gezaehlt', () => {
     // Zwei Regeln in einem Fall, und die erste Fassung hatte BEIDE falsch:
     //
