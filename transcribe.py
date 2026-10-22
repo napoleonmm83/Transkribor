@@ -336,7 +336,7 @@ def _ordnergroesse(ordner):
         for d in dateien:
             try:
                 # lstat: wo hub Symlinks anlegt, stuende jede fertige Datei sonst zweimal da
-                # (Blob + Verweis in snapshots/; im Review in WSL gemessen).
+                # (Blob + Verweis in snapshots/; hergeleitet, nicht gemessen).
                 gesamt += os.lstat(os.path.join(wurzel, d)).st_size
             except OSError:         # .incomplete wird waehrend des Zaehlens umbenannt
                 pass
