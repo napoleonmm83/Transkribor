@@ -308,9 +308,10 @@ def _fehlendes_modell(model):
     """Cache-Ordner eines noch nicht geladenen Whisper-Modells, sonst None (#693).
 
     Gefragt wird faster-whisper selbst (`download_model(..., local_files_only=True)`), damit
-    hier keine zweite Fassung seiner Repo-Zuordnung entsteht. Nur `LocalEntryNotFoundError`
-    heisst „fehlt" — jede andere Ausnahme heisst „unbekannt", und dafuer kuendigt dieser Lauf
-    keinen Download an, den es vielleicht nicht gibt.
+    hier keine zweite Fassung seiner Repo-Zuordnung entsteht. „Fehlt" heisst:
+    `LocalEntryNotFoundError`, oder ein gelieferter Snapshot ohne `model.bin` (#696). Jede
+    andere Ausnahme heisst „unbekannt", und dafuer kuendigt dieser Lauf keinen Download an,
+    den es vielleicht nicht gibt.
     """
     if os.path.isdir(model):
         return None
@@ -322,7 +323,7 @@ def _fehlendes_modell(model):
         return None
     try:
         pfad = download_model(model, local_files_only=True)
-        # hub < 2 hinterliess halbe Snapshots ohne trees/, die hub 2 als vollstaendig meldet (#696);
+        # ein halber Altcache ohne trees/ gilt hub als vollstaendig (#696);
         # ohne model.bin laedt faster-whisper nicht. Halb MIT model.bin bleibt unerkannt.
         if os.path.isfile(os.path.join(pfad, "model.bin")):
             return None
