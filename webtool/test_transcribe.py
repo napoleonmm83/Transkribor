@@ -348,7 +348,7 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
     monkeypatch.setattr(transcribe, "_modell", laden)
     assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.02) == "modell"
     zeilen = capsys.readouterr().out.splitlines()
-    assert zeilen[0] == "[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)"
+    assert zeilen[0] == "[Demo] Modell large-v3 wird heruntergeladen (einmalig)"
     assert "[Demo] Modell-Download: 0.00 GB" in zeilen[1:]  # 2 MB, auf zwei Stellen gerundet
     assert all(z.startswith("[Demo] Modell-Download: ") for z in zeilen[1:])
 

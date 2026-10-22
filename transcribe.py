@@ -351,7 +351,7 @@ def _modell_mit_anzeige(name, model, device, takt=2.0):
     ordner = _fehlendes_modell(model)
     if ordner is None:
         return _modell(model, device)
-    print(f"[{name}] Modell {model} wird heruntergeladen (einmalig, ~3 GB)", flush=True)
+    print(f"[{name}] Modell {model} wird heruntergeladen (einmalig)", flush=True)
     stopp = threading.Event()
 
     def melden():
