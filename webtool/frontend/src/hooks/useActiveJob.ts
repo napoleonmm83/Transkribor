@@ -220,7 +220,8 @@ export function mergePhases(jobs: Job[]): JobPhases {
     const geordnet = art === 'transcribe'
       ? laufOrdnung(bases)
       : [...bases].sort((a, b) => stabil(a) - stabil(b))
-    geordnet.forEach((b, i) => { warten[b] = { art, vor: i } })
+    // Spread, nicht neu bauen: sonst fiele `modell` (#693) hier still weg.
+    geordnet.forEach((b, i) => { warten[b] = { ...warten[b], vor: i } })
   }
   // ERST HIER beschneiden, nicht beim Sammeln: `warten` ist bis zu dieser Zeile nicht fertig —
   // `korrWarten` kommt oben erst nach der Job-Schleife dazu.

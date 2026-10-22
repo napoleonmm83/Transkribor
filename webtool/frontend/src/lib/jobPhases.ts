@@ -55,6 +55,9 @@ export function parseJobPhases(kind: string, lines: string[],
   // doppelt und der Balken schoesse ueber 100%.
   const blocks: Record<string, { done: Set<number>; total: number }> = Object.create(null)
   let global: GlobalPhase | null = null
+  // #693: Stand des einmaligen Modell-Downloads ('' = angekuendigt, noch keine Menge).
+  // Undefined heisst „kein Download", und das ist auch der Zustand ab der ersten Transkription.
+  let modellDownload: string | undefined
   // Eine LISTE, kein Set: die Reihenfolge IST die der Poolschlange (#442). Nie geraeumt —
   // wer heraus muss, faellt in `korrekturSchlange` durch die Filter, und die Historie bleibt
   // der Zaehlung erhalten.
@@ -323,8 +326,17 @@ export function parseJobPhases(kind: string, lines: string[],
       // Projekte mit Klammer gibt es nicht mehr, dieser Zweig bleibt der Vorbehalt fuer
       // Namen, die vor dem Riegel angelegt wurden. Bis dahin wiegt „keine Falschaussage"
       // schwerer.
+      // #693: `transcribe.py` laedt ein fehlendes Whisper-Modell (~3 GB) vor der ersten Datei.
+      // Ohne diese zwei Zeilen stand die Pille minutenlang auf „Wartet auf Transkription".
+      if (kind === 'transcribe') {
+        if (/^\[[^\]]+\] Modell \S+ wird heruntergeladen/.test(l)) { modellDownload ??= ''; continue }
+        if ((m = l.match(/^\[[^\]]+\] Modell-Download: (\d+(?:\.\d+)?) GB$/))) {
+          modellDownload = `${(+m[1]).toFixed(2).replace('.', ',')} GB`; continue
+        }
+      }
       if ((m = l.match(/^\[[^\]]+\] -> transkribiere (.+) …$/))) {
-        cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null; continue
+        cursor = m[1]; active[cursor] = { phase: 'transcribe' }; global = null
+        modellDownload = undefined; continue
       }
       // Der Wurf aus der Vorbereitung, und NUR der mit stehendem KI-Pool: `transcribe.py`
       // druckt fuer den Fall ohne Anbieter eine eigene Form, weil die Korrektur dort
@@ -666,7 +678,7 @@ export function parseJobPhases(kind: string, lines: string[],
 
   // `gesehen` nur, wenn wirklich etwas darin steht: ein immer vorhandenes leeres Set waere
   // eine Feldaenderung in JEDER Antwort, fuer einen Fall, den es meist gar nicht gibt.
-  return { global: Object.keys(active).length ? null : global, scope,
+  return { global: Object.keys(active).length ? null : global, scope, modellDownload,
            gesehen: gesehen.size ? gesehen : undefined,
            entfernt: ungueltig.size ? ungueltig : undefined,
            entferntJe: entferntJe.size ? entferntJe : undefined,
@@ -757,7 +769,11 @@ export function warteKarte(phases: JobPhases, kind: string): Record<string, Wart
   const ausstehend = laufOrdnung(phases.scope).filter(
     b => !Object.hasOwn(phases.perBase, b) && !phases.entfernt?.has(b) && !schonDurch(phases, kind, b))
   const karte: Record<string, Warten> = Object.create(null)
-  ausstehend.forEach((base, i) => { karte[base] = { art: kind, vor: i } })
+  // #693: solange das Modell laedt, wartet jede Aufnahme des Laufs genau darauf.
+  const modell = kind === 'transcribe' ? phases.modellDownload : undefined
+  ausstehend.forEach((base, i) => {
+    karte[base] = modell === undefined ? { art: kind, vor: i } : { art: kind, vor: i, modell }
+  })
   return karte
 }
 

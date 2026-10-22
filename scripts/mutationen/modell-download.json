@@ -1,0 +1,36 @@
+{
+  "test": "python -m pytest webtool/test_transcribe.py -q",
+  "pfade": [
+    "transcribe.py",
+    "webtool/test_transcribe.py"
+  ],
+  "mutationen": [
+    {
+      "id": "693-1 keine Ankuendigung des Downloads",
+      "datei": "transcribe.py",
+      "von": "    print(f\"[{name}] Modell {model} wird heruntergeladen (einmalig, ~3 GB)\", flush=True)",
+      "nach": "    pass  # 693-1",
+      "rot": [
+        "test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge"
+      ]
+    },
+    {
+      "id": "693-2 Download immer angekuendigt",
+      "datei": "transcribe.py",
+      "von": "    if ordner is None:\n        return _modell(model, device)",
+      "nach": "    if False:  # 693-2\n        return _modell(model, device)",
+      "rot": [
+        "test_vorhandenes_modell_kuendigt_keinen_download_an"
+      ]
+    },
+    {
+      "id": "693-3 jede Ausnahme gilt als fehlendes Modell",
+      "datei": "transcribe.py",
+      "von": "    except Exception:\n        return None\n\n\ndef _ordnergroesse",
+      "nach": "    except Exception:  # 693-3\n        return \"x\"\n\n\ndef _ordnergroesse",
+      "rot": [
+        "test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner"
+      ]
+    }
+  ]
+}

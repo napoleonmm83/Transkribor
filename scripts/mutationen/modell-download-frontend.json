@@ -1,0 +1,49 @@
+{
+  "test": "npm --prefix webtool/frontend test -- jobPhases.test FileStatusPill useActiveJob",
+  "pfade": [
+    "webtool/frontend/src/lib/jobPhases.ts",
+    "webtool/frontend/src/lib/jobPhases.test.ts",
+    "webtool/frontend/src/components/FileStatusPill.tsx",
+    "webtool/frontend/src/components/FileStatusPill.test.tsx",
+    "webtool/frontend/src/hooks/useActiveJob.ts",
+    "webtool/frontend/src/hooks/useActiveJob.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "693-f1 Mengenzeile wird nicht gelesen",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "          modellDownload = `${(+m[1]).toFixed(2).replace('.', ',')} GB`; continue",
+      "nach": "          continue",
+      "rot": [
+        "#693: ein laufender Modell-Download steht an jeder wartenden Aufnahme, mit Menge"
+      ]
+    },
+    {
+      "id": "693-f2 Download endet nicht mit der ersten Transkription",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "        modellDownload = undefined; continue",
+      "nach": "        continue",
+      "rot": [
+        "#693: mit der ersten Transkription ist der Download vorbei — und ohne Ankuendigung gab es keinen"
+      ]
+    },
+    {
+      "id": "693-f3 Pille zeigt weiter die Schlange",
+      "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
+      "von": "        ? warten.modell !== undefined",
+      "nach": "        ? false",
+      "rot": [
+        "#693: waehrend des Modell-Downloads steht der Download da, nicht die Schlange"
+      ]
+    },
+    {
+      "id": "693-f4 Neu-Durchzaehlung verliert das Feld",
+      "datei": "webtool/frontend/src/hooks/useActiveJob.ts",
+      "von": "{ warten[b] = { ...warten[b], vor: i } }",
+      "nach": "{ warten[b] = { art, vor: i } }",
+      "rot": [
+        "#693: die Neu-Durchzaehlung behaelt den Stand des Modell-Downloads"
+      ]
+    }
+  ]
+}

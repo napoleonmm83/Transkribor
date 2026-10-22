@@ -68,6 +68,16 @@ describe('FileStatusPill', () => {
     render(<FileStatusPill file={f()} jobRunning inScope mitText warten={{ art: 'correct', vor: 3 }} />)
     expect(screen.getByText('Wartet auf Korrektur · noch 3 vor dieser')).toBeInTheDocument()
   })
+  it('#693: waehrend des Modell-Downloads steht der Download da, nicht die Schlange', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText
+      warten={{ art: 'transcribe', vor: 2, modell: '1,54 GB' }} />)
+    expect(screen.getByText('Modell wird heruntergeladen · 1,54 GB')).toBeInTheDocument()
+    expect(screen.queryByText(/Wartet auf/)).toBeNull()
+  })
+  it('#693: angekuendigt, aber noch ohne Menge', () => {
+    render(<FileStatusPill file={f()} jobRunning inScope mitText warten={{ art: 'transcribe', vor: 0, modell: '' }} />)
+    expect(screen.getByText('Modell wird heruntergeladen…')).toBeInTheDocument()
+  })
   it('ohne mitText bleibt es beim kurzen Text — die 260px-Leiste hat den Platz nicht', () => {
     // Im Browser gemessen, gleicher Lauf, nur das Etikett ausgetauscht: mit „In
     // Warteschlange…" zeigte die Seitenleiste „Intervi…", mit „Wartet auf Transkription"

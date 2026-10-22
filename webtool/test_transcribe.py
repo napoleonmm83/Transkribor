@@ -332,6 +332,59 @@ def test_compute_type_haengt_am_geraet(monkeypatch):
     assert called == ["tls", "model", "tls", "model"]
 
 
+def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, tmp_path, capsys):
+    """#693: ohne diese Zeilen stand die Oberflaeche minutenlang auf „Wartet auf
+    Transkription", und ein Abbruch kostete den bisher geladenen Teil."""
+    ordner = tmp_path / "models--Systran--faster-whisper-large-v3"
+    (ordner / "blobs").mkdir(parents=True)
+    monkeypatch.setattr(transcribe, "_fehlendes_modell", lambda model: str(ordner))
+
+    def laden(model, device):
+        # Der echte Download schreibt in eine .incomplete-Datei — genau die muss mitzaehlen.
+        (ordner / "blobs" / "abc.incomplete").write_bytes(b"x" * 2_000_000)
+        time.sleep(0.2)
+        return "modell"
+
+    monkeypatch.setattr(transcribe, "_modell", laden)
+    assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.02) == "modell"
+    zeilen = capsys.readouterr().out.splitlines()
+    assert zeilen[0] == "[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)"
+    assert "[Demo] Modell-Download: 0.00 GB" in zeilen[1:]  # 2 MB, auf zwei Stellen gerundet
+    assert all(z.startswith("[Demo] Modell-Download: ") for z in zeilen[1:])
+
+
+def test_vorhandenes_modell_kuendigt_keinen_download_an(monkeypatch, capsys):
+    """Gegenprobe: eine Ankuendigung bei JEDEM Lauf waere ein Daueralarm."""
+    monkeypatch.setattr(transcribe, "_fehlendes_modell", lambda model: None)
+    monkeypatch.setattr(transcribe, "_modell", lambda model, device: "modell")
+    assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.01) == "modell"
+    assert capsys.readouterr().out == ""
+
+
+def test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner(monkeypatch, tmp_path):
+    """Nur `LocalEntryNotFoundError` heisst „fehlt" — eine andere Ausnahme ist „unbekannt"
+    und darf keinen Download ankuendigen, den es vielleicht nicht gibt."""
+    utils = pytest.importorskip("faster_whisper.utils")
+    errors = pytest.importorskip("huggingface_hub.errors")
+    from huggingface_hub import constants
+    gefragt = []
+
+    def fehlt(model, local_files_only=False, **kw):
+        gefragt.append((model, local_files_only))
+        raise errors.LocalEntryNotFoundError("nicht im Cache")
+
+    monkeypatch.setattr(utils, "download_model", fehlt)
+    assert transcribe._fehlendes_modell("large-v3") == os.path.join(
+        constants.HF_HUB_CACHE, "models--Systran--faster-whisper-large-v3")
+    assert gefragt == [("large-v3", True)]       # nie ein echter Download aus der Pruefung
+
+    monkeypatch.setattr(utils, "download_model", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
+    assert transcribe._fehlendes_modell("large-v3") is None
+    monkeypatch.setattr(utils, "download_model", lambda *a, **kw: "pfad")
+    assert transcribe._fehlendes_modell("large-v3") is None
+    assert transcribe._fehlendes_modell(str(tmp_path)) is None   # lokaler Modellordner
+
+
 def test_cuda_dlls_nur_auf_windows(monkeypatch, tmp_path):
     """CTranslate2 bringt cuBLAS nicht mit, torch schon — aber nur Windows sucht ueber PATH.
     os.add_dll_directory() reicht dort NICHT (CTranslate2 laedt per plainem LoadLibrary)."""
