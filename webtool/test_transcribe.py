@@ -401,7 +401,13 @@ def test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner(monkey
 
     monkeypatch.setattr(utils, "download_model", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x")))
     assert transcribe._fehlendes_modell("large-v3") is None
-    monkeypatch.setattr(utils, "download_model", lambda *a, **kw: "pfad")
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    monkeypatch.setattr(utils, "download_model", lambda *a, **kw: str(snapshot))
+    # halber Altcache aus hub < 2 (#696): hub liefert den Snapshot, model.bin fehlt -> Download
+    assert transcribe._fehlendes_modell("large-v3") == os.path.join(
+        constants.HF_HUB_CACHE, "models--Systran--faster-whisper-large-v3")
+    (snapshot / "model.bin").write_bytes(b"x")
     assert transcribe._fehlendes_modell("large-v3") is None
     assert transcribe._fehlendes_modell(str(tmp_path)) is None   # lokaler Modellordner
 

@@ -26,8 +26,17 @@
     {
       "id": "693-3 jede Ausnahme gilt als fehlendes Modell",
       "datei": "transcribe.py",
-      "von": "    except Exception:\n        return None\n\n\ndef _ordnergroesse",
-      "nach": "    except Exception:  # 693-3\n        return \"x\"\n\n\ndef _ordnergroesse",
+      "von": "    except Exception:\n        return None\n    repo = _MODELS",
+      "nach": "    except Exception:  # 693-3\n        return \"x\"\n    repo = _MODELS",
+      "rot": [
+        "test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner"
+      ]
+    },
+    {
+      "id": "696-1 halber Snapshot ohne model.bin gilt als vorhanden",
+      "datei": "transcribe.py",
+      "von": "        if os.path.isfile(os.path.join(pfad, \"model.bin\")):\n            return None",
+      "nach": "        if True:  # 696-1\n            return None",
       "rot": [
         "test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner"
       ]
