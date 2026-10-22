@@ -263,6 +263,10 @@ Gesprächskontext prüft, auf die lokale Audioanalyse wartet, das Modell lädt o
 Ausschnitte erneut abhört. Bei den Ausschnitten zeigt die Anzeige, wie viele schon geprüft
 sind; andere Vorbereitungsschritte haben keinen erfundenen Prozentwert.
 
+*(Nächste Fassung nach `v0.60.0`:)* Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme
+„Modell wird heruntergeladen“ und die schon geladene Menge, statt minutenlang nur „Wartet auf
+Transkription“.
+
 Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
 **Ab `v0.50.1`** siehst du auch bei diesen Aufnahmen in der Liste, woran
 Transkribor gerade arbeitet. In Fassungen bis einschliesslich `v0.50.0` stand bei ihnen bis
