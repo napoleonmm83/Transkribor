@@ -31,6 +31,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 **Neu**
 - Eine animierte Punkt-Kugel zeigt in der Laufleiste und neben der gerade bearbeiteten Aufnahme, woran die KI arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Bewegung und Farbe.
 
+**Behoben**
+- Folgt eine vor v0.59.3 hochgeladene Aufnahme der Projekteinstellung „Enthält weitere Sprachen“ nicht, stellst du sie im ⋯-Menü der Aufnahme unter „Sprache, Sprecher & Korrektur“ auf „Folgt dem Projekt“ zurück; danach zieht sie wieder mit.
+
 ## v0.59.3 — 2026-10-19
 
 **Behoben**
