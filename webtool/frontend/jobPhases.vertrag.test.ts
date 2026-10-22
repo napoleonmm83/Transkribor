@@ -639,8 +639,8 @@ const INVENTAR: Record<string, Eintrag> = {
   '[{}] Modell {}, {} Datei(en)': { art: 'ignoriert', beispiel: '[Demo] Modell large-v3, 3 Datei(en)' },
   // #693: der einmalige Download vor der ersten Datei — ohne beide stand die Pille minutenlang
   // auf „Wartet auf Transkription".
-  '[{}] Modell {} wird heruntergeladen (einmalig, ~3 GB)': {
-    art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell large-v3 wird heruntergeladen (einmalig, ~3 GB)' },
+  '[{}] Modell {} wird heruntergeladen (einmalig)': {
+    art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell large-v3 wird heruntergeladen (einmalig)' },
   '[{}] Modell-Download: {} GB': {
     art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell-Download: 1.54 GB' },
   '[{}] Warte auf verbleibende KI-Korrekturen…': {
