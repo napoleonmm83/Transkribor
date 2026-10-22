@@ -335,7 +335,9 @@ def _ordnergroesse(ordner):
     for wurzel, _, dateien in os.walk(ordner):
         for d in dateien:
             try:
-                gesamt += os.path.getsize(os.path.join(wurzel, d))
+                # lstat: wo hub Symlinks anlegt, stuende jede fertige Datei sonst zweimal da
+                # (Blob + Verweis in snapshots/; im Review in WSL gemessen).
+                gesamt += os.lstat(os.path.join(wurzel, d)).st_size
             except OSError:         # .incomplete wird waehrend des Zaehlens umbenannt
                 pass
     return gesamt
@@ -345,18 +347,23 @@ def _modell_mit_anzeige(name, model, device, takt=2.0):
     """`_modell`, und waehrend eines Erst-Downloads alle `takt` s eine Mengenzeile (#693).
 
     Vorher stand die Oberflaeche minutenlang auf „Wartet auf Transkription", und wer abbrach,
-    begann den Download von vorn. Gemessen wird die Groesse des Cache-Ordners samt
-    `.incomplete`-Dateien — das ist, was auf der Platte angekommen ist.
+    begann den Download von vorn. Gemeldet wird der ZUWACHS des Cache-Ordners seit Beginn:
+    hub 2 legt je Anlauf eine neue `.incomplete`-Datei an und raeumt alte nie weg (im Review
+    gemessen), die absolute Groesse zaehlte nach einem Abbruch tote Reste mit.
+    Die Abschlusszeile im `finally` setzt die Anzeige zurueck — auch wenn der Download
+    scheitert oder (whisper.cpp-Rueckfall) mitten im Lauf nach `-> transkribiere` kam.
     """
     ordner = _fehlendes_modell(model)
     if ordner is None:
         return _modell(model, device)
     print(f"[{name}] Modell {model} wird heruntergeladen (einmalig)", flush=True)
+    basis = _ordnergroesse(ordner)
     stopp = threading.Event()
 
     def melden():
         while not stopp.wait(takt):
-            print(f"[{name}] Modell-Download: {_ordnergroesse(ordner) / 1e9:.2f} GB", flush=True)
+            neu = max(0, _ordnergroesse(ordner) - basis)
+            print(f"[{name}] Modell-Download: {neu / 1e9:.2f} GB", flush=True)
 
     faden = threading.Thread(target=melden, daemon=True)
     faden.start()
@@ -365,6 +372,7 @@ def _modell_mit_anzeige(name, model, device, takt=2.0):
     finally:
         stopp.set()
         faden.join()
+        print(f"[{name}] Modell-Download beendet", flush=True)
 
 
 def _ergebnis(segmente, info):

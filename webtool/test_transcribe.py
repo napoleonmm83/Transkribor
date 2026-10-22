@@ -337,11 +337,13 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
     Transkription", und ein Abbruch kostete den bisher geladenen Teil."""
     ordner = tmp_path / "models--Systran--faster-whisper-large-v3"
     (ordner / "blobs").mkdir(parents=True)
+    # Rest eines abgebrochenen Anlaufs: hub 2 raeumt ihn nie weg, er darf nicht mitzaehlen.
+    (ordner / "blobs" / "alt.aaaa.incomplete").write_bytes(b"x" * 30_000_000)
     monkeypatch.setattr(transcribe, "_fehlendes_modell", lambda model: str(ordner))
 
     def laden(model, device):
         # Der echte Download schreibt in eine .incomplete-Datei — genau die muss mitzaehlen.
-        (ordner / "blobs" / "abc.incomplete").write_bytes(b"x" * 2_000_000)
+        (ordner / "blobs" / "neu.bbbb.incomplete").write_bytes(b"x" * 10_000_000)
         time.sleep(0.2)
         return "modell"
 
@@ -349,8 +351,23 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
     assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.02) == "modell"
     zeilen = capsys.readouterr().out.splitlines()
     assert zeilen[0] == "[Demo] Modell large-v3 wird heruntergeladen (einmalig)"
-    assert "[Demo] Modell-Download: 0.00 GB" in zeilen[1:]  # 2 MB, auf zwei Stellen gerundet
-    assert all(z.startswith("[Demo] Modell-Download: ") for z in zeilen[1:])
+    assert "[Demo] Modell-Download: 0.01 GB" in zeilen[1:-1]   # 10 MB neu, nicht 40 MB
+    assert all(z.startswith("[Demo] Modell-Download: ") for z in zeilen[1:-1])
+    assert zeilen[-1] == "[Demo] Modell-Download beendet"
+
+
+def test_gescheiterter_download_meldet_trotzdem_das_ende(monkeypatch, tmp_path, capsys):
+    """Ohne die Abschlusszeile stuende die Pille nach einem Fehlschlag weiter auf
+    „Modell wird heruntergeladen" (Review #693, F3)."""
+    monkeypatch.setattr(transcribe, "_fehlendes_modell", lambda model: str(tmp_path))
+
+    def scheitert(model, device):
+        raise OSError("offline")
+
+    monkeypatch.setattr(transcribe, "_modell", scheitert)
+    with pytest.raises(OSError):
+        transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.01)
+    assert capsys.readouterr().out.splitlines()[-1] == "[Demo] Modell-Download beendet"
 
 
 def test_vorhandenes_modell_kuendigt_keinen_download_an(monkeypatch, capsys):
@@ -364,16 +381,20 @@ def test_vorhandenes_modell_kuendigt_keinen_download_an(monkeypatch, capsys):
 def test_fehlendes_modell_fragt_faster_whisper_und_nennt_den_cache_ordner(monkeypatch, tmp_path):
     """Nur `LocalEntryNotFoundError` heisst „fehlt" — eine andere Ausnahme ist „unbekannt"
     und darf keinen Download ankuendigen, den es vielleicht nicht gibt."""
-    utils = pytest.importorskip("faster_whisper.utils")
-    errors = pytest.importorskip("huggingface_hub.errors")
-    from huggingface_hub import constants
+    # Attrappe statt importorskip: der CI-Laeufer der Mutationsproben hat kein faster-whisper,
+    # ein uebersprungener Test wuerde dort nie rot (Review #693, F1). huggingface_hub ist da.
+    from huggingface_hub import constants, errors
+    utils = types.ModuleType("faster_whisper.utils")
+    utils._MODELS = {"large-v3": "Systran/faster-whisper-large-v3"}
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.ModuleType("faster_whisper"))
+    monkeypatch.setitem(sys.modules, "faster_whisper.utils", utils)
     gefragt = []
 
     def fehlt(model, local_files_only=False, **kw):
         gefragt.append((model, local_files_only))
         raise errors.LocalEntryNotFoundError("nicht im Cache")
 
-    monkeypatch.setattr(utils, "download_model", fehlt)
+    monkeypatch.setattr(utils, "download_model", fehlt, raising=False)
     assert transcribe._fehlendes_modell("large-v3") == os.path.join(
         constants.HF_HUB_CACHE, "models--Systran--faster-whisper-large-v3")
     assert gefragt == [("large-v3", True)]       # nie ein echter Download aus der Pruefung

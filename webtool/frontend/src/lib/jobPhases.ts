@@ -330,6 +330,7 @@ export function parseJobPhases(kind: string, lines: string[],
       // Ohne diese zwei Zeilen stand die Pille minutenlang auf „Wartet auf Transkription".
       if (kind === 'transcribe') {
         if (/^\[[^\]]+\] Modell \S+ wird heruntergeladen/.test(l)) { modellDownload ??= ''; continue }
+        if (/^\[[^\]]+\] Modell-Download beendet$/.test(l)) { modellDownload = undefined; continue }
         if ((m = l.match(/^\[[^\]]+\] Modell-Download: (\d+(?:\.\d+)?) GB$/))) {
           modellDownload = `${(+m[1]).toFixed(2).replace('.', ',')} GB`; continue
         }

@@ -28,6 +28,15 @@
       ]
     },
     {
+      "id": "693-f5 Abschlusszeile wird nicht gelesen",
+      "datei": "webtool/frontend/src/lib/jobPhases.ts",
+      "von": "Modell-Download beendet$/.test(l)) { modellDownload = undefined; continue }",
+      "nach": "Modell-Download beendet$/.test(l)) { continue }",
+      "rot": [
+        "#693: mit der ersten Transkription ist der Download vorbei — und ohne Ankuendigung gab es keinen"
+      ]
+    },
+    {
       "id": "693-f3 Pille zeigt weiter die Schlange",
       "datei": "webtool/frontend/src/components/FileStatusPill.tsx",
       "von": "        ? warten.modell !== undefined",
