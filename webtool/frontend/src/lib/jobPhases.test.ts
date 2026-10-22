@@ -1397,6 +1397,12 @@ describe('laufOrdnung / warteKarte (#370, #442)', () => {
       '[Demo] Modell-Download: 3.1 GB', '[Demo] -> transkribiere A …'])
     expect(danach.modellDownload).toBeUndefined()
     expect(warteKarte(danach, 'transcribe').B).toEqual({ art: 'transcribe', vor: 1 })
+    // Die Abschlusszeile beendet ihn auch OHNE folgende Transkription (Fehlschlag, oder der
+    // whisper.cpp-Rueckfall, der erst nach `-> transkribiere A` laedt — Review #693, F3).
+    const rueckfall = parseJobPhases('transcribe', ['[scope] A\tB', '[Demo] -> transkribiere A …',
+      '[Demo] Modell large-v3 wird heruntergeladen (einmalig)', '[Demo] Modell-Download: 3.1 GB',
+      '[Demo] Modell-Download beendet'])
+    expect(rueckfall.modellDownload).toBeUndefined()
     // Gegenprobe: ohne Download-Zeilen kein Feld — sonst stuende der Text bei jedem Lauf da.
     expect(parseJobPhases('transcribe', ['[scope] A']).modellDownload).toBeUndefined()
   })

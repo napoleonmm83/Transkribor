@@ -643,6 +643,10 @@ const INVENTAR: Record<string, Eintrag> = {
     art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell large-v3 wird heruntergeladen (einmalig)' },
   '[{}] Modell-Download: {} GB': {
     art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell-Download: 1.54 GB' },
+  // Wirkt nur nach einer Ankuendigung — darum `vor`.
+  '[{}] Modell-Download beendet': {
+    art: 'gelesen', kind: 'transcribe', beispiel: '[Demo] Modell-Download beendet',
+    vor: ['[Demo] Modell large-v3 wird heruntergeladen (einmalig)'] },
   '[{}] Warte auf verbleibende KI-Korrekturen…': {
     art: 'ignoriert', beispiel: '[Demo] Warte auf verbleibende KI-Korrekturen…',
   },
