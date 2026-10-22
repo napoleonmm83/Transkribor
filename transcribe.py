@@ -321,13 +321,17 @@ def _fehlendes_modell(model):
     except ImportError:
         return None
     try:
-        download_model(model, local_files_only=True)
-        return None
+        pfad = download_model(model, local_files_only=True)
+        # hub < 2 hinterliess halbe Snapshots ohne trees/, die hub 2 als vollstaendig meldet (#696);
+        # ohne model.bin laedt faster-whisper nicht. Halb MIT model.bin bleibt unerkannt.
+        if os.path.isfile(os.path.join(pfad, "model.bin")):
+            return None
     except LocalEntryNotFoundError:
-        repo = _MODELS.get(model, model)
-        return os.path.join(constants.HF_HUB_CACHE, "models--" + repo.replace("/", "--"))
+        pass
     except Exception:
         return None
+    repo = _MODELS.get(model, model)
+    return os.path.join(constants.HF_HUB_CACHE, "models--" + repo.replace("/", "--"))
 
 
 def _ordnergroesse(ordner):
