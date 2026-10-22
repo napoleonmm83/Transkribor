@@ -265,7 +265,8 @@ sind; andere Vorbereitungsschritte haben keinen erfundenen Prozentwert.
 
 *(Nächste Fassung nach `v0.60.0`:)* Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme
 „Modell wird heruntergeladen“ und die schon geladene Menge, statt minutenlang nur „Wartet auf
-Transkription“.
+Transkription“. Bei manchen Downloads lässt sich die Menge unterwegs nicht messen — dann steht
+nur „Modell wird heruntergeladen“, ohne Zahl.
 
 Neue Aufnahmen kannst du dabei jederzeit dazulegen — auch mitten in einem laufenden Lauf.
 **Ab `v0.50.1`** siehst du auch bei diesen Aufnahmen in der Liste, woran

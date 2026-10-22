@@ -30,6 +30,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 **Behoben**
 - Hast du früher einen Modell-Download abgebrochen, bevor die grosse Modelldatei fertig war, zeigt die Aufnahme beim nächsten Versuch wieder „Modell wird heruntergeladen“ statt nur „Wartet auf Transkription“.
+- Bei Modell-Downloads, deren Menge sich unterwegs nicht messen lässt, steht nur noch „Modell wird heruntergeladen“ statt minutenlang „0,00 GB“, was wie ein hängender Download aussah.
 
 ## v0.60.0 — 2026-10-20
 
