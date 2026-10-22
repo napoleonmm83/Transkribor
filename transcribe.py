@@ -349,7 +349,8 @@ def _ordnergroesse(ordner):
 
 
 def _modell_mit_anzeige(name, model, device, takt=2.0):
-    """`_modell`, und waehrend eines Erst-Downloads alle `takt` s eine Mengenzeile (#693).
+    """`_modell`, und waehrend eines Erst-Downloads alle `takt` s eine Mengenzeile (#693),
+    sobald mindestens 0,01 GB dazugekommen sind (#699).
 
     Vorher stand die Oberflaeche minutenlang auf „Wartet auf Transkription", und wer abbrach,
     begann den Download von vorn. Gemeldet wird der ZUWACHS des Cache-Ordners seit Beginn:

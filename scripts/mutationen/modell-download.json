@@ -72,7 +72,7 @@
       "id": "699-2 Schwelle verschluckt echte Mengen",
       "datei": "transcribe.py",
       "von": "            if neu < 5e6:",
-      "nach": "            if neu < 5e7:  # 699-2",
+      "nach": "            if neu < 1e7:  # 699-2",
       "rot": [
         "test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge"
       ]

@@ -343,7 +343,8 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
 
     def laden(model, device):
         # Der echte Download schreibt in eine .incomplete-Datei — genau die muss mitzaehlen.
-        (ordner / "blobs" / "neu.bbbb.incomplete").write_bytes(b"x" * 10_000_000)
+        # knapp ueber der #699-Schwelle (5 MB), damit eine hoeher gerutschte Schwelle rot wird
+        (ordner / "blobs" / "neu.bbbb.incomplete").write_bytes(b"x" * 6_000_000)
         time.sleep(0.2)
         return "modell"
 
@@ -351,7 +352,7 @@ def test_fehlendes_modell_meldet_waehrend_des_downloads_die_menge(monkeypatch, t
     assert transcribe._modell_mit_anzeige("Demo", "large-v3", "cuda", takt=0.02) == "modell"
     zeilen = capsys.readouterr().out.splitlines()
     assert zeilen[0] == "[Demo] Modell large-v3 wird heruntergeladen (einmalig)"
-    assert "[Demo] Modell-Download: 0.01 GB" in zeilen[1:-1]   # 10 MB neu, nicht 40 MB
+    assert "[Demo] Modell-Download: 0.01 GB" in zeilen[1:-1]   # 6 MB neu, nicht 36 MB
     assert all(z.startswith("[Demo] Modell-Download: ") for z in zeilen[1:-1])
     assert zeilen[-1] == "[Demo] Modell-Download beendet"
 
