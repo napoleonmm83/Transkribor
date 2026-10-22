@@ -28,6 +28,9 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Behoben**
+- Hast du früher einen Modell-Download abgebrochen, zeigt die Aufnahme beim nächsten Versuch wieder „Modell wird heruntergeladen“ statt nur „Wartet auf Transkription“.
+
 ## v0.60.0 — 2026-10-20
 
 **Neu**
