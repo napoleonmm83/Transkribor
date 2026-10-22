@@ -28,15 +28,16 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme beim Transkribieren „Modell wird heruntergeladen“ mit der schon geladenen Menge (oder ohne Zahl, wenn sie sich unterwegs nicht messen lässt), statt minutenlang nur „Wartet auf Transkription“.
+
 **Behoben**
 - Hast du früher einen Modell-Download abgebrochen, bevor die grosse Modelldatei fertig war, zeigt die Aufnahme beim nächsten Versuch wieder „Modell wird heruntergeladen“ statt nur „Wartet auf Transkription“.
-- Bei Modell-Downloads, deren Menge sich unterwegs nicht messen lässt, steht nur noch „Modell wird heruntergeladen“ statt minutenlang „0,00 GB“, was wie ein hängender Download aussah.
 
 ## v0.60.0 — 2026-10-20
 
 **Neu**
 - Eine animierte Punkt-Kugel zeigt in der Laufleiste und neben der gerade bearbeiteten Aufnahme, woran die KI arbeitet: jede Phase (Transkribieren, Sprecher trennen, Korrigieren, Prüfen) hat ihre eigene Bewegung und Farbe.
-- Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme beim Transkribieren „Modell wird heruntergeladen“ mit der schon geladenen Menge, statt minutenlang nur „Wartet auf Transkription“.
 
 **Behoben**
 - Folgt eine vor v0.59.3 hochgeladene Aufnahme der Projekteinstellung „Enthält weitere Sprachen“ nicht, stellst du sie im ⋯-Menü der Aufnahme unter „Sprache, Sprecher & Korrektur“ auf „Folgt dem Projekt“ zurück; danach zieht sie wieder mit.
