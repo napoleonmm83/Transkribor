@@ -756,7 +756,8 @@ nach; „Nein“ ist die Vorgabe. Umstellen kannst du es jederzeit unter **Versi
 - **die Fassung** von Transkribor, zum Beispiel 0.61.0
 - **das Betriebssystem samt Prozessortyp**, zum Beispiel Windows auf 64-Bit-Intel/AMD
 
-Unter **Version** siehst du genau, was dein Gerät sendet — Zeichen für Zeichen.
+Unter **Version** siehst du genau, was dein Gerät sendet — Zeichen für Zeichen. Klappt die
+Meldung einmal nicht (etwa ohne Internet), versucht es Transkribor später am selben Tag noch einmal.
 
 **Wofür:** damit wir wissen, wie viele Geräte Transkribor benutzen und welche Fassungen und
 Betriebssysteme wir weiter unterstützen müssen.
@@ -905,8 +906,10 @@ zum FastAPI-Backend auf :8000 durchgereicht). Installer selbst bauen:
 `npm install && npm run dist` → `dist\` (Windows `.exe`, macOS `.dmg`, Linux `AppImage`/`.deb`).
 
 **Nutzungszählung (ab v0.61.0):** `electron/nutzung.js` sendet nach Zustimmung (Schalter
-`nutzung.json` in `userData`) höchstens einmal je Kalendertag per `POST /v1/ping` an
-`https://transcribor.martini.digital` (überschreibbar per `-c.extraMetadata.nutzungUrl=…`):
+`nutzung.json` in `userData`) per `POST /v1/ping` an `https://transcribor.martini.digital`
+(überschreibbar per `-c.extraMetadata.nutzungUrl=…`). Erfolgreich ist das höchstens einmal je
+Kalendertag; scheitert die Meldung (Netz, 5xx, 429), versucht es die App stündlich erneut, bis
+eine durchkommt; ein anderes 4xx gilt als dauerhafte Ablehnung bis zum nächsten Tag:
 
 ```json
 { "geraet": "<sha256 hex, 64 Zeichen>", "version": "0.61.0", "plattform": "win32-x64" }

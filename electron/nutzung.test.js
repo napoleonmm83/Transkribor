@@ -111,13 +111,14 @@ test('Rechnerkennung je Plattform', () => {
 
 test('zwei gleichzeitige Ticks senden nur einmal', async () => {
   const p = schalter({ an: true })
-  let offen
+  // Alle Aufloesungen sammeln: sendete eine Regression doppelt, wird der Test rot statt zu haengen.
+  const offen = []
   const h = holer()
-  const langsam = (url, opt) => new Promise(r => { offen = () => r(h(url, opt)) })
+  const langsam = (url, opt) => new Promise(r => { offen.push(() => r(h(url, opt))) })
   const a = n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: langsam, jetzt: JETZT })
   const b = n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: langsam, jetzt: JETZT })
   await new Promise(r => setImmediate(r))
-  offen()
+  for (const f of offen) f()
   assert.deepStrictEqual(await Promise.all([a, b]), ['gesendet', 'laeuft'])
   assert.strictEqual(h.aufrufe.length, 1)
 })
