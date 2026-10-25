@@ -52,7 +52,35 @@
       "datei": "docs/nutzung-server/server.py",
       "von": "                if not self.angemeldet():\n                    return self.antwort(403)",
       "nach": "                if False:\n                    return self.antwort(403)",
-      "rot": ["test_uebersicht_nur_fuer_erlaubte_adresse"]
+      "rot": ["test_uebersicht_nur_mit_gueltigem_access_token"]
+    },
+    {
+      "id": "N11 Signatur wird nicht geprueft",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        if not k or not rs256_gueltig(*k, f\"{kopf_b64}.{rumpf_b64}\".encode(), _b64(sig_b64)):",
+      "nach": "        if not k:",
+      "rot": ["test_access_token_pruefung"]
+    },
+    {
+      "id": "N12 fremde Audience wird angenommen",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        if ACCESS_AUD not in aud or rumpf.get(\"iss\") != ACCESS_TEAM:",
+      "nach": "        if rumpf.get(\"iss\") != ACCESS_TEAM:",
+      "rot": ["test_access_token_pruefung"]
+    },
+    {
+      "id": "N13 abgelaufenes Token gilt",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        if not (isinstance(rumpf.get(\"exp\"), (int, float)) and rumpf[\"exp\"] > t):",
+      "nach": "        if not isinstance(rumpf.get(\"exp\"), (int, float)):",
+      "rot": ["test_access_token_pruefung"]
+    },
+    {
+      "id": "N14 Uebersicht ohne Sicherheitskoepfe",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "                    self.send_header(\"Cache-Control\", \"no-store\")\n",
+      "nach": "",
+      "rot": ["test_uebersicht_nur_mit_gueltigem_access_token"]
     },
     {
       "id": "N10 Verlauf laesst Tage ohne Meldung aus",

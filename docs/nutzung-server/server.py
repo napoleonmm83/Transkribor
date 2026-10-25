@@ -6,6 +6,8 @@ Zusagen an die Nutzer (README `#nutzung`, `NutzungFrage.tsx`), hier eingeloest:
   * Zeilen aelter als AUFBEWAHRUNG_TAGE werden beim Start und taeglich geloescht.
 Nur Standardbibliothek: der Container braucht nichts ausser Python.
 """
+import base64
+import hashlib
 import hmac
 import json
 import os
@@ -14,6 +16,7 @@ import sqlite3
 import sys
 import threading
 import time
+import urllib.request
 from datetime import date, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -64,9 +67,10 @@ def eintragen(con, d, heute=None):
         con.commit()
 
 
+# limit: POST /v1/ping ist offen; erfundene Fassungen sollen die Uebersicht nicht sprengen.
 _JE = {
-    "version": "select version, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc",
-    "plattform": "select plattform, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc",
+    "version": "select version, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc limit 30",
+    "plattform": "select plattform, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc limit 30",
 }
 
 
@@ -93,11 +97,77 @@ def verlauf(con, heute=None, tage=90):
             for i in range(tage)]
 
 
-# Zweite Schicht hinter Cloudflare Access: Access setzt diesen Kopf nach der Anmeldung. Die Herkunft
-# ist nur ueber Cloudflare erreichbar (direkter Zugriff auf die IP gemessen: Timeout), der Kopf also
-# nicht von aussen zu faelschen — er schuetzt, falls die Access-Regel je fehlt oder verrutscht.
+# Zweite Schicht hinter Cloudflare Access: das signierte Access-Token (Cf-Access-Jwt-Assertion) wird
+# hier selbst geprueft — Signatur gegen die oeffentlichen Schluessel des Teams, Audience, Aussteller,
+# Ablauf. Ein blosser Kopf wie Cf-Access-Authenticated-User-Email reicht laut Cloudflare NICHT, solange
+# die Herkunft nicht per Tunnel angebunden ist: fiele die Access-Regel weg, reichte der Proxy einen
+# vom Client gesetzten Kopf durch.
 ERLAUBT = {a.strip().lower() for a in os.environ.get(
     "NUTZUNG_ERLAUBT", "marcus@martini.digital,marcusmartini83@gmail.com").split(",") if a.strip()}
+ACCESS_TEAM = os.environ.get("NUTZUNG_ACCESS_TEAM", "https://martinidigital.cloudflareaccess.com")
+ACCESS_AUD = os.environ.get("NUTZUNG_ACCESS_AUD", "d02fa57701511639002a4596ef3a90796ebc1767b2c7d4a62ecfb77733718ee2")
+_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")  # DER-Praefix SHA-256 (RFC 8017)
+_schluessel = {"zeit": 0.0, "keys": {}}
+
+
+def _b64(s):
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def rs256_gueltig(n, e, nachricht, signatur):
+    """RSASSA-PKCS1-v1_5 mit SHA-256, nur mit pow() — die Standardbibliothek hat keine RSA-Pruefung."""
+    k = (n.bit_length() + 7) // 8
+    if len(signatur) != k:
+        return False
+    em = pow(int.from_bytes(signatur, "big"), e, n).to_bytes(k, "big")
+    soll = (b"\x00\x01" + b"\xff" * (k - 3 - len(_DIGEST_INFO) - 32) + b"\x00"
+            + _DIGEST_INFO + hashlib.sha256(nachricht).digest())
+    return hmac.compare_digest(em, soll)
+
+
+def _holen_schluessel():
+    # ACCESS_TEAM ist eine feste https-Adresse aus der Konfiguration, kein Nutzerwert.
+    req = urllib.request.Request(ACCESS_TEAM + "/cdn-cgi/access/certs", headers={"User-Agent": "transkribor-nutzung/1"})  # noqa: S310
+    with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310
+        return {k["kid"]: (int.from_bytes(_b64(k["n"]), "big"), int.from_bytes(_b64(k["e"]), "big"))
+                for k in json.load(r)["keys"] if k.get("kty") == "RSA"}
+
+
+def schluessel(kid, holen=_holen_schluessel, jetzt=None):
+    """Schluessel je kid, eine Stunde gemerkt; ein unbekanntes kid laedt hoechstens einmal je Minute nach."""
+    t = jetzt if jetzt is not None else time.time()
+    alt = t - _schluessel["zeit"]
+    if alt > 3600 or (kid not in _schluessel["keys"] and alt > 60):
+        try:
+            _schluessel["keys"], _schluessel["zeit"] = holen(), t
+        except Exception as e:
+            print("Access-Schluessel nicht ladbar:", type(e).__name__, file=sys.stderr)
+    return _schluessel["keys"].get(kid)
+
+
+def access_email(token, finde=schluessel, jetzt=None):
+    """Die E-Mail aus einem gueltigen Access-Token, sonst None. Wirft nie."""
+    try:
+        kopf_b64, rumpf_b64, sig_b64 = token.split(".")
+        kopf, rumpf = json.loads(_b64(kopf_b64)), json.loads(_b64(rumpf_b64))
+        if kopf.get("alg") != "RS256":
+            return None
+        k = finde(kopf.get("kid"))
+        if not k or not rs256_gueltig(*k, f"{kopf_b64}.{rumpf_b64}".encode(), _b64(sig_b64)):
+            return None
+        t = jetzt if jetzt is not None else time.time()
+        aud = rumpf.get("aud")
+        aud = aud if isinstance(aud, list) else [aud]
+        if ACCESS_AUD not in aud or rumpf.get("iss") != ACCESS_TEAM:
+            return None
+        if not (isinstance(rumpf.get("exp"), (int, float)) and rumpf["exp"] > t):
+            return None
+        if isinstance(rumpf.get("nbf"), (int, float)) and rumpf["nbf"] > t + 60:
+            return None
+        email = rumpf.get("email")
+        return email.strip().lower() if isinstance(email, str) else None
+    except Exception:
+        return None
 SEITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uebersicht.html")
 
 
@@ -139,7 +209,7 @@ def handler_fuer(con):
             self.antwort(200, {"ok": True})
 
         def angemeldet(self):
-            return self.headers.get("Cf-Access-Authenticated-User-Email", "").strip().lower() in ERLAUBT
+            return access_email(self.headers.get("Cf-Access-Jwt-Assertion", "")) in ERLAUBT
 
         def do_GET(self):
             # Pfade werden WOERTLICH verglichen, nie normalisiert: die Access-Freigabe fuer /v1/ping laesst
@@ -160,7 +230,7 @@ def handler_fuer(con):
                     self.send_header("Cache-Control", "no-store")
                     self.send_header("Content-Security-Policy",
                                      "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline';"
-                                     " connect-src 'self'; img-src 'self' data:")
+                                     " connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
                     self.end_headers()
                     self.wfile.write(roh)
                 except OSError:
