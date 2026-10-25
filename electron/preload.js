@@ -34,6 +34,11 @@ contextBridge.exposeInMainWorld('transkribor', {
     status: () => ipcRenderer.invoke('fehlerberichte:status'),
     setzen: an => ipcRenderer.invoke('fehlerberichte:setzen', an === true),
   },
+  // Opt-in Nutzungszaehlung — dieselbe Form: nur ein Boolean geht hinein.
+  nutzung: {
+    status: () => ipcRenderer.invoke('nutzung:status'),
+    setzen: an => ipcRenderer.invoke('nutzung:setzen', an === true),
+  },
   // Ohne Argument, und das ist der Punkt (#218): der Hauptprozess kennt das Verzeichnis
   // selbst. Naehme der Kanal einen Pfad entgegen, waere aus der schmalen Bruecke ein
   // „oeffne beliebiges Verzeichnis" geworden — fuer alles, was in diesem Fenster laeuft,

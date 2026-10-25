@@ -19,6 +19,7 @@ const setup = require('./setup')
 const protokoll = require('./protokoll')
 const updater = require('./updater')
 const fehlerberichte = require('./fehlerberichte')
+const nutzung = require('./nutzung')
 const manuellerBericht = require('./manueller-bericht')
 const P = require('./paths')
 const {
@@ -529,6 +530,36 @@ ipcMain.handle('protokollOeffnen', () => {
   return protokoll.pfad()
 })
 
+// Opt-in Nutzungszaehlung: Entscheidungen in nutzung.js, hier nur die Leitung. Der Schalter
+// liegt neben fehlerberichte.json; die Nutzlast ist dieselbe, die die Versionsseite anzeigt.
+function nutzungPfad() { return nutzung.pfad(app.getPath('userData')) }
+let nutzungLastCache
+function nutzungLast() {
+  if (nutzungLastCache === undefined) {
+    nutzungLastCache = nutzung.nutzlast({ kennung: nutzung.rechnerKennung(), version: app.getVersion(),
+      plattform: process.platform, arch: process.arch })
+  }
+  return nutzungLastCache
+}
+function nutzungTick() {
+  return nutzung.tick({ schalterPfad: nutzungPfad(), url: paket.nutzungUrl || nutzung.URL_VORGABE, last: nutzungLast })
+    .then(r => { if (r === 'gesendet') protokoll.schreiben('— Nutzungszaehlung: Tagesmeldung gesendet —') })
+}
+function nutzungStarten() {
+  nutzungTick()
+  // Stuendlich nachsehen, gesendet wird hoechstens einmal je Kalendertag (nutzung.faellig).
+  setInterval(nutzungTick, 60 * 60 * 1000).unref()
+}
+ipcMain.handle('nutzung:status', () => ({ ...nutzung.lesen(nutzungPfad()), nutzlast: nutzungLast() }))
+ipcMain.handle('nutzung:setzen', (_e, an) => {
+  const pfad = nutzungPfad()
+  const vorher = nutzung.lesen(pfad)
+  const jetzt = nutzung.schreiben(pfad, { ...vorher, an: an === true, gefragt: vorher.gefragt || new Date().toISOString() })
+  protokoll.schreiben(`— Nutzungszaehlung: ${jetzt.an ? 'an' : 'aus'} —`)
+  if (jetzt.an) nutzungTick()
+  return { ...jetzt, nutzlast: nutzungLast() }
+})
+
 // Der Opt-in-Schalter (#530): lesen und setzen. Das Argument ist ein Boolean und sonst nichts —
 // alles andere heisst AUS; der Hauptprozess entscheidet, wo die Datei liegt.
 ipcMain.handle('fehlerberichte:status', () => fehlerberichte.lesen(schalterPfad()))
@@ -783,6 +814,7 @@ if (!app.requestSingleInstanceLock()) {
 async function starten() {
   protokoll.kopf()
   fenster()
+  nutzungStarten()
   await pruefen()
   // Update: Pruefen laeuft von selbst, Laden erst auf Klick. Der Zustand geht ins Fenster
   // (Einstellungen), Fehler zusaetzlich ins Protokoll — ein Popup, das man wegklickt und
