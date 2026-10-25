@@ -109,6 +109,21 @@ test('Rechnerkennung je Plattform', () => {
   assert.strictEqual(n.rechnerKennung('win32', () => 'nichts'), null)
 })
 
-test('echte Rechnerkennung dieses Geraets ist lesbar', () => {
+test('zwei gleichzeitige Ticks senden nur einmal', async () => {
+  const p = schalter({ an: true })
+  let offen
+  const h = holer()
+  const langsam = (url, opt) => new Promise(r => { offen = () => r(h(url, opt)) })
+  const a = n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: langsam, jetzt: JETZT })
+  const b = n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: langsam, jetzt: JETZT })
+  await new Promise(r => setImmediate(r))
+  offen()
+  assert.deepStrictEqual(await Promise.all([a, b]), ['gesendet', 'laeuft'])
+  assert.strictEqual(h.aufrufe.length, 1)
+})
+
+// Auf Linux ohne /etc/machine-id (manche Container) gibt es keine Kennung — dort ist nichts zu messen.
+const ohneKennungsQuelle = process.platform === 'linux' && !fs.existsSync('/etc/machine-id')
+test('echte Rechnerkennung dieses Geraets ist lesbar', { skip: ohneKennungsQuelle }, () => {
   assert.ok(n.rechnerKennung(), 'auf diesem Rechner muss eine Kennung lesbar sein')
 })

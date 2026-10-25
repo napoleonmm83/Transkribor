@@ -253,7 +253,8 @@ export function VersionPage() {
                 <span>
                   <span className="font-medium">Nutzung mitzählen (einmal am Tag)</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    Damit wir wissen, wie viele Geräte Transkribor nutzen und welche Versionen und Systeme wir
+                    Gesendet werden eine Gerätenummer, die Fassung und das Betriebssystem samt Prozessortyp —
+                    damit wir wissen, wie viele Geräte Transkribor nutzen und welche Versionen und Systeme wir
                     weiter unterstützen müssen. Keine Inhalte, keine Namen; deine IP-Adresse speichern wir nicht.{' '}
                     <a className="underline underline-offset-2 hover:text-foreground" href={README_NUTZUNG}
                       target="_blank" rel="noreferrer">Mehr dazu</a>

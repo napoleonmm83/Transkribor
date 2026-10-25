@@ -43,7 +43,8 @@ export function NutzungFrage() {
             <div className="space-y-3">
               <p>
                 Einmal am Tag schickt Transkribor drei Angaben an uns: eine Gerätenummer, die Fassung
-                des Programms und dein Betriebssystem. Die Gerätenummer wird aus einer Kennung deines
+                des Programms und dein Betriebssystem samt Prozessortyp (zum Beispiel Windows auf
+                64-Bit-Intel/AMD oder macOS auf Apple-Chip). Die Gerätenummer wird aus einer Kennung deines
                 Computers berechnet. Sie erkennt dieses Gerät wieder, auch nach einer Neuinstallation,
                 verrät aber nicht, wer du bist oder wie dein Computer heisst.
               </p>
