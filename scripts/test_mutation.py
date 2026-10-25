@@ -863,3 +863,38 @@ def test_main_haelt_bei_einer_gewoehnlichen_aenderung_weiterhin_an(tmp_path, mon
     rc = mutation.main(["--repo", str(tmp_path), "--test", "egal",
                        "--plan", str(plandatei), "--pfad", "."])
     assert rc == 2, "eine gewoehnliche Aenderung MUSS den Startriegel weiterhin ausloesen"
+
+
+def test_mutationslauf_faehrt_nur_die_benannten_pytest_tests(tmp_path, monkeypatch):
+    """Der Vorlauf faehrt die ganze Suite, jede Mutation nur `rot` und `gruen` (-k).
+
+    Vorher lief bei jeder Mutation die volle Datei mit: 73 s je Mutation fuer
+    `weitergereichtes_then`, 17 min in CI-Lauf 40216196133.
+    """
+    kommandos = []
+
+    def falscher_lauf(repo, kommando, zusatz=None):
+        kommandos.append(kommando)
+        return (_GRUEN, 0) if len(kommandos) == 1 else (
+            "FAILED x.py::test_wert[a] - assert\n1 failed in 0.1s\n", 1)
+
+    ziel = tmp_path / "ziel.py"
+    ziel.write_bytes(b"WERT = 1\r\nandere = 2\r\n")
+    plandatei = tmp_path / "plan.json"
+    plandatei.write_text(json.dumps([
+        {"id": "T1", "datei": "ziel.py", "von": "WERT = 1", "nach": "WERT = 2",
+         "rot": ["test_wert[a]"], "gruen": ["test_andere"]}]), encoding="utf-8")
+    monkeypatch.setattr(mutation, "_lauf", falscher_lauf)
+    monkeypatch.setattr(mutation, "_verfolgt_geaendert", lambda repo, p, **k: "")
+    rc = mutation.main(["--repo", str(tmp_path), "--test", "python -m pytest x.py -q",
+                        "--plan", str(plandatei), "--pfad", "."])
+    assert rc == 0
+    assert kommandos == ["python -m pytest x.py -q",
+                         'python -m pytest x.py -q -k "test_andere or test_wert"']
+
+
+def test_benannte_tests_nur_fuer_pytest_und_nur_mit_sauberen_namen():
+    m = {"rot": ["test_a"], "gruen": []}
+    assert mutation.nur_benannte("npm --prefix web test", m) == "npm --prefix web test"
+    schief = {"rot": ["test a; rm"], "gruen": []}
+    assert mutation.nur_benannte("python -m pytest x.py", schief) == "python -m pytest x.py"

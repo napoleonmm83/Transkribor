@@ -232,6 +232,27 @@
       "gruen": [
         "test_der_workflow_liefert_den_status_mit"
       ]
+    },
+    {
+      "id": "L19 teuer wird bei der Vergabe ignoriert",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "key=lambda p: (not p.teuer, -len(p.mutationen), p.name)",
+      "nach": "key=lambda p: (-len(p.mutationen), p.name)",
+      "rot": [
+        "test_teure_plaene_landen_in_verschiedenen_teilen"
+      ],
+      "gruen": [
+        "test_die_teile_decken_die_ganze_auswahl_ab_und_ueberschneiden_sich_nicht"
+      ]
+    },
+    {
+      "id": "L20 teuer als Text wird still angenommen",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if not isinstance(teuer, bool):",
+      "nach": "        if False:",
+      "rot": [
+        "test_teuer_muss_ein_bool_sein"
+      ]
     }
   ],
   "hinweis": "`.github/workflows/test.yml` steht ABSICHTLICH in `pfade`, obwohl das den abgeleiteten --pfad von `scripts` auf `.` weitet: nur so waehlt eine reine Workflow-Aenderung diesen Plan, und nur so liegt L18 innerhalb des Pfades (der Treiber bricht sonst ab). Der Preis ist gemessen und tragbar — Sauberkeitspruefung und Bytecode-Leeren laufen ueber den ganzen Baum, bei 62 unversionierten Dateien (Stand 19.09.2026) sind das rund 10 s je Pruefung. Wer den Baum zumuellt, zahlt hier zuerst: die Hausregel dazu steht in ~/.claude/CLAUDE.md unter 'Reisst ein Riegel sein Limit, sieh ZUERST im Arbeitsbaum nach' (dort waren es 147506 Dateien und ueber 560 s). Praezedenz: testdeckel_riegel, fehlerberichte-python."
