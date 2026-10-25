@@ -1,0 +1,44 @@
+{
+  "test": "python -m pytest docs/nutzung-server/test_server.py -q",
+  "pfade": [
+    "docs/nutzung-server/server.py",
+    "docs/nutzung-server/test_server.py"
+  ],
+  "mutationen": [
+    {
+      "id": "N1 Zusatzfeld (z.B. ip) wird angenommen",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "set(d) != {\"geraet\", \"version\", \"plattform\"}",
+      "nach": "not {\"geraet\", \"version\", \"plattform\"} <= set(d)",
+      "rot": ["test_falsche_form_wird_abgewiesen"]
+    },
+    {
+      "id": "N2 abschliessender Zeilenumbruch rutscht durch",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "GERAET.fullmatch(d[\"geraet\"])",
+      "nach": "GERAET.match(d[\"geraet\"])",
+      "rot": ["test_falsche_form_wird_abgewiesen"]
+    },
+    {
+      "id": "N3 ein Geraet zaehlt je Tag mehrfach",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "primary key (tag, geraet)",
+      "nach": "primary key (tag, geraet, version)",
+      "rot": ["test_ein_geraet_zaehlt_je_tag_einmal"]
+    },
+    {
+      "id": "N4 Zahlen ohne Token lesbar",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "if not TOKEN or not hmac.compare_digest(auth, f\"Bearer {TOKEN}\"):",
+      "nach": "if False:",
+      "rot": ["test_http_ende_zu_ende"]
+    },
+    {
+      "id": "N5 Aufraeumen loescht nichts",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "con.execute(\"delete from ping where tag < ?\", (grenze,))",
+      "nach": "con.execute(\"select ?\", (grenze,))",
+      "rot": ["test_fenster_und_aufraeumen"]
+    }
+  ]
+}

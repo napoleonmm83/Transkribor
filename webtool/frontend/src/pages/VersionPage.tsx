@@ -263,7 +263,7 @@ export function VersionPage() {
               {nu.zustand?.nutzlast && (
                 <div className="mt-2 ml-6.5 text-xs text-muted-foreground">
                   <p>Das wird gesendet{nu.zustand.an ? '' : ' (nur wenn eingeschaltet)'}:</p>
-                  <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 font-mono" data-testid="nutzlast">
+                  <pre className="relative mt-1 overflow-x-auto rounded bg-muted p-2 font-mono" data-testid="nutzlast">
                     {JSON.stringify(nu.zustand.nutzlast, null, 2)}
                   </pre>
                   {nu.zustand.zuletzt && <p className="mt-1">Zuletzt gesendet: {nu.zustand.zuletzt}</p>}
