@@ -188,7 +188,7 @@ def test_access_token_pruefung(rsa):
 
 
 def test_schluessel_werden_gemerkt_und_bei_unbekanntem_kid_nachgeladen(monkeypatch):
-    monkeypatch.setattr(server, "_schluessel", {"zeit": 0.0, "keys": {}})
+    monkeypatch.setattr(server, "_schluessel", {"zeit": 0.0, "versuch": 0.0, "keys": {}})
     geholt = []
     def holen():
         geholt.append(1)
@@ -200,11 +200,24 @@ def test_schluessel_werden_gemerkt_und_bei_unbekanntem_kid_nachgeladen(monkeypat
     assert len(geholt) == 2
 
 
+def test_gescheitertes_holen_wird_gebremst(monkeypatch):
+    monkeypatch.setattr(server, "_schluessel", {"zeit": 0.0, "versuch": 0.0, "keys": {}})
+    versuche = []
+    def kaputt():
+        versuche.append(1)
+        raise OSError("weg")
+    for t in (10_000, 10_005, 10_030):
+        assert server.schluessel("k1", kaputt, jetzt=t) is None
+    assert len(versuche) == 1
+    server.schluessel("k1", kaputt, jetzt=10_070)
+    assert len(versuche) == 2
+
+
 def test_uebersicht_nur_mit_gueltigem_access_token(con, rsa, monkeypatch):
     n, e, _ = rsa
     monkeypatch.setattr(server, "ERLAUBT", {"marcusmartini83@gmail.com", "marcus@martini.digital"})
     monkeypatch.setattr(server, "TOKEN", "geheim")
-    monkeypatch.setattr(server, "_schluessel", {"zeit": time.time(), "keys": {"k1": (n, e)}})
+    monkeypatch.setattr(server, "_schluessel", {"zeit": time.time(), "versuch": time.time(), "keys": {"k1": (n, e)}})
     srv = ThreadingHTTPServer(("127.0.0.1", 0), server.handler_fuer(con))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     basis = f"http://127.0.0.1:{srv.server_address[1]}"
