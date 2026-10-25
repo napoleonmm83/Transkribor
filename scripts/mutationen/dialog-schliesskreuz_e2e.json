@@ -1,5 +1,6 @@
 {
   "test": "npm --prefix webtool/frontend run test:e2e",
+  "lokal": true,
   "pfade": [
     "webtool/frontend/e2e/dialog-schliesskreuz.spec.ts",
     "webtool/frontend/playwright.config.ts",

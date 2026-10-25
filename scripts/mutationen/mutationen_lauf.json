@@ -253,6 +253,45 @@
       "rot": [
         "test_teuer_muss_ein_bool_sein"
       ]
+    },
+    {
+      "id": "L21 --ohne-lokal faehrt Browser-Plaene trotzdem",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    lokal = [p for p in gewaehlt if p.lokal] if a.ohne_lokal else []",
+      "nach": "    lokal = []",
+      "rot": [
+        "test_ohne_lokal_faehrt_den_browser_plan_nicht_nennt_ihn_aber"
+      ],
+      "gruen": [
+        "test_ohne_schalter_faehrt_auch_den_browser_plan"
+      ]
+    },
+    {
+      "id": "L22 lokale Plaene fallen still weg - kein Hinweis",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        print(f\"  LOKAL (nicht in CI, lokal fahren): {p.name}\")",
+      "nach": "        pass",
+      "rot": [
+        "test_ohne_lokal_faehrt_den_browser_plan_nicht_nennt_ihn_aber"
+      ]
+    },
+    {
+      "id": "L23 lokal wirkt auch ohne Schalter - Browser-Plaene laufen nirgends",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "if p.lokal] if a.ohne_lokal else []",
+      "nach": "if p.lokal]",
+      "rot": [
+        "test_ohne_schalter_faehrt_auch_den_browser_plan"
+      ]
+    },
+    {
+      "id": "L24 lokal als Text wird still angenommen",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "        if not isinstance(lokal, bool):",
+      "nach": "        if False:",
+      "rot": [
+        "test_lokal_muss_ein_bool_sein"
+      ]
     }
   ],
   "hinweis": "`.github/workflows/test.yml` steht ABSICHTLICH in `pfade`, obwohl das den abgeleiteten --pfad von `scripts` auf `.` weitet: nur so waehlt eine reine Workflow-Aenderung diesen Plan, und nur so liegt L18 innerhalb des Pfades (der Treiber bricht sonst ab). Der Preis ist gemessen und tragbar — Sauberkeitspruefung und Bytecode-Leeren laufen ueber den ganzen Baum, bei 62 unversionierten Dateien (Stand 19.09.2026) sind das rund 10 s je Pruefung. Wer den Baum zumuellt, zahlt hier zuerst: die Hausregel dazu steht in ~/.claude/CLAUDE.md unter 'Reisst ein Riegel sein Limit, sieh ZUERST im Arbeitsbaum nach' (dort waren es 147506 Dateien und ueber 560 s). Praezedenz: testdeckel_riegel, fehlerberichte-python."

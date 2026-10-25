@@ -74,6 +74,7 @@ class Plan:
     mutationen: list[dict]
     env: dict[str, str] = field(default_factory=dict)
     teuer: bool = False
+    lokal: bool = False
 
     @property
     def name(self) -> str:
@@ -135,8 +136,12 @@ def lade_plaene(wurzel: pathlib.Path) -> list[Plan]:
         teuer = roh.get("teuer", False)
         if not isinstance(teuer, bool):
             raise ValueError(f"{datei.name}: `teuer` muss true oder false sein")
+        lokal = roh.get("lokal", False)
+        if not isinstance(lokal, bool):
+            raise ValueError(f"{datei.name}: `lokal` muss true oder false sein")
         geladen.append(Plan(datei=datei, test=roh["test"], pfade=list(pfade),
-                            mutationen=list(mutationen), env=dict(umgebung), teuer=teuer))
+                            mutationen=list(mutationen), env=dict(umgebung), teuer=teuer,
+                            lokal=lokal))
     return geladen
 
 
@@ -274,6 +279,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="nur die Auswahl drucken, nichts fahren")
     ap.add_argument("--teil", metavar="i/n",
                     help="nur den i-ten von n Teilen der Auswahl fahren (1-basiert)")
+    ap.add_argument("--ohne-lokal", action="store_true",
+                    help="Plaene mit \"lokal\": true nicht fahren, nur nennen (CI ohne Browser)")
     a = ap.parse_args(argv)
 
     if a.alle == bool(a.geaendert):
@@ -359,13 +366,20 @@ def main(argv: list[str] | None = None) -> int:
     ganze_auswahl = len(gewaehlt)
     if teil is not None:
         gewaehlt = teile(gewaehlt, *teil)
+    # Entscheid Marcus 2026-10-25: Playwright laeuft nicht mehr in der CI. Browser-Plaene
+    # tragen `"lokal": true` und werden dort nur GENANNT — nie still weggelassen und nie als
+    # bestanden gezaehlt; gefahren werden sie lokal ohne den Schalter.
+    lokal = [p for p in gewaehlt if p.lokal] if a.ohne_lokal else []
+    gewaehlt = [p for p in gewaehlt if p not in lokal]
 
     teil_text = f", Teil {teil[0]}/{teil[1]}" if teil else ""
     print(f"{len(gewaehlt)} von {len(plaene)} Plaenen gewaehlt{teil_text}"
           f" ({sum(len(p.mutationen) for p in gewaehlt)} Mutationen):")
     for p in gewaehlt:
         print(f"  {p.name}  --pfad {p.pfad_wurzel(wurzel)}")
-    if not gewaehlt:
+    for p in lokal:
+        print(f"  LOKAL (nicht in CI, lokal fahren): {p.name}")
+    if not gewaehlt and not lokal:
         if teil is not None and ganze_auswahl:
             print(f"  (keiner — die {ganze_auswahl} gewaehlten Plaene liegen in anderen"
                   f" Teilen; das ist kein Fehler)")
@@ -411,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
         schlimmster = max(schlimmster, rc)
 
     print(f"\nBILANZ{teil_text}: {len(gewaehlt) - len(gescheitert)} von {len(gewaehlt)}"
-          " bestanden")
+          " bestanden" + (f", {len(lokal)} NUR LOKAL (hier nicht gefahren)" if lokal else ""))
     for name, rc in gescheitert:
         print(f"  GESCHEITERT {name} (rc {rc})")
     return schlimmster

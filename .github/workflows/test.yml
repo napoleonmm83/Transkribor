@@ -247,16 +247,10 @@ jobs:
       - run: npm run build
         working-directory: webtool/frontend
 
-      # #423: Layout-Wächter im echten Chromium. jsdom rechnet kein Layout — die
-      # Klassenstring-Wächter von #330 sind gegen echte Regressionen (Sticky weg,
-      # overflow-Deckel weg) blind, und genau das hat #330 versehentlich ausgeliefert.
-      # Der Browser-Download (~1–2 min) bewusst OHNE actions/cache: Das Repo nutzt ihn
-      # nirgends, der Job hat laut Zeitbudget oben 9x Reserve — eine neue Cache-Mechanik
-      # waere hier Rueckstand fuer eine Ersparnis, die niemand vermisst.
-      - run: npx playwright install --with-deps chromium
-        working-directory: webtool/frontend
-      - run: npm run test:e2e
-        working-directory: webtool/frontend
+      # Die Browser-Suite (`npm run test:e2e`, Layout-Waechter von #423) laeuft seit dem
+      # 2026-10-25 NICHT mehr hier, sondern lokal gegen den lokalen Bau (Entscheid Marcus;
+      # Anlass: `playwright install --with-deps` hing in Lauf 40224638863 zehn Minuten am
+      # apt-Download). Wer das Frontend aendert, faehrt sie vor dem PR selbst.
 
   # Drei Plattformen, und der Anlass ist gemessen: am 2026-08-28 starb der Release-Lauf
   # 33183032424 im Job „bauen (macos-latest)" an genau dieser Suite — 189 Tests, 1 fail
@@ -653,19 +647,10 @@ jobs:
       - run: npm ci --no-audit --fund=false
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      # Der Browser gehoert seit Buendel D dazu: zwei Plaene fahren ihre Waechter im
-      # echten Chromium (buendel-d-515-kontrast-reflow_e2e, dialog-schliesskreuz_e2e).
-      # Ohne ihn faellt nicht eine Mutation um, sondern die POSITIVKONTROLLE — alle zehn
-      # Tests scheitern am fehlenden Binary, der Treiber bricht mit rc 2 ab und meldet
-      # „die Suite ist schon OHNE Mutation rot", also einen Befund ueber den Code, wo ein
-      # Werkzeug fehlte. GEMESSEN an Lauf 34631352339: `npx playwright install` stand
-      # genau EINMAL im Workflow, im Job `Frontend` — dieselbe Suite, derselbe Commit,
-      # dort `10 passed (22.7s)`, hier zehn rote Zeilen.
-      # Bedingungslos aus demselben Grund wie das `npm ci` darueber: eine Bedingung
-      # „nur wenn ein E2E-Plan gewaehlt ist" waere ein zweiter Ort, an dem die Auswahl
-      # steht, und der erste, der driftet.
-      - run: npx playwright install --with-deps chromium
-        working-directory: webtool/frontend
+      # Kein Browser hier (seit 2026-10-25, siehe Job `Frontend`): die zwei Browser-Plaene
+      # tragen `"lokal": true`, `--ohne-lokal` nennt sie nur. Ohne den Schalter liefe ihre
+      # Positivkontrolle ohne Chromium rot (gemessen an Lauf 34631352339) — die Absage
+      # waere ein Befund ueber den Code, wo ein Werkzeug fehlt.
 
       - name: Geaenderte Dateien bestimmen
         if: github.event_name == 'pull_request'
@@ -682,9 +667,9 @@ jobs:
           GITHUB_COM_TOKEN: ${{ github.token }}
         run: >
           python scripts/mutationen_lauf.py --repo .
-          --geaendert ${{ runner.temp }}/geaendert.txt --teil ${{ matrix.teil }}/4
+          --geaendert ${{ runner.temp }}/geaendert.txt --teil ${{ matrix.teil }}/4 --ohne-lokal
       - name: Alle Mutationsproben
         if: github.event_name != 'pull_request'
         env:
           GITHUB_COM_TOKEN: ${{ github.token }}
-        run: python scripts/mutationen_lauf.py --repo . --alle --teil ${{ matrix.teil }}/4
+        run: python scripts/mutationen_lauf.py --repo . --alle --teil ${{ matrix.teil }}/4 --ohne-lokal
