@@ -38,6 +38,12 @@
   .liste .zahl { font-variant-numeric: tabular-nums; color: var(--leise); }
   .liste .spur { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--balken); overflow: hidden; }
   .liste .spur span { display: block; height: 100%; background: var(--akzent); border-radius: 3px; }
+  .werte { margin-top: 10px; font-size: 13px; color: var(--leise); }
+  .werte summary { cursor: pointer; width: fit-content; }
+  .werte summary:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; border-radius: 4px; }
+  .werte table { margin-top: 8px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .werte th, .werte td { text-align: left; padding: 2px 16px 2px 0; border-bottom: 1px solid var(--linie); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .leer, .fehler { color: var(--leise); font-size: 14px; }
   .fehler { color: #c2410c; }
   @media (max-width: 760px) {
@@ -63,7 +69,15 @@
 
   <section class="karte" aria-labelledby="t-verlauf">
     <h2 id="t-verlauf">Aktive Geräte je Tag · 90 Tage</h2>
-    <svg id="verlauf" role="img" aria-label="Verlauf der aktiven Geräte je Tag" viewBox="0 0 1000 220"></svg>
+    <svg id="verlauf" aria-hidden="true" viewBox="0 0 1000 220"></svg>
+    <details class="werte">
+      <summary>Werte als Tabelle</summary>
+      <table>
+        <caption class="sr-only">Aktive Geräte je Tag, letzte 90 Tage</caption>
+        <thead><tr><th scope="col">Tag</th><th scope="col">Geräte</th></tr></thead>
+        <tbody id="verlauf-tabelle"></tbody>
+      </table>
+    </details>
   </section>
 
   <div class="reihe">
@@ -97,7 +111,7 @@
       const li = document.createElement('li'); li.className = 'leer'; li.textContent = 'Noch keine Meldungen.'
       ul.append(li); return
     }
-    const max = Math.max(...eintraege.map(([, n]) => n))
+    const max = eintraege.reduce((m, [, n]) => Math.max(m, n), 1)
     for (const [k, n] of eintraege) {
       const li = document.createElement('li')
       const t = document.createElement('span'); t.textContent = name(k)
@@ -114,7 +128,7 @@
     // Zeichenbreite = echte Breite: sonst staucht das SVG auf schmalen Schirmen die Beschriftung.
     const B = Math.max(280, Math.round(svg.clientWidth || 1000)), H = 220, L = 34, U = 22, O = 8
     svg.setAttribute('viewBox', `0 0 ${B} ${H}`)
-    const max = Math.max(1, ...punkte.map(p => p.geraete))
+    const max = punkte.reduce((m, p) => Math.max(m, p.geraete), 1)
     const x = i => L + (i / Math.max(1, punkte.length - 1)) * (B - L - 8)
     const y = n => O + (1 - n / max) * (H - O - U)
     for (const s of [0, .5, 1]) {
@@ -145,6 +159,13 @@
       document.getElementById('k-gesamt').textContent = zahl(d.gesamt)
       letzterVerlauf = d.verlauf
       kurve(d.verlauf)
+      const tb = document.getElementById('verlauf-tabelle')
+      tb.replaceChildren(...[...d.verlauf].reverse().map(p => {
+        const tr = document.createElement('tr')
+        const [jj, mm, tt] = p.tag.split('-')
+        for (const t of [`${tt}.${mm}.${jj}`, zahl(p.geraete)]) { const td = document.createElement('td'); td.textContent = t; tr.append(td) }
+        return tr
+      }))
       liste('versionen', d.version_30_tage)
       liste('plattformen', d.plattform_30_tage, plattformName)
       stand.className = 'stand'

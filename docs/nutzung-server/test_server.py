@@ -1,4 +1,7 @@
+import base64
+import hashlib
 import json
+import random
 import socket
 import threading
 import time
@@ -117,30 +120,121 @@ def test_verlauf_ist_lueckenlos(con):
                  {"tag": "2026-10-25", "geraete": 2}]
 
 
-def test_uebersicht_nur_fuer_erlaubte_adresse(con):
+def _primzahl(bits, rnd):
+    while True:
+        p = rnd.getrandbits(bits) | (1 << (bits - 1)) | 1
+        d, s = p - 1, 0
+        while d % 2 == 0:
+            d, s = d // 2, s + 1
+        for _ in range(24):
+            x = pow(rnd.randrange(2, p - 1), d, p)
+            if x in (1, p - 1):
+                continue
+            for _ in range(s - 1):
+                x = pow(x, 2, p)
+                if x == p - 1:
+                    break
+            else:
+                break
+        else:
+            return p
+
+
+@pytest.fixture(scope="module")
+def rsa():
+    """Ein Test-Schluesselpaar nur aus der Standardbibliothek (1024 Bit reichen fuer PKCS#1-Padding)."""
+    rnd = random.Random(4711)
+    e = 65537
+    while True:
+        p, q = _primzahl(512, rnd), _primzahl(512, rnd)
+        phi = (p - 1) * (q - 1)
+        if p != q and phi % e:
+            return p * q, e, pow(e, -1, phi)
+
+
+def _b64u(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _token(rsa, **rumpf):
+    n, _, d = rsa
+    kopf = _b64u(json.dumps({"alg": "RS256", "kid": "k1"}).encode())
+    inhalt = {"aud": [server.ACCESS_AUD], "iss": server.ACCESS_TEAM, "exp": time.time() + 600,
+              "email": "marcusmartini83@gmail.com", **rumpf}
+    koerper = _b64u(json.dumps(inhalt).encode())
+    k = (n.bit_length() + 7) // 8
+    em = (b"\x00\x01" + b"\xff" * (k - 3 - len(server._DIGEST_INFO) - 32) + b"\x00"
+          + server._DIGEST_INFO + hashlib.sha256(f"{kopf}.{koerper}".encode()).digest())
+    sig = pow(int.from_bytes(em, "big"), d, n).to_bytes(k, "big")
+    return f"{kopf}.{koerper}.{_b64u(sig)}"
+
+
+def test_access_token_pruefung(rsa):
+    n, e, _ = rsa
+    finde = {"k1": (n, e)}.get
+    assert server.access_email(_token(rsa), finde) == "marcusmartini83@gmail.com"
+    assert server.access_email(_token(rsa, aud=["fremd"]), finde) is None
+    assert server.access_email(_token(rsa, iss="https://fremd.cloudflareaccess.com"), finde) is None
+    assert server.access_email(_token(rsa, exp=time.time() - 1), finde) is None
+    assert server.access_email(_token(rsa, nbf=time.time() + 3600), finde) is None
+    kopf, rumpf, sig = _token(rsa).split(".")
+    falscher_rumpf = _b64u(json.dumps({"aud": [server.ACCESS_AUD], "iss": server.ACCESS_TEAM,
+                                       "exp": time.time() + 600, "email": "boese@example.com"}).encode())
+    assert server.access_email(f"{kopf}.{falscher_rumpf}.{sig}", finde) is None
+    unsigniert = _b64u(json.dumps({"alg": "none", "kid": "k1"}).encode())
+    assert server.access_email(f"{unsigniert}.{rumpf}.", finde) is None
+    assert server.access_email(_token(rsa), {}.get) is None
+    assert server.access_email("", finde) is None and server.access_email("a.b", finde) is None
+
+
+def test_schluessel_werden_gemerkt_und_bei_unbekanntem_kid_nachgeladen(monkeypatch):
+    monkeypatch.setattr(server, "_schluessel", {"zeit": 0.0, "keys": {}})
+    geholt = []
+    def holen():
+        geholt.append(1)
+        return {"k1": (3, 5)}
+    assert server.schluessel("k1", holen, jetzt=10_000) == (3, 5)
+    assert server.schluessel("k1", holen, jetzt=10_010) == (3, 5)
+    assert server.schluessel("k2", holen, jetzt=10_020) is None  # unter einer Minute: kein Nachladen
+    assert server.schluessel("k2", holen, jetzt=10_100) is None
+    assert len(geholt) == 2
+
+
+def test_uebersicht_nur_mit_gueltigem_access_token(con, rsa, monkeypatch):
+    n, e, _ = rsa
+    monkeypatch.setattr(server, "ERLAUBT", {"marcusmartini83@gmail.com", "marcus@martini.digital"})
+    monkeypatch.setattr(server, "TOKEN", "geheim")
+    monkeypatch.setattr(server, "_schluessel", {"zeit": time.time(), "keys": {"k1": (n, e)}})
     srv = ThreadingHTTPServer(("127.0.0.1", 0), server.handler_fuer(con))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     basis = f"http://127.0.0.1:{srv.server_address[1]}"
 
-    def get(pfad, email=None):
-        kopf = {"Cf-Access-Authenticated-User-Email": email} if email else {}
+    def get(pfad, kopf=None):
         try:
-            r = urllib.request.urlopen(urllib.request.Request(basis + pfad, headers=kopf))
-            return r.status, r.headers.get("Content-Type"), r.read()
+            r = urllib.request.urlopen(urllib.request.Request(basis + pfad, headers=kopf or {}))
+            return r.status, r.headers, r.read()
         except urllib.error.HTTPError as e:
             return e.code, None, b""
+    gut = {"Cf-Access-Jwt-Assertion": _token(rsa)}
     try:
         for pfad in ("/", "/v1/uebersicht"):
             assert get(pfad)[0] == 403
-            assert get(pfad, "fremd@example.com")[0] == 403
-        code, typ, roh = get("/", "Marcusmartini83@gmail.com ")
-        assert code == 200 and typ.startswith("text/html") and b"Transkribor" in roh
-        code, _, roh = get("/v1/uebersicht", "marcus@martini.digital")
+            # Der blosse Kopf genuegt nicht mehr — nur das signierte Token zaehlt.
+            assert get(pfad, {"Cf-Access-Authenticated-User-Email": "marcusmartini83@gmail.com"})[0] == 403
+            assert get(pfad, {"Cf-Access-Jwt-Assertion": _token(rsa, email="fremd@example.com")})[0] == 403
+        code, kopf, roh = get("/", gut)
+        assert code == 200 and kopf["Content-Type"].startswith("text/html") and b"Transkribor" in roh
+        assert kopf["Cache-Control"] == "no-store"
+        assert "default-src 'none'" in kopf["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in kopf["Content-Security-Policy"]
+        code, _, roh = get("/v1/uebersicht", gut)
         d = json.loads(roh)
         assert code == 200 and len(d["verlauf"]) == 90 and "gesamt" in d
+        # Das Access-Token ersetzt den Lese-Token fuer Skripte nicht.
+        assert get("/v1/zahlen", gut)[0] == 401
         # Die Access-Freigabe fuer /v1/ping laesst Pfade darunter durch — der Server normalisiert nie.
-        assert get("/v1/ping/..%2Fzahlen")[0] == 404
-        assert get("/v1/ping/../uebersicht")[0] == 404
+        assert get("/v1/ping/..%2Fzahlen", gut)[0] == 404
+        assert get("/v1/ping/../uebersicht", gut)[0] == 404
     finally:
         srv.shutdown()
 
