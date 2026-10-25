@@ -907,9 +907,11 @@ zum FastAPI-Backend auf :8000 durchgereicht). Installer selbst bauen:
 
 **Nutzungszählung (ab v0.61.0):** `electron/nutzung.js` sendet nach Zustimmung (Schalter
 `nutzung.json` in `userData`) per `POST /v1/ping` an `https://transcribor.martini.digital`
-(überschreibbar per `-c.extraMetadata.nutzungUrl=…`). Erfolgreich ist das höchstens einmal je
-Kalendertag; scheitert die Meldung (Netz, 5xx, 429), versucht es die App stündlich erneut, bis
-eine durchkommt; ein anderes 4xx gilt als dauerhafte Ablehnung bis zum nächsten Tag:
+(überschreibbar per `-c.extraMetadata.nutzungUrl=…`). Nach einer angenommenen Meldung merkt sich
+die App den Tag; scheitert sie (Netz, 5xx, 429, oder der Tag lässt sich lokal nicht speichern),
+versucht sie es stündlich erneut; ein anderes 4xx gilt als Ablehnung bis zum nächsten Tag.
+Gezählt wird ein Gerät trotzdem höchstens einmal je Tag: der Server fasst Meldungen über den
+Schlüssel (Tag, Gerät) zusammen.
 
 ```json
 { "geraet": "<sha256 hex, 64 Zeichen>", "version": "0.61.0", "plattform": "win32-x64" }
