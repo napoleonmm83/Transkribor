@@ -377,8 +377,8 @@
     {
       "id": "NB1 jede Mutation faehrt wieder die ganze Suite",
       "datei": "scripts/mutation.py",
-      "von": "aus, _rc = _lauf(a.repo, nur_benannte(test, m), zusatz)",
-      "nach": "aus, _rc = _lauf(a.repo, test, zusatz)",
+      "von": "            gefiltert = nur_benannte(test, m)",
+      "nach": "            gefiltert = test",
       "rot": [
         "test_mutationslauf_faehrt_nur_die_benannten_pytest_tests"
       ]
@@ -395,10 +395,37 @@
     {
       "id": "NB3 unsaubere Namen landen ungeprueft in der Shell",
       "datei": "scripts/mutation.py",
-      "von": "    if not all(_K_NAME.fullmatch(n) for n in namen):",
+      "von": "    if not all(_K_NAME.fullmatch(n) and n not in (\"and\", \"or\", \"not\") for n in namen):",
       "nach": "    if False:",
       "rot": [
         "test_benannte_tests_nur_fuer_pytest_und_nur_mit_sauberen_namen"
+      ]
+    },
+    {
+      "id": "NB4 and/or/not als Name sprengt den Filter-Ausdruck",
+      "datei": "scripts/mutation.py",
+      "von": "_K_NAME.fullmatch(n) and n not in (\"and\", \"or\", \"not\")",
+      "nach": "_K_NAME.fullmatch(n)",
+      "rot": [
+        "test_benannte_tests_nur_fuer_pytest_und_nur_mit_sauberen_namen"
+      ]
+    },
+    {
+      "id": "NB5 Plan-eigenes -k wird still ersetzt",
+      "datei": "scripts/mutation.py",
+      "von": " or \" -k\" in kommando:",
+      "nach": ":",
+      "rot": [
+        "test_plan_eigenes_k_wird_nicht_ueberschrieben"
+      ]
+    },
+    {
+      "id": "NB6 Filter ohne Treffer heisst wieder Importfehler",
+      "datei": "scripts/mutation.py",
+      "von": "            if gefiltert != test and _rc in (4, 5):",
+      "nach": "            if False:",
+      "rot": [
+        "test_filter_ohne_treffer_sagt_es_statt_importfehler"
       ]
     }
   ]
