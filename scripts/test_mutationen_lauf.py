@@ -486,3 +486,33 @@ def test_die_matrix_des_workflows_passt_zum_nenner():
     alle = {int(x) for x in teiler} | {int(x) for x in im_namen}
     assert alle == {len(eintraege)}, (
         f"Matrix hat {len(eintraege)} Eintraege, genannt werden {sorted(alle)}")
+
+
+def test_teure_plaene_landen_in_verschiedenen_teilen():
+    """Lauf 40216196133: drei langsame Plaene reihum im SELBEN Teil, 25 min statt ~11.
+
+    Nach Mutationszahl stehen die drei hier auf Platz 0, 4 und 8 — reihum ueber vier Teile
+    also alle in Teil 1, genau wie im Lauf. Erst `teuer` zieht sie auseinander.
+    """
+    plaene = [_plan(f"billig{n}", ["webtool/x.py"], mutationen=n)
+              for n in (29, 28, 27, 19, 18, 17)]
+    for name, n in (("t1", 30), ("t2", 20), ("t3", 10)):
+        p = _plan(name, ["webtool/x.py"], mutationen=n)
+        p.teuer = True
+        plaene.append(p)
+    teile = [{p.name for p in mutationen_lauf.teile(plaene, i, 4)} for i in range(1, 5)]
+    assert all(len(t & {"t1", "t2", "t3"}) <= 1 for t in teile), teile
+    assert set().union(*teile) == {p.name for p in plaene}
+
+
+def test_teuer_muss_ein_bool_sein(tmp_path):
+    ordner = tmp_path / "scripts" / "mutationen"
+    ordner.mkdir(parents=True)
+    (ordner / "x.json").write_text(json.dumps(
+        {"test": "t", "pfade": ["a.py"], "mutationen": [], "teuer": "true"}), encoding="utf-8")
+    try:
+        mutationen_lauf.lade_plaene(tmp_path)
+    except ValueError as f:
+        assert "teuer" in str(f)
+    else:
+        raise AssertionError("`teuer` als Text wurde still angenommen")

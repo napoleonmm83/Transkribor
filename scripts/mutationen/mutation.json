@@ -373,6 +373,33 @@
       "gruen": [
         "test_lauf_entfaerbt_die_ausgabe_eines_echten_kindes"
       ]
+    },
+    {
+      "id": "NB1 jede Mutation faehrt wieder die ganze Suite",
+      "datei": "scripts/mutation.py",
+      "von": "aus, _rc = _lauf(a.repo, nur_benannte(test, m), zusatz)",
+      "nach": "aus, _rc = _lauf(a.repo, test, zusatz)",
+      "rot": [
+        "test_mutationslauf_faehrt_nur_die_benannten_pytest_tests"
+      ]
+    },
+    {
+      "id": "NB2 gruen faellt aus dem Filter - die Gegenprobe liefe nie",
+      "datei": "scripts/mutation.py",
+      "von": "(*m[\"rot\"], *m.get(\"gruen\", []))",
+      "nach": "(*m[\"rot\"],)",
+      "rot": [
+        "test_mutationslauf_faehrt_nur_die_benannten_pytest_tests"
+      ]
+    },
+    {
+      "id": "NB3 unsaubere Namen landen ungeprueft in der Shell",
+      "datei": "scripts/mutation.py",
+      "von": "    if not all(_K_NAME.fullmatch(n) for n in namen):",
+      "nach": "    if False:",
+      "rot": [
+        "test_benannte_tests_nur_fuer_pytest_und_nur_mit_sauberen_namen"
+      ]
     }
   ]
 }
