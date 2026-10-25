@@ -265,7 +265,7 @@ Gesprächskontext prüft, auf die lokale Audioanalyse wartet, das Modell lädt o
 Ausschnitte erneut abhört. Bei den Ausschnitten zeigt die Anzeige, wie viele schon geprüft
 sind; andere Vorbereitungsschritte haben keinen erfundenen Prozentwert.
 
-*(Nächste Fassung nach `v0.60.0`:)* Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme
+*(Ab `v0.61.0`:)* Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme
 „Modell wird heruntergeladen“ und die schon geladene Menge, statt minutenlang nur „Wartet auf
 Transkription“. Bei manchen Downloads lässt sich die Menge unterwegs nicht messen — dann steht
 dort „Modell wird heruntergeladen“ ohne Zahl, und die volle Grösse erscheint erst kurz vor dem Ende.
