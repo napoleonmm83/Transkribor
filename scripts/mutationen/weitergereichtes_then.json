@@ -1,5 +1,6 @@
 {
   "test": "python -m pytest webtool/test_jobs.py webtool/test_api.py -q",
+  "teuer": true,
   "pfade": [
     "webtool/app.py",
     "webtool/jobs.py",
