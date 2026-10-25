@@ -29,6 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Neu**
+- Auf Wunsch zählt Transkribor mit, dass es benutzt wird: einmal am Tag eine Gerätenummer, die Fassung und das Betriebssystem — nur nach deinem Ja beim ersten Start, unter „Version“ jederzeit abschaltbar und dort genau einsehbar.
 - Fehlt das gewählte Whisper-Modell noch, zeigt die Aufnahme beim Transkribieren „Modell wird heruntergeladen“ mit der schon geladenen Menge (oder ohne Zahl, wenn sie sich unterwegs nicht messen lässt), statt minutenlang nur „Wartet auf Transkription“.
 
 **Behoben**

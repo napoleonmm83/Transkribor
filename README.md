@@ -94,7 +94,9 @@ deinem Rechner — ohne Konto, ohne Cloud, ohne Upload der Aufnahme. Nur wenn du
 über einen Onlinedienst laufen lässt, verlässt der *Text* deinen Rechner. Und Fehlerberichte
 gehen automatisch nur, wenn du es ausdrücklich einschaltest, an einen Server, den wir selbst
 betreiben. Dateien werden nicht angehängt; Fehlermeldungen können unbekannten Text enthalten
-(siehe „Etwas geht schief“ weiter unten).
+(siehe „Etwas geht schief“ weiter unten). Ebenso nur auf ausdrückliches Ja meldet die App
+einmal am Tag, dass sie benutzt wird — drei Angaben, keine Inhalte (siehe „Zählt Transkribor
+mit, wer es benutzt?“ weiter unten; ab der nächsten Fassung).
 
 <details>
 <summary>Und die Textkorrektur?</summary>
@@ -735,6 +737,38 @@ Fehler; es geht keine Mail heraus.
 **„Protokoll anzeigen“** zeigt dir die lokale Protokolldatei im Dateimanager. Sie wird beim
 manuellen Bericht nicht angehängt. Ist sie sehr gross geworden, liegen ältere Teile als
 `.1` bis `.3` daneben.
+
+</details>
+
+<a id="nutzung"></a>
+<details>
+<summary><strong>Zählt Transkribor mit, wer es benutzt?</strong></summary>
+
+Nur, wenn du es erlaubst (ab der nächsten Fassung). Beim ersten Start fragt Transkribor einmal
+nach; „Nein“ ist die Vorgabe. Umstellen kannst du es jederzeit unter **Version**.
+
+**Was gesendet wird** — einmal am Tag, genau diese drei Angaben und nichts sonst:
+
+```json
+{ "geraet": "3f9a…(64 Zeichen)", "version": "0.61.0", "plattform": "win32-x64" }
+```
+
+- **geraet** ist eine Nummer, die aus der Kennung berechnet wird, die dein Betriebssystem deinem
+  Computer gibt. Sie erkennt dasselbe Gerät wieder, auch nach einer Neuinstallation von
+  Transkribor, verrät aber weder deinen Namen noch den Namen des Computers. Die Kennung selbst
+  verlässt den Rechner nie. Deine eigene Nummer siehst du unter **Version**.
+- **version** ist die Fassung von Transkribor, **plattform** das Betriebssystem.
+
+**Wofür:** damit wir wissen, wie viele Geräte Transkribor benutzen und welche Fassungen und
+Betriebssysteme wir weiter unterstützen müssen.
+
+**Nie dabei:** Aufnahmen, Transkripte, Projekt- und Dateinamen, Einstellungen.
+
+**Was wir speichern:** Tag, Gerätenummer, Fassung, Betriebssystem — auf einem Server, den wir
+selbst betreiben (`transcribor.martini.digital`). Deine IP-Adresse speichert dieser Server
+nicht, auch nicht in einem Zugriffsprotokoll. Die Verbindung läuft über Cloudflare, das wie bei
+jeder Website deine IP-Adresse für die Zustellung sieht. Einträge werden nach 400 Tagen gelöscht.
+Möchtest du, dass deine Einträge gelöscht werden, schick uns deine Gerätenummer.
 
 </details>
 

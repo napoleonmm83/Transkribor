@@ -14,12 +14,14 @@ vi.mock('@/lib/releases', () => ({ holeReleases: vi.fn() }))
 // Der Opt-in-Schalter (#530): ohne Bruecke liefert der Hook `null`, und so bleibt es fuer die
 // bestehenden Tests — nur der eigene Block unten setzt ihn.
 vi.mock('@/hooks/useFehlerberichte', () => ({ useFehlerberichte: vi.fn(() => null) }))
+vi.mock('@/hooks/useNutzung', () => ({ useNutzung: vi.fn(() => null) }))
 // Ohne die Attrappe ist `toast.error` in jsdom kein Beobachtungspunkt — dieselbe Falle wie
 // bei `toast.info` in #174.
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() } }))
 
 import { useUpdate } from '@/hooks/useUpdate'
 import { useFehlerberichte } from '@/hooks/useFehlerberichte'
+import { useNutzung } from '@/hooks/useNutzung'
 import { holeReleases } from '@/lib/releases'
 
 /** Rueckgabe des Fehlerbericht-Kanals — die Attrappe muss die VOLLE Form liefern, sonst
@@ -353,5 +355,31 @@ describe('VersionPage — automatische Fehlerberichte (#530)', () => {
     zeigeMit(STAND)
     fireEvent.click(screen.getByLabelText(HAKEN))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/nicht speichern/)))
+  })
+})
+
+describe('VersionPage — Nutzungszählung', () => {
+  beforeEach(() => vi.clearAllMocks())
+  afterEach(cleanup)
+  const STAND: UpdateZustand = { version: '0.2.1', art: 'aktuell' }
+  const HAKEN = /Nutzung mitzählen/
+  const LAST = { geraet: 'f'.repeat(64), version: '0.61.0', plattform: 'darwin-arm64' }
+
+  it('ohne Schalter in der App-Huelle gibt es weder Haken noch Anzeige', () => {
+    vi.mocked(useNutzung).mockReturnValue(null)
+    zeigeMit(STAND)
+    expect(screen.queryByLabelText(HAKEN)).toBeNull()
+    expect(screen.queryByTestId('nutzlast')).toBeNull()
+  })
+
+  it('zeigt die EXAKTE Nutzlast dieses Geraets, und ein Klick schaltet ein', () => {
+    const setzen = vi.fn(() => Promise.resolve({ an: true, gefragt: 'x', zuletzt: null, nutzlast: LAST }))
+    vi.mocked(useNutzung).mockReturnValue({ zustand: { an: false, gefragt: 'x', zuletzt: null, nutzlast: LAST }, setzen })
+    zeigeMit(STAND)
+    expect(JSON.parse(screen.getByTestId('nutzlast').textContent ?? '')).toEqual(LAST)
+    const haken = screen.getByLabelText(HAKEN) as HTMLInputElement
+    expect(haken.checked).toBe(false)
+    fireEvent.click(haken)
+    expect(setzen).toHaveBeenCalledWith(true)
   })
 })
