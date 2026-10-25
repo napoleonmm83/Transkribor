@@ -605,7 +605,8 @@ jobs:
     # Plaene ihre Waechter im echten Chromium, das kostet Browser-Installation plus zehn volle
     # Playwright-Laeufe. Die Zahl ist mitgezogen statt stehengelassen — ein Reserve-Faktor, den
     # niemand nachrechnet, ist beim naechsten Zuwachs die Begruendung fuer einen Deckel, der
-    # nicht mehr traegt. Wer einen weiteren E2E-Plan anlegt, misst hier nach.
+    # nicht mehr traegt. Seit 2026-10-25 laufen die Browser-Plaene NICHT mehr hier (`lokal`),
+    # und der laengste Teil liegt bei 9 min (Lauf 40227632123) — der Deckel ist reine Notbremse.
     #
     # SEIT DER AUFTEILUNG gilt der Deckel je TEIL, nicht mehr fuer die ganze Serie: gemessen
     # 21,8 min fuer den laengsten, der Faktor ist damit von 1,1x auf 2,8x gestiegen. Bewusst

@@ -551,6 +551,17 @@ def test_ohne_lokal_faehrt_den_browser_plan_nicht_nennt_ihn_aber(monkeypatch, ca
     assert "1 von 1 bestanden, 1 NUR LOKAL" in aus
 
 
+def test_nur_browser_plaene_gewaehlt_heisst_nicht_keiner(monkeypatch, capsys):
+    """Ein reiner Browser-PR beruehrt sehr wohl einen Waechter — „keiner" waere gelogen."""
+    browser = _plan("browser", ["webtool/x.py"])
+    browser.lokal = True
+    monkeypatch.setattr(mutationen_lauf, "lade_plaene", lambda w: [browser])
+    assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle", "--ohne-lokal"]) == 0
+    aus = capsys.readouterr().out
+    assert "LOKAL (nicht in CI, lokal fahren): browser" in aus
+    assert "keiner" not in aus
+
+
 def test_ohne_schalter_faehrt_auch_den_browser_plan(monkeypatch):
     gefahren = _browser_und_normal(monkeypatch)
     assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle"]) == 0

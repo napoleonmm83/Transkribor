@@ -382,3 +382,17 @@ def test_globale_pfade_existieren_und_ziehen_JEDEN_plan():
         gewaehlt = mutationen_lauf.waehle(alle, {p})
         assert len(gewaehlt) == len(alle), (
             f"{p} steht in GLOBALE_PFADE, waehlt aber nur {len(gewaehlt)} von {len(alle)}")
+
+
+def test_lokal_genau_dann_wenn_der_plan_den_browser_braucht():
+    """`"lokal": true` nimmt einen Plan aus der CI — nur ein Browser-Plan darf das.
+
+    Sonst ist das Feld ein unbewachter Opt-out fuer jeden Waechter (gegnerisches Review an
+    PR #708). Umgekehrt landet ein Browser-Plan ohne das Feld in einer CI ohne Chromium und
+    faellt dort schon an der Positivkontrolle.
+    """
+    for p in mutationen_lauf.lade_plaene(WURZEL):
+        browser = "test:e2e" in p.test or "playwright" in p.test
+        assert p.lokal == browser, (
+            f"{p.name}: lokal={p.lokal}, braucht Browser={browser} — "
+            "lokal ist nur fuer Plaene, die `test:e2e`/Playwright fahren")

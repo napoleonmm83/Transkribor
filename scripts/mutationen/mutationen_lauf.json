@@ -292,6 +292,15 @@
       "rot": [
         "test_lokal_muss_ein_bool_sein"
       ]
+    },
+    {
+      "id": "L25 reiner Browser-PR meldet zusaetzlich keinen Waechter",
+      "datei": "scripts/mutationen_lauf.py",
+      "von": "    if not gewaehlt and not lokal:",
+      "nach": "    if not gewaehlt:",
+      "rot": [
+        "test_nur_browser_plaene_gewaehlt_heisst_nicht_keiner"
+      ]
     }
   ],
   "hinweis": "`.github/workflows/test.yml` steht ABSICHTLICH in `pfade`, obwohl das den abgeleiteten --pfad von `scripts` auf `.` weitet: nur so waehlt eine reine Workflow-Aenderung diesen Plan, und nur so liegt L18 innerhalb des Pfades (der Treiber bricht sonst ab). Der Preis ist gemessen und tragbar — Sauberkeitspruefung und Bytecode-Leeren laufen ueber den ganzen Baum, bei 62 unversionierten Dateien (Stand 19.09.2026) sind das rund 10 s je Pruefung. Wer den Baum zumuellt, zahlt hier zuerst: die Hausregel dazu steht in ~/.claude/CLAUDE.md unter 'Reisst ein Riegel sein Limit, sieh ZUERST im Arbeitsbaum nach' (dort waren es 147506 Dateien und ueber 560 s). Praezedenz: testdeckel_riegel, fehlerberichte-python."
