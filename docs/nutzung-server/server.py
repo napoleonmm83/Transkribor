@@ -11,6 +11,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 import time
 from datetime import date, timedelta
@@ -63,6 +64,12 @@ def eintragen(con, d, heute=None):
         con.commit()
 
 
+_JE = {
+    "version": "select version, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc",
+    "plattform": "select plattform, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc",
+}
+
+
 def zahlen(con, heute=None):
     h = heute or date.today()
     def geraete(tage):
@@ -70,8 +77,7 @@ def zahlen(con, heute=None):
         return con.execute("select count(distinct geraet) from ping where tag >= ?", (ab,)).fetchone()[0]
     def je(spalte):
         ab = (h - timedelta(days=29)).isoformat()
-        sql = f"select {spalte}, count(distinct geraet) from ping where tag >= ? group by 1 order by 2 desc"
-        return dict(con.execute(sql, (ab,)).fetchall())
+        return dict(con.execute(_JE[spalte], (ab,)).fetchall())
     gesamt = con.execute("select count(distinct geraet) from ping").fetchone()[0]
     return {"heute": geraete(1), "7_tage": geraete(7), "30_tage": geraete(30), "gesamt": gesamt,
             "version_30_tage": je("version"), "plattform_30_tage": je("plattform")}
@@ -79,16 +85,22 @@ def zahlen(con, heute=None):
 
 def handler_fuer(con):
     class H(BaseHTTPRequestHandler):
+        # Ein halber Rumpf haelt sonst einen Faden unbegrenzt; der Timeout landet in log_error -> stumm.
+        timeout = 10
+
         def log_message(self, *a):  # kein Zugriffslog: es truege die IP
             pass
 
         def antwort(self, code, koerper=None):
             roh = json.dumps(koerper or {}).encode()
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(roh)))
-            self.end_headers()
-            self.wfile.write(roh)
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(roh)))
+                self.end_headers()
+                self.wfile.write(roh)
+            except OSError:  # Client hat aufgelegt — nichts zu melden
+                pass
 
         def do_POST(self):
             if self.path != "/v1/ping":
@@ -113,11 +125,20 @@ def handler_fuer(con):
                 return self.antwort(200, {"ok": True})
             if self.path != "/v1/zahlen":
                 return self.antwort(404)
-            auth = self.headers.get("Authorization", "")
-            if not TOKEN or not hmac.compare_digest(auth, f"Bearer {TOKEN}"):
+            # Als Bytes vergleichen: compare_digest wirft bei nicht-ASCII-str einen TypeError.
+            auth = self.headers.get("Authorization", "").encode("utf-8", "surrogateescape")
+            if not TOKEN or not hmac.compare_digest(auth, f"Bearer {TOKEN}".encode()):
                 return self.antwort(401)
             self.antwort(200, zahlen(con))
     return H
+
+
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        # Die Vorgabe druckt "... from (ip, port)" samt Traceback — das waere ein Zugriffslog mit IP.
+        print("Fehler bei einer Anfrage:", sys.exc_info()[0].__name__, file=sys.stderr)
 
 
 def main():
@@ -128,9 +149,13 @@ def main():
     def taeglich():
         while True:
             time.sleep(24 * 3600)
-            aufraeumen(con)
+            try:
+                aufraeumen(con)
+            except Exception as e:  # der Faden darf nicht sterben, sonst haelt die 400-Tage-Zusage nicht
+                print("Aufraeumen fehlgeschlagen:", type(e).__name__, file=sys.stderr)
     threading.Thread(target=taeglich, daemon=True).start()
-    ThreadingHTTPServer(("0.0.0.0", int(os.environ.get("PORT", "8080"))), handler_fuer(con)).serve_forever()
+    # 0.0.0.0 ist Absicht: der Container wird nur ueber den Proxy erreicht.
+    Server(("0.0.0.0", int(os.environ.get("PORT", "8080"))), handler_fuer(con)).serve_forever()  # noqa: S104
 
 
 if __name__ == "__main__":

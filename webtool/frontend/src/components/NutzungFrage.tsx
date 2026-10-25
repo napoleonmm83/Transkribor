@@ -54,7 +54,8 @@ export function NutzungFrage() {
               </p>
               <p>
                 <strong className="font-medium text-foreground">Nie dabei:</strong> Aufnahmen,
-                Transkripte, Projekt- oder Dateinamen, Einstellungen. Deine IP-Adresse wird nicht gespeichert.
+                Transkripte, Projekt- oder Dateinamen, Einstellungen. Deine IP-Adresse speichern wir nicht;
+                die Verbindung läuft über Cloudflare, das sie wie bei jeder Website zur Zustellung sieht.
               </p>
               <p>Du kannst das jederzeit unter „Version“ umstellen und siehst dort genau, was gesendet wird.</p>
             </div>

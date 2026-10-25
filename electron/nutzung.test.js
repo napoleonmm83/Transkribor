@@ -20,7 +20,7 @@ const LAST = n.nutzlast({ kennung: 'abc-123', version: '0.60.1', plattform: 'win
 const JETZT = new Date(2026, 9, 25, 12)
 function holer(status = 200) {
   const aufrufe = []
-  const f = async (url, opt) => { aufrufe.push({ url, opt }); return { ok: status >= 200 && status < 300 } }
+  const f = async (url, opt) => { aufrufe.push({ url, opt }); return { ok: status >= 200 && status < 300, status } }
   f.aufrufe = aufrufe
   return f
 }
@@ -75,6 +75,15 @@ test('Fehlschlag merkt sich den Tag NICHT', async () => {
     assert.strictEqual(await n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: h, jetzt: JETZT }), 'fehler')
     assert.strictEqual(n.lesen(p).zuletzt, null)
   }
+})
+
+test('dauerhafte Ablehnung (4xx) wird bis morgen nicht wiederholt, 429 schon', async () => {
+  const p = schalter({ an: true })
+  assert.strictEqual(await n.tick({ schalterPfad: p, url: 'u', last: LAST, holen: holer(400), jetzt: JETZT }), 'abgelehnt')
+  assert.strictEqual(n.lesen(p).zuletzt, '2026-10-25')
+  const q = schalter({ an: true })
+  assert.strictEqual(await n.tick({ schalterPfad: q, url: 'u', last: LAST, holen: holer(429), jetzt: JETZT }), 'fehler')
+  assert.strictEqual(n.lesen(q).zuletzt, null)
 })
 
 test('ohne Kennung kein Versand', async () => {

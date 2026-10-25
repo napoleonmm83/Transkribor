@@ -765,8 +765,8 @@ Betriebssysteme wir weiter unterstützen müssen.
 **Nie dabei:** Aufnahmen, Transkripte, Projekt- und Dateinamen, Einstellungen.
 
 **Was wir speichern:** Tag, Gerätenummer, Fassung, Betriebssystem — auf einem Server, den wir
-selbst betreiben (`transcribor.martini.digital`). Deine IP-Adresse speichert dieser Server
-nicht, auch nicht in einem Zugriffsprotokoll. Die Verbindung läuft über Cloudflare, das wie bei
+selbst betreiben (`transcribor.martini.digital`). Deine IP-Adresse speichert der Dienst
+nicht, und das Zugriffsprotokoll unseres Servers ist für diese Adresse abgeschaltet. Die Verbindung läuft über Cloudflare, das wie bei
 jeder Website deine IP-Adresse für die Zustellung sieht. Einträge werden nach 400 Tagen gelöscht.
 Möchtest du, dass deine Einträge gelöscht werden, schick uns deine Gerätenummer.
 
