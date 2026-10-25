@@ -218,7 +218,9 @@ def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
     # NACHTRAG 2026-10-25: Ein Bool `teuer` statt einer Kostentabelle. Lauf 40216196133 legte
     # `testdeckel` (9 min, Deckel-Timeouts), die E2E-Probe (5,5) und `alias_identity` (4,5)
     # reihum in DENSELBEN Teil — 25 min. Teure Plaene werden zuerst reihum verteilt, dann der
-    # Rest wie bisher. Ein Bool driftet nur, wenn ein Plan die Klasse wechselt.
+    # Rest wie bisher. Ein Bool driftet nur, wenn ein Plan die Klasse wechselt — und das tat
+    # er sofort: nach dem -k-Filter waren alias_identity 1,3 min, weitergereichtes_then 5,2;
+    # die Markierung folgt der MESSUNG (Lauf 40224638863), nicht dieser Aufzaehlung.
     nach_kosten = sorted(gewaehlt, key=lambda p: (not p.teuer, -len(p.mutationen), p.name))
     return [p for i, p in enumerate(nach_kosten) if i % anzahl == nummer - 1]
 
