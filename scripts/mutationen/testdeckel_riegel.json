@@ -1,5 +1,6 @@
 {
   "test": "python -m pytest scripts/test_testdeckel.py scripts/test_pytest_riegel.py -q",
+  "teuer": true,
   "pfade": [
     ".github/workflows/test.yml",
     "conftest.py",

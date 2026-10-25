@@ -1,5 +1,6 @@
 {
   "test": "python -m pytest scripts/test_testdeckel.py -q",
+  "teuer": true,
   "pfade": [
     "conftest.py",
     "scripts/test_testdeckel.py"

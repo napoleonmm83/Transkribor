@@ -430,6 +430,25 @@ def zeilenenden_angleichen(inhalt: str, text: str) -> str:
     return text.replace("\n", "\r\n") if "\r\n" in inhalt else text
 
 
+_K_NAME = re.compile(r"[A-Za-z0-9_]+")
+
+
+def nur_benannte(kommando: str, m: dict) -> str:
+    """pytest-Kommando auf die Tests der Mutation einengen (`-k`), sonst unveraendert.
+
+    Das Urteil liest nur `rot` und `gruen` (Teilstring gegen die Fehlzeilen); jeder andere
+    Test der Datei lief bisher bei JEDER Mutation umsonst mit — `weitergereichtes_then`
+    kostete so 73 s je Mutation, 17 min im CI-Lauf 40216196133. Die Positivkontrolle bleibt
+    beim vollen Kommando. Ein Name, den `-k` nicht sauber nimmt, laesst den Filter weg.
+    """
+    if not kommando.lstrip().startswith("python -m pytest"):
+        return kommando
+    namen = sorted({n.split("[", 1)[0] for n in (*m["rot"], *m.get("gruen", []))})
+    if not all(_K_NAME.fullmatch(n) for n in namen):
+        return kommando
+    return f'{kommando} -k "{" or ".join(namen)}"'
+
+
 def _direkte_kommando_teile(kommando: str) -> list[str] | None:
     """Nur ein einzelnes Kommando; Zeilen und Shell-Operatoren sind keine Argumente."""
     # cmd.exe behandelt einfache Quotes nicht als Schutz fuer &/|; POSIX-Shells
@@ -742,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
         fremd = False
         try:
             datei.write_bytes(mutiert)
-            aus, _rc = _lauf(a.repo, test, zusatz)
+            aus, _rc = _lauf(a.repo, nur_benannte(test, m), zusatz)
         finally:
             # FALLE 1: aus dem SPEICHER, nicht ueber git — das fasst nur DIESE Datei an.
             #

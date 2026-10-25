@@ -1,5 +1,6 @@
 {
   "test": "npm --prefix webtool/frontend run test:e2e",
+  "teuer": true,
   "pfade": [
     "webtool/frontend/e2e/seitenleiste-kontrast.spec.ts",
     "webtool/frontend/e2e/reflow-320.spec.ts",

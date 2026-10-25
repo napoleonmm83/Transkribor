@@ -73,6 +73,7 @@ class Plan:
     pfade: list[str]
     mutationen: list[dict]
     env: dict[str, str] = field(default_factory=dict)
+    teuer: bool = False
 
     @property
     def name(self) -> str:
@@ -131,8 +132,11 @@ def lade_plaene(wurzel: pathlib.Path) -> list[Plan]:
         if not isinstance(umgebung, dict) or not all(
                 isinstance(k, str) and isinstance(v, str) for k, v in umgebung.items()):
             raise ValueError(f"{datei.name}: `env` nimmt nur Zeichenketten")
+        teuer = roh.get("teuer", False)
+        if not isinstance(teuer, bool):
+            raise ValueError(f"{datei.name}: `teuer` muss true oder false sein")
         geladen.append(Plan(datei=datei, test=roh["test"], pfade=list(pfade),
-                            mutationen=list(mutationen), env=dict(umgebung)))
+                            mutationen=list(mutationen), env=dict(umgebung), teuer=teuer))
     return geladen
 
 
@@ -206,7 +210,11 @@ def teile(gewaehlt: list[Plan], nummer: int, anzahl: int) -> list[Plan]:
     an DIESER Zeile haengt statt an einer Zusage von `lade_plaene` — aber es verdient keine
     Begruendung, die mehr verspricht.
     """
-    nach_kosten = sorted(gewaehlt, key=lambda p: (-len(p.mutationen), p.name))
+    # NACHTRAG 2026-10-25: Ein Bool `teuer` statt einer Kostentabelle. Lauf 40216196133 legte
+    # `testdeckel` (9 min, Deckel-Timeouts), die E2E-Probe (5,5) und `alias_identity` (4,5)
+    # reihum in DENSELBEN Teil — 25 min. Teure Plaene werden zuerst reihum verteilt, dann der
+    # Rest wie bisher. Ein Bool driftet nur, wenn ein Plan die Klasse wechselt.
+    nach_kosten = sorted(gewaehlt, key=lambda p: (not p.teuer, -len(p.mutationen), p.name))
     return [p for i, p in enumerate(nach_kosten) if i % anzahl == nummer - 1]
 
 
