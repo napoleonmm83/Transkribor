@@ -441,10 +441,12 @@ def nur_benannte(kommando: str, m: dict) -> str:
     kostete so 73 s je Mutation, 17 min im CI-Lauf 40216196133. Die Positivkontrolle bleibt
     beim vollen Kommando. Ein Name, den `-k` nicht sauber nimmt, laesst den Filter weg.
     """
-    if not kommando.lstrip().startswith("python -m pytest"):
+    # Ein Plan-eigenes `-k` bleibt unangetastet: pytest nimmt das LETZTE, ein Ausschluss
+    # wie `not langsam` fiele sonst nur bei den Mutationen still weg (gegnerisches Review).
+    if not kommando.lstrip().startswith("python -m pytest") or " -k" in kommando:
         return kommando
     namen = sorted({n.split("[", 1)[0] for n in (*m["rot"], *m.get("gruen", []))})
-    if not all(_K_NAME.fullmatch(n) for n in namen):
+    if not all(_K_NAME.fullmatch(n) and n not in ("and", "or", "not") for n in namen):
         return kommando
     return f'{kommando} -k "{" or ".join(namen)}"'
 
@@ -761,7 +763,8 @@ def main(argv: list[str] | None = None) -> int:
         fremd = False
         try:
             datei.write_bytes(mutiert)
-            aus, _rc = _lauf(a.repo, nur_benannte(test, m), zusatz)
+            gefiltert = nur_benannte(test, m)
+            aus, _rc = _lauf(a.repo, gefiltert, zusatz)
         finally:
             # FALLE 1: aus dem SPEICHER, nicht ueber git — das fasst nur DIESE Datei an.
             #
@@ -817,7 +820,12 @@ def main(argv: list[str] | None = None) -> int:
         if not rote and offen:
             # Die Diagnose muss die drei Faelle auseinanderhalten, sonst zeigt sie in die
             # falsche Richtung — sie sehen alle drei nach "null rote Zeilen" aus.
-            if not _sah_einen_testlauf(aus):
+            if gefiltert != test and _rc in (4, 5):
+                # pytest rc 5 = der -k-Filter waehlte nichts, rc 4 = Ausdruck unbrauchbar.
+                print(f"      Achtung: der Filter waehlte keinen Test (pytest rc {_rc}) — die"
+                      " Namen in rot/gruen sind keine Testnamen. Das ist KEINE Aussage ueber"
+                      " die Mutation.")
+            elif not _sah_einen_testlauf(aus):
                 print("      Achtung: die Suite ist gar nicht GELAUFEN — die Mutation hat sie"
                       " vermutlich unlesbar gemacht (Syntaxfehler, Importfehler). Das ist"
                       " KEINE Aussage ueber den Test.")

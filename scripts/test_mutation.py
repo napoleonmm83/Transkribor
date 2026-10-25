@@ -898,3 +898,20 @@ def test_benannte_tests_nur_fuer_pytest_und_nur_mit_sauberen_namen():
     assert mutation.nur_benannte("npm --prefix web test", m) == "npm --prefix web test"
     schief = {"rot": ["test a; rm"], "gruen": []}
     assert mutation.nur_benannte("python -m pytest x.py", schief) == "python -m pytest x.py"
+    wort = {"rot": ["test_a"], "gruen": ["not"]}
+    assert mutation.nur_benannte("python -m pytest x.py", wort) == "python -m pytest x.py"
+
+
+def test_plan_eigenes_k_wird_nicht_ueberschrieben():
+    """pytest nimmt das LETZTE -k — ein Ausschluss des Plans fiele sonst still weg."""
+    kommando = 'python -m pytest x.py -k "not langsam"'
+    assert mutation.nur_benannte(kommando, {"rot": ["test_a"]}) == kommando
+
+
+def test_filter_ohne_treffer_sagt_es_statt_importfehler(tmp_path, monkeypatch, capsys):
+    """rc 5 nach -k heisst: rot/gruen sind keine Testnamen — nicht „Suite nie gelaufen"."""
+    rc, _ = _lauf_main(tmp_path, monkeypatch, _PLAN_OK,
+                       [_GRUEN, ("45 deselected in 0.25s\n", 5)],
+                       testkommando="python -m pytest x.py -q")
+    assert rc == 1
+    assert "der Filter waehlte keinen Test" in capsys.readouterr().out
