@@ -83,6 +83,24 @@ def zahlen(con, heute=None):
             "version_30_tage": je("version"), "plattform_30_tage": je("plattform")}
 
 
+def verlauf(con, heute=None, tage=90):
+    """Aktive Geraete je Tag, lueckenlos (Tage ohne Meldung mit 0) — die Kurve der Uebersicht."""
+    h = heute or date.today()
+    ab = h - timedelta(days=tage - 1)
+    roh = dict(con.execute("select tag, count(distinct geraet) from ping where tag >= ? group by tag",
+                           (ab.isoformat(),)).fetchall())
+    return [{"tag": (ab + timedelta(days=i)).isoformat(), "geraete": roh.get((ab + timedelta(days=i)).isoformat(), 0)}
+            for i in range(tage)]
+
+
+# Zweite Schicht hinter Cloudflare Access: Access setzt diesen Kopf nach der Anmeldung. Die Herkunft
+# ist nur ueber Cloudflare erreichbar (direkter Zugriff auf die IP gemessen: Timeout), der Kopf also
+# nicht von aussen zu faelschen — er schuetzt, falls die Access-Regel je fehlt oder verrutscht.
+ERLAUBT = {a.strip().lower() for a in os.environ.get(
+    "NUTZUNG_ERLAUBT", "marcus@martini.digital,marcusmartini83@gmail.com").split(",") if a.strip()}
+SEITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uebersicht.html")
+
+
 def handler_fuer(con):
     class H(BaseHTTPRequestHandler):
         # Ein halber Rumpf haelt sonst einen Faden unbegrenzt; der Timeout landet in log_error -> stumm.
@@ -120,9 +138,34 @@ def handler_fuer(con):
             eintragen(con, d)
             self.antwort(200, {"ok": True})
 
+        def angemeldet(self):
+            return self.headers.get("Cf-Access-Authenticated-User-Email", "").strip().lower() in ERLAUBT
+
         def do_GET(self):
+            # Pfade werden WOERTLICH verglichen, nie normalisiert: die Access-Freigabe fuer /v1/ping laesst
+            # auch /v1/ping/..%2Fzahlen durch, und das darf hier nur 404 sein.
             if self.path == "/gesund":
                 return self.antwort(200, {"ok": True})
+            if self.path in ("/", "/v1/uebersicht"):
+                if not self.angemeldet():
+                    return self.antwort(403)
+                if self.path == "/v1/uebersicht":
+                    return self.antwort(200, {**zahlen(con), "verlauf": verlauf(con)})
+                with open(SEITE, "rb") as f:
+                    roh = f.read()
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(roh)))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("Content-Security-Policy",
+                                     "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline';"
+                                     " connect-src 'self'; img-src 'self' data:")
+                    self.end_headers()
+                    self.wfile.write(roh)
+                except OSError:
+                    pass
+                return
             if self.path != "/v1/zahlen":
                 return self.antwort(404)
             # Als Bytes vergleichen: compare_digest wirft bei nicht-ASCII-str einen TypeError.

@@ -108,6 +108,43 @@ def test_halber_rumpf_blockiert_nicht_ewig():
     assert server.handler_fuer(None).timeout == 10
 
 
+def test_verlauf_ist_lueckenlos(con):
+    server.eintragen(con, GUT, date(2026, 10, 23))
+    server.eintragen(con, {**GUT, "geraet": "b" * 64}, date(2026, 10, 25))
+    server.eintragen(con, GUT, date(2026, 10, 25))
+    v = server.verlauf(con, date(2026, 10, 25), tage=3)
+    assert v == [{"tag": "2026-10-23", "geraete": 1}, {"tag": "2026-10-24", "geraete": 0},
+                 {"tag": "2026-10-25", "geraete": 2}]
+
+
+def test_uebersicht_nur_fuer_erlaubte_adresse(con):
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), server.handler_fuer(con))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    basis = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def get(pfad, email=None):
+        kopf = {"Cf-Access-Authenticated-User-Email": email} if email else {}
+        try:
+            r = urllib.request.urlopen(urllib.request.Request(basis + pfad, headers=kopf))
+            return r.status, r.headers.get("Content-Type"), r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, None, b""
+    try:
+        for pfad in ("/", "/v1/uebersicht"):
+            assert get(pfad)[0] == 403
+            assert get(pfad, "fremd@example.com")[0] == 403
+        code, typ, roh = get("/", "Marcusmartini83@gmail.com ")
+        assert code == 200 and typ.startswith("text/html") and b"Transkribor" in roh
+        code, _, roh = get("/v1/uebersicht", "marcus@martini.digital")
+        d = json.loads(roh)
+        assert code == 200 and len(d["verlauf"]) == 90 and "gesamt" in d
+        # Die Access-Freigabe fuer /v1/ping laesst Pfade darunter durch — der Server normalisiert nie.
+        assert get("/v1/ping/..%2Fzahlen")[0] == 404
+        assert get("/v1/ping/../uebersicht")[0] == 404
+    finally:
+        srv.shutdown()
+
+
 def test_http_ende_zu_ende(con, monkeypatch):
     monkeypatch.setattr(server, "TOKEN", "geheim")
     srv = ThreadingHTTPServer(("127.0.0.1", 0), server.handler_fuer(con))

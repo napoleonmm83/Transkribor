@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transkribor Nutzung</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --karte: #ffffff; --text: #14161a; --leise: #626a76; --linie: #e3e6eb;
+    --akzent: #4f46e5; --akzent-weich: rgba(79, 70, 229, .14); --balken: #e9ebf0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --karte: #171a20; --text: #eceef2; --leise: #9aa3b0; --linie: #262a33;
+      --akzent: #8b85ff; --akzent-weich: rgba(139, 133, 255, .18); --balken: #232731;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 24px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--leise); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 14px; }
+  .stand { color: var(--leise); font-size: 13px; }
+  .kacheln { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .karte { background: var(--karte); border: 1px solid var(--linie); border-radius: 14px; padding: 18px 20px; }
+  .kachel .wert { font-size: 34px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .kachel .name { color: var(--leise); font-size: 13px; }
+  .reihe { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  svg { display: block; width: 100%; height: 220px; }
+  .achse { fill: var(--leise); font-size: 11px; }
+  .gitter { stroke: var(--linie); stroke-width: 1; }
+  .liste { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .liste li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-size: 14px; }
+  .liste .zahl { font-variant-numeric: tabular-nums; color: var(--leise); }
+  .liste .spur { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--balken); overflow: hidden; }
+  .liste .spur span { display: block; height: 100%; background: var(--akzent); border-radius: 3px; }
+  .leer, .fehler { color: var(--leise); font-size: 14px; }
+  .fehler { color: #c2410c; }
+  @media (max-width: 760px) {
+    .kacheln { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reihe { grid-template-columns: 1fr; }
+    .kachel .wert { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Transkribor · Nutzung</h1>
+    <span class="stand" id="stand">Lädt …</span>
+  </header>
+
+  <section class="kacheln" aria-label="Kennzahlen">
+    <div class="karte kachel"><div class="wert" id="k-heute">–</div><div class="name">Geräte heute</div></div>
+    <div class="karte kachel"><div class="wert" id="k-7">–</div><div class="name">Geräte, letzte 7 Tage</div></div>
+    <div class="karte kachel"><div class="wert" id="k-30">–</div><div class="name">Geräte, letzte 30 Tage</div></div>
+    <div class="karte kachel"><div class="wert" id="k-gesamt">–</div><div class="name">Geräte insgesamt</div></div>
+  </section>
+
+  <section class="karte" aria-labelledby="t-verlauf">
+    <h2 id="t-verlauf">Aktive Geräte je Tag · 90 Tage</h2>
+    <svg id="verlauf" role="img" aria-label="Verlauf der aktiven Geräte je Tag" viewBox="0 0 1000 220"></svg>
+  </section>
+
+  <div class="reihe">
+    <section class="karte" aria-labelledby="t-version">
+      <h2 id="t-version">Fassungen · 30 Tage</h2>
+      <ul class="liste" id="versionen"></ul>
+    </section>
+    <section class="karte" aria-labelledby="t-plattform">
+      <h2 id="t-plattform">Betriebssysteme · 30 Tage</h2>
+      <ul class="liste" id="plattformen"></ul>
+    </section>
+  </div>
+</main>
+<script>
+  const zahl = n => new Intl.NumberFormat('de-CH').format(n)
+  const NAMEN = { win32: 'Windows', darwin: 'macOS', linux: 'Linux' }
+  const plattformName = p => { const [os, arch] = p.split('-'); return `${NAMEN[os] || os} (${arch})` }
+  const ns = 'http://www.w3.org/2000/svg'
+  const el = (tag, attrs = {}, text) => {
+    const e = document.createElementNS(ns, tag)
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v)
+    if (text !== undefined) e.textContent = text
+    return e
+  }
+
+  function liste(id, werte, name = x => x) {
+    const ul = document.getElementById(id)
+    ul.replaceChildren()
+    const eintraege = Object.entries(werte)
+    if (!eintraege.length) {
+      const li = document.createElement('li'); li.className = 'leer'; li.textContent = 'Noch keine Meldungen.'
+      ul.append(li); return
+    }
+    const max = Math.max(...eintraege.map(([, n]) => n))
+    for (const [k, n] of eintraege) {
+      const li = document.createElement('li')
+      const t = document.createElement('span'); t.textContent = name(k)
+      const z = document.createElement('span'); z.className = 'zahl'; z.textContent = zahl(n)
+      const spur = document.createElement('div'); spur.className = 'spur'
+      const fuell = document.createElement('span'); fuell.style.width = `${(n / max) * 100}%`
+      spur.append(fuell); li.append(t, z, spur); ul.append(li)
+    }
+  }
+
+  function kurve(punkte) {
+    const svg = document.getElementById('verlauf')
+    svg.replaceChildren()
+    // Zeichenbreite = echte Breite: sonst staucht das SVG auf schmalen Schirmen die Beschriftung.
+    const B = Math.max(280, Math.round(svg.clientWidth || 1000)), H = 220, L = 34, U = 22, O = 8
+    svg.setAttribute('viewBox', `0 0 ${B} ${H}`)
+    const max = Math.max(1, ...punkte.map(p => p.geraete))
+    const x = i => L + (i / Math.max(1, punkte.length - 1)) * (B - L - 8)
+    const y = n => O + (1 - n / max) * (H - O - U)
+    for (const s of [0, .5, 1]) {
+      const v = Math.round(max * s)
+      svg.append(el('line', { class: 'gitter', x1: L, x2: B, y1: y(v), y2: y(v) }))
+      svg.append(el('text', { class: 'achse', x: 0, y: y(v) + 4 }, zahl(v)))
+    }
+    const linie = punkte.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.geraete).toFixed(1)}`).join('')
+    svg.append(el('path', { d: `${linie}L${x(punkte.length - 1)},${y(0)}L${x(0)},${y(0)}Z`, fill: 'var(--akzent-weich)' }))
+    svg.append(el('path', { d: linie, fill: 'none', stroke: 'var(--akzent)', 'stroke-width': 2, 'stroke-linejoin': 'round' }))
+    for (const i of [0, Math.floor(punkte.length / 2), punkte.length - 1]) {
+      const [jj, mm, tt] = punkte[i].tag.split('-')
+      svg.append(el('text', { class: 'achse', x: x(i), y: H - 4, 'text-anchor': i ? (i === punkte.length - 1 ? 'end' : 'middle') : 'start' }, `${tt}.${mm}.${jj}`))
+    }
+    const heute = punkte[punkte.length - 1]
+    svg.append(el('title', {}, `Heute ${zahl(heute.geraete)} Geräte, Spitze ${zahl(max)}`))
+  }
+
+  async function laden() {
+    const stand = document.getElementById('stand')
+    try {
+      const r = await fetch('/v1/uebersicht', { cache: 'no-store' })
+      if (!r.ok) throw new Error(`Antwort ${r.status}`)
+      const d = await r.json()
+      document.getElementById('k-heute').textContent = zahl(d.heute)
+      document.getElementById('k-7').textContent = zahl(d['7_tage'])
+      document.getElementById('k-30').textContent = zahl(d['30_tage'])
+      document.getElementById('k-gesamt').textContent = zahl(d.gesamt)
+      letzterVerlauf = d.verlauf
+      kurve(d.verlauf)
+      liste('versionen', d.version_30_tage)
+      liste('plattformen', d.plattform_30_tage, plattformName)
+      stand.className = 'stand'
+      stand.textContent = `Stand ${new Date().toLocaleString('de-CH', { dateStyle: 'medium', timeStyle: 'short' })}`
+    } catch (e) {
+      stand.className = 'fehler'
+      stand.textContent = `Zahlen nicht ladbar (${e.message}).`
+    }
+  }
+  let letzterVerlauf = null
+  addEventListener('resize', () => { if (letzterVerlauf) kurve(letzterVerlauf) })
+  laden()
+  setInterval(laden, 5 * 60 * 1000)
+</script>
+</body>
+</html>

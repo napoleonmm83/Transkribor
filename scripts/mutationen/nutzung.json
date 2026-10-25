@@ -48,6 +48,20 @@
       "rot": ["test_fehlerdruck_ohne_adresse"]
     },
     {
+      "id": "N9 Uebersicht ohne Anmeldung lesbar",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "                if not self.angemeldet():\n                    return self.antwort(403)",
+      "nach": "                if False:\n                    return self.antwort(403)",
+      "rot": ["test_uebersicht_nur_fuer_erlaubte_adresse"]
+    },
+    {
+      "id": "N10 Verlauf laesst Tage ohne Meldung aus",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "\"geraete\": roh.get((ab + timedelta(days=i)).isoformat(), 0)}\n            for i in range(tage)]",
+      "nach": "\"geraete\": roh.get((ab + timedelta(days=i)).isoformat(), 0)}\n            for i in range(tage) if (ab + timedelta(days=i)).isoformat() in roh]",
+      "rot": ["test_verlauf_ist_lueckenlos"]
+    },
+    {
       "id": "N8 kein Socket-Timeout",
       "datei": "docs/nutzung-server/server.py",
       "von": "        timeout = 10\n",
