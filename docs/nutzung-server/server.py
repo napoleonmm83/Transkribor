@@ -107,7 +107,8 @@ ERLAUBT = {a.strip().lower() for a in os.environ.get(
 ACCESS_TEAM = os.environ.get("NUTZUNG_ACCESS_TEAM", "https://martinidigital.cloudflareaccess.com")
 ACCESS_AUD = os.environ.get("NUTZUNG_ACCESS_AUD", "d02fa57701511639002a4596ef3a90796ebc1767b2c7d4a62ecfb77733718ee2")
 _DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")  # DER-Praefix SHA-256 (RFC 8017)
-_schluessel = {"zeit": 0.0, "keys": {}}
+_schluessel = {"zeit": 0.0, "versuch": 0.0, "keys": {}}
+_schluessel_sperre = threading.Lock()
 
 
 def _b64(s):
@@ -136,13 +137,17 @@ def _holen_schluessel():
 def schluessel(kid, holen=_holen_schluessel, jetzt=None):
     """Schluessel je kid, eine Stunde gemerkt; ein unbekanntes kid laedt hoechstens einmal je Minute nach."""
     t = jetzt if jetzt is not None else time.time()
-    alt = t - _schluessel["zeit"]
-    if alt > 3600 or (kid not in _schluessel["keys"] and alt > 60):
-        try:
-            _schluessel["keys"], _schluessel["zeit"] = holen(), t
-        except Exception as e:
-            print("Access-Schluessel nicht ladbar:", type(e).__name__, file=sys.stderr)
-    return _schluessel["keys"].get(kid)
+    with _schluessel_sperre:
+        seit_versuch = t - _schluessel.get("versuch", 0.0)
+        faellig = t - _schluessel["zeit"] > 3600 or kid not in _schluessel["keys"]
+        # Jeder Versuch zaehlt fuer die Minutenbremse — auch ein gescheiterter, sonst holte jede Anfrage neu.
+        if faellig and seit_versuch > 60:
+            _schluessel["versuch"] = t
+            try:
+                _schluessel["keys"], _schluessel["zeit"] = holen(), t
+            except Exception as e:
+                print("Access-Schluessel nicht ladbar:", type(e).__name__, file=sys.stderr)
+        return _schluessel["keys"].get(kid)
 
 
 def access_email(token, finde=schluessel, jetzt=None):
