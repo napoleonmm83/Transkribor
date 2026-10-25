@@ -74,6 +74,8 @@ ignore = ["E501"]   # Zeilenlänge ist Sache des Formatierers, nicht des Linters
 # als build/test_bilder.py, zwei als scripts/test_*.py.
 "**/test_*.py" = ["S101"]
 "**/*_test.py" = ["S101"]
+# Der Ende-zu-Ende-Test spricht seinen eigenen Server auf 127.0.0.1 per http an.
+"docs/nutzung-server/test_server.py" = ["S101", "S310"]
 
 [tool.mypy]
 python_version = "3.13"

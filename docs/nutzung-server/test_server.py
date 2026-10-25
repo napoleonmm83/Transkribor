@@ -1,12 +1,13 @@
 import json
+import socket
 import threading
+import time
 import urllib.error
 import urllib.request
 from datetime import date
 from http.server import ThreadingHTTPServer
 
 import pytest
-
 import server
 
 G = "a" * 64
@@ -45,6 +46,13 @@ def test_tabelle_hat_keine_ip_spalte(con):
     assert spalten == ["tag", "geraet", "version", "plattform"]
 
 
+def test_ueber_tage_zaehlt_ein_geraet_einmal(con):
+    server.eintragen(con, GUT, date(2026, 10, 24))
+    server.eintragen(con, GUT, date(2026, 10, 25))
+    z = server.zahlen(con, date(2026, 10, 25))
+    assert (z["7_tage"], z["gesamt"]) == (1, 1)
+
+
 def test_ein_geraet_zaehlt_je_tag_einmal(con):
     t = date(2026, 10, 25)
     server.eintragen(con, GUT, t)
@@ -62,6 +70,42 @@ def test_fenster_und_aufraeumen(con):
     assert (z["heute"], z["7_tage"], z["30_tage"], z["gesamt"]) == (0, 0, 1, 2)
     server.aufraeumen(con, date(2026, 10, 25))
     assert server.zahlen(con, date(2026, 10, 25))["gesamt"] == 1
+
+
+def test_kein_log_mit_adresse(con, capfd):
+    """Weder Zugriffszeile noch Fehlerdruck darf die Client-Adresse tragen (README-Zusage)."""
+    srv = server.Server(("127.0.0.1", 0), server.handler_fuer(con))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port = srv.server_address[1]
+    try:
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/gesund").read()
+        s = socket.create_connection(("127.0.0.1", port))
+        s.sendall(b"POST /v1/ping HTTP/1.1\r\nHost: x\r\nContent-Length: 50\r\n\r\n{\"a\":")
+        s.close()
+        time.sleep(0.3)
+    finally:
+        srv.shutdown()
+    aus = capfd.readouterr()
+    assert "127.0.0.1" not in aus.out + aus.err
+    assert "GET /gesund" not in aus.out + aus.err
+
+
+def test_fehlerdruck_ohne_adresse(capfd):
+    srv = server.Server(("127.0.0.1", 0), server.handler_fuer(None))
+    try:
+        try:
+            raise ConnectionResetError("weg")
+        except ConnectionResetError:
+            srv.handle_error(None, ("203.0.113.7", 4711))
+    finally:
+        srv.server_close()
+    aus = capfd.readouterr()
+    assert "203.0.113.7" not in aus.out + aus.err
+    assert "ConnectionResetError" in aus.err  # Positivkontrolle: es wurde gedruckt
+
+
+def test_halber_rumpf_blockiert_nicht_ewig():
+    assert server.handler_fuer(None).timeout == 10
 
 
 def test_http_ende_zu_ende(con, monkeypatch):
@@ -89,6 +133,7 @@ def test_http_ende_zu_ende(con, monkeypatch):
         assert post({**GUT, "ip": "x"}) == 400
         assert get("/v1/zahlen")[0] == 401
         assert get("/v1/zahlen", "falsch")[0] == 401
+        assert get("/v1/zahlen", "fälsch")[0] == 401  # nicht-ASCII: 401, kein Absturz
         code, z = get("/v1/zahlen", "geheim")
         assert code == 200 and z["heute"] == 1
     finally:

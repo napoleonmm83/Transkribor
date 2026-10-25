@@ -254,12 +254,17 @@ export function VersionPage() {
                   <span className="font-medium">Nutzung mitzählen (einmal am Tag)</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
                     Damit wir wissen, wie viele Geräte Transkribor nutzen und welche Versionen und Systeme wir
-                    weiter unterstützen müssen. Keine Inhalte, keine Namen, keine IP-Adresse wird gespeichert.{' '}
+                    weiter unterstützen müssen. Keine Inhalte, keine Namen; deine IP-Adresse speichern wir nicht.{' '}
                     <a className="underline underline-offset-2 hover:text-foreground" href={README_NUTZUNG}
                       target="_blank" rel="noreferrer">Mehr dazu</a>
                   </span>
                 </span>
               </label>
+              {nu.zustand && !nu.zustand.nutzlast && (
+                <p className="mt-2 ml-6.5 text-xs text-muted-foreground" data-testid="ohne-kennung">
+                  Auf diesem Gerät lässt sich keine Gerätenummer bilden — es wird nichts gesendet.
+                </p>
+              )}
               {nu.zustand?.nutzlast && (
                 <div className="mt-2 ml-6.5 text-xs text-muted-foreground">
                   <p>Das wird gesendet{nu.zustand.an ? '' : ' (nur wenn eingeschaltet)'}:</p>

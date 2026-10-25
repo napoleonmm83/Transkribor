@@ -91,7 +91,8 @@ async function tick({ schalterPfad, url, last, holen = fetch, jetzt = new Date()
   const heute = tag(jetzt)
   if (z.an !== true) return 'aus'
   if (!faellig(z, heute)) return 'erledigt'
-  // Eine Funktion wird erst hier gerufen: die Kennung wird nur gelesen, wenn wirklich gesendet wird.
+  // Eine Funktion wird erst hier gerufen: tick() selbst liest die Kennung nur, wenn gesendet wird.
+  // (Die Versionsseite liest sie zur Anzeige ohnehin, ueber nutzung:status in main.js.)
   const l = typeof last === 'function' ? last() : last
   if (!l) return 'ohne-kennung'
   try {
@@ -101,6 +102,9 @@ async function tick({ schalterPfad, url, last, holen = fetch, jetzt = new Date()
       body: JSON.stringify(l),
       signal: AbortSignal.timeout(FRIST_MS),
     })
+    // 4xx (ausser 429) heisst: der Server nimmt DIESE Nutzlast nie an — bis morgen nicht wieder fragen.
+    const abgelehnt = antwort.status >= 400 && antwort.status < 500 && antwort.status !== 429
+    if (abgelehnt) { schreiben(schalterPfad, { ...lesen(schalterPfad), zuletzt: heute }); return 'abgelehnt' }
     if (!antwort.ok) return 'fehler'
     // Neu lesen: der Nutzer kann waehrend der Anfrage abgeschaltet haben.
     schreiben(schalterPfad, { ...lesen(schalterPfad), zuletzt: heute })

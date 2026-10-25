@@ -533,9 +533,10 @@ ipcMain.handle('protokollOeffnen', () => {
 // Opt-in Nutzungszaehlung: Entscheidungen in nutzung.js, hier nur die Leitung. Der Schalter
 // liegt neben fehlerberichte.json; die Nutzlast ist dieselbe, die die Versionsseite anzeigt.
 function nutzungPfad() { return nutzung.pfad(app.getPath('userData')) }
-let nutzungLastCache
+// Nur ein Erfolg wird gemerkt: ein einmal gescheitertes `reg query` (Startlast) versucht es spaeter neu.
+let nutzungLastCache = null
 function nutzungLast() {
-  if (nutzungLastCache === undefined) {
+  if (!nutzungLastCache) {
     nutzungLastCache = nutzung.nutzlast({ kennung: nutzung.rechnerKennung(), version: app.getVersion(),
       plattform: process.platform, arch: process.arch })
   }

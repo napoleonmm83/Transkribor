@@ -20,18 +20,39 @@
       "rot": ["test_falsche_form_wird_abgewiesen"]
     },
     {
-      "id": "N3 ein Geraet zaehlt je Tag mehrfach",
+      "id": "N3 ein Geraet zaehlt ueber mehrere Tage mehrfach",
       "datei": "docs/nutzung-server/server.py",
-      "von": "primary key (tag, geraet)",
-      "nach": "primary key (tag, geraet, version)",
-      "rot": ["test_ein_geraet_zaehlt_je_tag_einmal"]
+      "von": "return con.execute(\"select count(distinct geraet) from ping where tag >= ?\", (ab,)).fetchone()[0]",
+      "nach": "return con.execute(\"select count(geraet) from ping where tag >= ?\", (ab,)).fetchone()[0]",
+      "rot": ["test_ueber_tage_zaehlt_ein_geraet_einmal"]
     },
     {
       "id": "N4 Zahlen ohne Token lesbar",
       "datei": "docs/nutzung-server/server.py",
-      "von": "if not TOKEN or not hmac.compare_digest(auth, f\"Bearer {TOKEN}\"):",
+      "von": "if not TOKEN or not hmac.compare_digest(auth, f\"Bearer {TOKEN}\".encode()):",
       "nach": "if False:",
       "rot": ["test_http_ende_zu_ende"]
+    },
+    {
+      "id": "N6 Zugriffszeile mit Client-Adresse wird gedruckt",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        def log_message(self, *a):  # kein Zugriffslog: es truege die IP\n            pass",
+      "nach": "        def log_message(self, *a):  # kein Zugriffslog: es truege die IP\n            super().log_message(*a)",
+      "rot": ["test_kein_log_mit_adresse"]
+    },
+    {
+      "id": "N7 Fehlerdruck traegt die Client-Adresse",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        print(\"Fehler bei einer Anfrage:\", sys.exc_info()[0].__name__, file=sys.stderr)",
+      "nach": "        super().handle_error(request, client_address)",
+      "rot": ["test_fehlerdruck_ohne_adresse"]
+    },
+    {
+      "id": "N8 kein Socket-Timeout",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "        timeout = 10\n",
+      "nach": "        timeout = None\n",
+      "rot": ["test_halber_rumpf_blockiert_nicht_ewig"]
     },
     {
       "id": "N5 Aufraeumen loescht nichts",
