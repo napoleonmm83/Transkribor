@@ -96,7 +96,7 @@ gehen automatisch nur, wenn du es ausdrücklich einschaltest, an einen Server, d
 betreiben. Dateien werden nicht angehängt; Fehlermeldungen können unbekannten Text enthalten
 (siehe „Etwas geht schief“ weiter unten). Ebenso nur auf ausdrückliches Ja meldet die App
 einmal am Tag, dass sie benutzt wird — drei Angaben, keine Inhalte (siehe „Zählt Transkribor
-mit, wer es benutzt?“ weiter unten; ab der nächsten Fassung).
+mit, wer es benutzt?“ weiter unten; ab v0.61.0).
 
 <details>
 <summary>Und die Textkorrektur?</summary>
@@ -744,20 +744,19 @@ manuellen Bericht nicht angehängt. Ist sie sehr gross geworden, liegen ältere 
 <details>
 <summary><strong>Zählt Transkribor mit, wer es benutzt?</strong></summary>
 
-Nur, wenn du es erlaubst (ab der nächsten Fassung). Beim ersten Start fragt Transkribor einmal
+Nur, wenn du es erlaubst (ab v0.61.0). Beim ersten Start fragt Transkribor einmal
 nach; „Nein“ ist die Vorgabe. Umstellen kannst du es jederzeit unter **Version**.
 
 **Was gesendet wird** — einmal am Tag, genau diese drei Angaben und nichts sonst:
 
-```json
-{ "geraet": "3f9a…(64 Zeichen)", "version": "0.61.0", "plattform": "win32-x64" }
-```
+- **eine Gerätenummer** — berechnet aus der Kennung, die dein Betriebssystem deinem Computer
+  gibt. Sie erkennt dasselbe Gerät wieder, auch nach einer Neuinstallation von Transkribor,
+  verrät aber weder deinen Namen noch den Namen des Computers. Die Kennung selbst verlässt den
+  Rechner nie.
+- **die Fassung** von Transkribor, zum Beispiel 0.61.0
+- **das Betriebssystem samt Prozessortyp**, zum Beispiel Windows auf 64-Bit-Intel/AMD
 
-- **geraet** ist eine Nummer, die aus der Kennung berechnet wird, die dein Betriebssystem deinem
-  Computer gibt. Sie erkennt dasselbe Gerät wieder, auch nach einer Neuinstallation von
-  Transkribor, verrät aber weder deinen Namen noch den Namen des Computers. Die Kennung selbst
-  verlässt den Rechner nie. Deine eigene Nummer siehst du unter **Version**.
-- **version** ist die Fassung von Transkribor, **plattform** das Betriebssystem.
+Unter **Version** siehst du genau, was dein Gerät sendet — Zeichen für Zeichen.
 
 **Wofür:** damit wir wissen, wie viele Geräte Transkribor benutzen und welche Fassungen und
 Betriebssysteme wir weiter unterstützen müssen.
@@ -904,6 +903,19 @@ Die Desktop-App ist der empfohlene Weg; alles darin läuft aber auch direkt aus 
 Frontend mit Hot-Reload: `npm --prefix webtool/frontend run dev` (Vite auf :5173, `/api` wird
 zum FastAPI-Backend auf :8000 durchgereicht). Installer selbst bauen:
 `npm install && npm run dist` → `dist\` (Windows `.exe`, macOS `.dmg`, Linux `AppImage`/`.deb`).
+
+**Nutzungszählung (ab v0.61.0):** `electron/nutzung.js` sendet nach Zustimmung (Schalter
+`nutzung.json` in `userData`) höchstens einmal je Kalendertag per `POST /v1/ping` an
+`https://transcribor.martini.digital` (überschreibbar per `-c.extraMetadata.nutzungUrl=…`):
+
+```json
+{ "geraet": "<sha256 hex, 64 Zeichen>", "version": "0.61.0", "plattform": "win32-x64" }
+```
+
+`geraet` = sha256(`transkribor-nutzung-v1:` + Rechnerkennung: Windows `MachineGuid`, macOS
+`IOPlatformUUID`, Linux `/etc/machine-id`). Der Empfänger liegt in `docs/nutzung-server/`
+(Python-Standardbibliothek + SQLite, Dockerfile für Coolify); seine Übersicht unter `/` steht
+hinter Cloudflare Access und prüft zusätzlich das Access-Token selbst.
 
 **Automatische Fehlerberichte (Bugsink, #530):** Die App meldet an ein selbst gehostetes
 [Bugsink](https://www.bugsink.com/) (Sentry-kompatibel, `@sentry/electron` im Hauptprozess).

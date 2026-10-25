@@ -86,7 +86,19 @@ function faellig(zustand, heute) { return zustand.an === true && zustand.zuletzt
  * nach einer 2xx-Antwort. Wirft nie — ein fehlender Server darf die App nicht stoeren.
  * Gibt zurueck, was passiert ist ('aus' | 'erledigt' | 'ohne-kennung' | 'gesendet' | 'fehler').
  */
-async function tick({ schalterPfad, url, last, holen = fetch, jetzt = new Date() }) {
+// Laufende Ticks je Schalterdatei: Zeitgeber und Einschalten koennen gleichzeitig feuern; beide
+// laesen `zuletzt !== heute` und sendeten doppelt. Ein zweiter wartet auf den ersten.
+const laufend = new Map()
+
+function tick(opt) {
+  const vorher = laufend.get(opt.schalterPfad)
+  if (vorher) return vorher.then(() => 'laeuft')
+  const p = tickEinmal(opt).finally(() => laufend.delete(opt.schalterPfad))
+  laufend.set(opt.schalterPfad, p)
+  return p
+}
+
+async function tickEinmal({ schalterPfad, url, last, holen = fetch, jetzt = new Date() }) {
   const z = lesen(schalterPfad)
   const heute = tag(jetzt)
   if (z.an !== true) return 'aus'
