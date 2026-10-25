@@ -240,7 +240,8 @@ def test_uebersicht_nur_mit_gueltigem_access_token(con, rsa, monkeypatch):
         assert kopf["Cache-Control"] == "no-store"
         assert "default-src 'none'" in kopf["Content-Security-Policy"]
         assert "frame-ancestors 'none'" in kopf["Content-Security-Policy"]
-        code, _, roh = get("/v1/uebersicht", gut)
+        code, kopf, roh = get("/v1/uebersicht", gut)
+        assert kopf["Cache-Control"] == "no-store"  # sonst cacht Cloudflare die Zahlen
         d = json.loads(roh)
         assert code == 200 and len(d["verlauf"]) == 90 and "gesamt" in d
         # Das Access-Token ersetzt den Lese-Token fuer Skripte nicht.
@@ -274,6 +275,7 @@ def test_http_ende_zu_ende(con, monkeypatch):
             return e.code, None
     try:
         assert post(GUT) == 200
+        assert get("/gesund")[1] == {"ok": True}  # oeffentlich: keine Zahlen
         assert post({**GUT, "ip": "x"}) == 400
         assert get("/v1/zahlen")[0] == 401
         assert get("/v1/zahlen", "falsch")[0] == 401

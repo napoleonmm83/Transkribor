@@ -190,6 +190,9 @@ def handler_fuer(con):
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(roh)))
+                # Pflicht: die Zone cacht aggressiv, ohne diesen Kopf lieferte Cloudflare alte Zahlen
+                # aus (gemessen cf-cache-status HIT, Age 347 auf /gesund; die Uebersicht zeigte 0).
+                self.send_header("Cache-Control", "no-store")
                 self.end_headers()
                 self.wfile.write(roh)
             except OSError:  # Client hat aufgelegt — nichts zu melden
@@ -220,6 +223,7 @@ def handler_fuer(con):
             # Pfade werden WOERTLICH verglichen, nie normalisiert: die Access-Freigabe fuer /v1/ping laesst
             # auch /v1/ping/..%2Fzahlen durch, und das darf hier nur 404 sein.
             if self.path == "/gesund":
+                # Bewusst ohne Zahlen: /gesund ist oeffentlich, die Nutzungszahlen sind es nicht.
                 return self.antwort(200, {"ok": True})
             if self.path in ("/", "/v1/uebersicht"):
                 if not self.angemeldet():

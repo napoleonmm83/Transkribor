@@ -90,6 +90,13 @@
       "rot": ["test_verlauf_ist_lueckenlos"]
     },
     {
+      "id": "N15 JSON-Antworten ohne no-store (Cloudflare cacht alte Zahlen)",
+      "datei": "docs/nutzung-server/server.py",
+      "von": "                self.send_header(\"Cache-Control\", \"no-store\")\n                self.end_headers()\n                self.wfile.write(roh)\n            except OSError:  # Client hat aufgelegt",
+      "nach": "                self.end_headers()\n                self.wfile.write(roh)\n            except OSError:  # Client hat aufgelegt",
+      "rot": ["test_uebersicht_nur_mit_gueltigem_access_token"]
+    },
+    {
       "id": "N8 kein Socket-Timeout",
       "datei": "docs/nutzung-server/server.py",
       "von": "        timeout = 10\n",
