@@ -516,3 +516,55 @@ def test_teuer_muss_ein_bool_sein(tmp_path):
         assert "teuer" in str(f)
     else:
         raise AssertionError("`teuer` als Text wurde still angenommen")
+
+
+def _browser_und_normal(monkeypatch):
+    browser = _plan("browser", ["webtool/x.py"])
+    browser.lokal = True
+    monkeypatch.setattr(mutationen_lauf, "lade_plaene",
+                        lambda w: [browser, _plan("normal", ["webtool/x.py"])])
+    gefahren = []
+
+    class Ergebnis:
+        returncode = 0
+
+    def falsch(argv, **k):
+        gefahren.append(pathlib_name(argv[argv.index("--plan") + 1]))
+        return Ergebnis()
+
+    monkeypatch.setattr(mutationen_lauf.subprocess, "run", falsch)
+    return gefahren
+
+
+def pathlib_name(pfad):
+    return Path(pfad).stem
+
+
+def test_ohne_lokal_faehrt_den_browser_plan_nicht_nennt_ihn_aber(monkeypatch, capsys):
+    """CI ohne Browser (Entscheid 2026-10-25): der Plan wird genannt, nie still weggelassen
+    und nie als bestanden gezaehlt."""
+    gefahren = _browser_und_normal(monkeypatch)
+    assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle", "--ohne-lokal"]) == 0
+    aus = capsys.readouterr().out
+    assert gefahren == ["normal"]
+    assert "LOKAL (nicht in CI, lokal fahren): browser" in aus
+    assert "1 von 1 bestanden, 1 NUR LOKAL" in aus
+
+
+def test_ohne_schalter_faehrt_auch_den_browser_plan(monkeypatch):
+    gefahren = _browser_und_normal(monkeypatch)
+    assert mutationen_lauf.main(["--repo", str(WURZEL), "--alle"]) == 0
+    assert sorted(gefahren) == ["browser", "normal"]
+
+
+def test_lokal_muss_ein_bool_sein(tmp_path):
+    ordner = tmp_path / "scripts" / "mutationen"
+    ordner.mkdir(parents=True)
+    (ordner / "x.json").write_text(json.dumps(
+        {"test": "t", "pfade": ["a.py"], "mutationen": [], "lokal": "ja"}), encoding="utf-8")
+    try:
+        mutationen_lauf.lade_plaene(tmp_path)
+    except ValueError as f:
+        assert "lokal" in str(f)
+    else:
+        raise AssertionError("`lokal` als Text wurde still angenommen")
