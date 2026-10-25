@@ -6,6 +6,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { VersionPage } from '@/pages/VersionPage'
 import { ProjektPalette } from '@/components/ProjektPalette'
 import { FehlerberichteFrage } from '@/components/FehlerberichteFrage'
+import { NutzungFrage } from '@/components/NutzungFrage'
 import { AppShell } from '@/components/AppShell'
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
           Palette: oberste Stelle innerhalb der AppShell, damit sie auf jeder Route greift.
           Sie zeigt sich nur, solange der Hauptprozess `gefragt: null` meldet. */}
       <FehlerberichteFrage />
+      <NutzungFrage />
       <Routes>
         <Route path="/" element={<HomeGallery />} />
         <Route path="/einstellungen" element={<SettingsPage />} />

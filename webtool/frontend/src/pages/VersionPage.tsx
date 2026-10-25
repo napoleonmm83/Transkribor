@@ -3,6 +3,7 @@ import { ChevronRight, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useUpdate } from '@/hooks/useUpdate'
 import { useFehlerberichte } from '@/hooks/useFehlerberichte'
+import { useNutzung } from '@/hooks/useNutzung'
 import { PageHeader } from '@/components/PageHeader'
 import { Abschnitt } from '@/components/Abschnitt'
 import { Notizen } from '@/components/Notizen'
@@ -15,6 +16,7 @@ import { tag } from '@/lib/utils'
 const RELEASES = 'https://github.com/napoleonmm83/Transkribor/releases'
 /** Der README-Abschnitt, der aufzählt, was ein automatischer Fehlerbericht trägt (#530). */
 const README_FEHLERBERICHTE = 'https://github.com/napoleonmm83/Transkribor#fehlerberichte'
+const README_NUTZUNG = 'https://github.com/napoleonmm83/Transkribor#nutzung'
 
 /**
  * Der Grund kommt als Code aus Electron — der Satz gehört hierher, wo Umlaute erlaubt sind.
@@ -52,6 +54,7 @@ function mb(bytes: number, stellen = 0) {
 export function VersionPage() {
   const { zustand: upd, pruefen, laden, installieren, protokollOeffnen, berichtVorschau, berichtSenden } = useUpdate()
   const fb = useFehlerberichte()
+  const nu = useNutzung()
   // Ausserhalb von Electron gibt es keinen Update-Zustand — dann ist der zur Bauzeit
   // eingesetzte Wert die einzige (und richtige) Quelle, wie in der Fusszeile.
   const version = upd?.version ?? __APP_VERSION__
@@ -232,6 +235,41 @@ export function VersionPage() {
                 </span>
               </span>
             </label>
+          )}
+          {/* Opt-in Nutzungszählung: Schalter + das EXAKTE Objekt, das dieses Gerät sendet. */}
+          {nu && (
+            <div className="mt-4">
+              <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-primary"
+                  checked={nu.zustand?.an ?? false}
+                  disabled={!nu.zustand}
+                  onChange={e => {
+                    nu.setzen(e.target.checked)
+                      .catch(() => toast.error('Der Schalter liess sich nicht speichern — bitte noch einmal versuchen.'))
+                  }}
+                />
+                <span>
+                  <span className="font-medium">Nutzung mitzählen (einmal am Tag)</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Damit wir wissen, wie viele Geräte Transkribor nutzen und welche Versionen und Systeme wir
+                    weiter unterstützen müssen. Keine Inhalte, keine Namen, keine IP-Adresse wird gespeichert.{' '}
+                    <a className="underline underline-offset-2 hover:text-foreground" href={README_NUTZUNG}
+                      target="_blank" rel="noreferrer">Mehr dazu</a>
+                  </span>
+                </span>
+              </label>
+              {nu.zustand?.nutzlast && (
+                <div className="mt-2 ml-6.5 text-xs text-muted-foreground">
+                  <p>Das wird gesendet{nu.zustand.an ? '' : ' (nur wenn eingeschaltet)'}:</p>
+                  <pre className="mt-1 overflow-x-auto rounded bg-muted p-2 font-mono" data-testid="nutzlast">
+                    {JSON.stringify(nu.zustand.nutzlast, null, 2)}
+                  </pre>
+                  {nu.zustand.zuletzt && <p className="mt-1">Zuletzt gesendet: {nu.zustand.zuletzt}</p>}
+                </div>
+              )}
+            </div>
           )}
         </Abschnitt>
       )}
