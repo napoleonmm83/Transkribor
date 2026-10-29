@@ -196,8 +196,8 @@
       "datei": "webtool/jobs.py",
       "von": "            if erste_meldung and proc is not None:\n                try:\n                    bereinigungsfehler, bereinigt = _bereinige_fehlerprozess(proc)",
       "nach": "            if erste_meldung and proc is not None:\n                try:\n                    bereinigungsfehler, bereinigt = [], True  # P24: Prozess bleibt unbeachtet",
-      "rot": ["test_stdout_parserfehler_beendet_den_kindprozess"],
-      "gruen": ["test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen"]
+      "rot": ["test_stdout_parserfehler_beendet_den_kindprozess", "test_stderr_faden_beendet_den_job_statt_ihn_haengen_zulassen"],
+      "gruen": ["test_request_startet_sofort_wenn_frei"]
     },
     {
       "id": "P25 ein werfender Baumkill erhaelt keinen direkten Rueckfall",
