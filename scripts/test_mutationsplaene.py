@@ -25,6 +25,9 @@ daneben: zwei Stellen fuer eine Regel driften.
 """
 
 import json
+import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -37,6 +40,10 @@ import mutationen_lauf  # noqa: E402, I001
 WURZEL = Path(__file__).resolve().parents[1]
 PLANORDNER = WURZEL / "scripts" / "mutationen"
 PFLICHT = {"id", "datei", "von", "nach", "rot"}
+PYTEST_OPTIONEN_MIT_WERT = {
+    "-k", "-m", "-c", "-o", "-p", "--rootdir", "--basetemp",
+    "--confcutdir", "--ignore", "--ignore-glob", "--deselect", "--maxfail",
+}
 
 
 def plaene() -> list[Path]:
@@ -59,10 +66,7 @@ def _testkommando_fehler(plan: dict, wurzel: Path) -> str | None:
     if not teile:
         return "Testkommando ist nicht direkt startbar"
     if teile[:3] == ["python", "-m", "pytest"]:
-        optionen_mit_wert = {
-            "-k", "-m", "-c", "-o", "-p", "--rootdir", "--basetemp",
-            "--confcutdir", "--ignore", "--ignore-glob", "--deselect", "--maxfail",
-        }
+        optionen_mit_wert = PYTEST_OPTIONEN_MIT_WERT
         index = 3
         while index < len(teile):
             teil = teile[index]
@@ -343,6 +347,90 @@ def test_jeder_rot_und_gruen_name_existiert_wirklich():
     assert not fehlend, (
         f"{len(fehlend)} von {geprueft} Testnamen stehen in keiner Datei aus `pfade`:\n  "
         + "\n  ".join(fehlend[:10]))
+
+
+def _gesammelte_testnamen(teile: list[str]) -> set[str] | None:
+    """Welche Testfunktionen sammelt ein `python -m pytest …`-Kommando? None = nicht bestimmbar.
+
+    Statisch statt `--collect-only`: Sekunden statt eines pytest-Starts je Plan. Eine nodeid
+    liefert ihren letzten Teil, ein Datei- oder Ordnerpfad jedes `def test_…` darin. Ein
+    eigenes `-k`/`-m`/`--deselect` engt die Menge ein, die sich hier nicht nachrechnen laesst.
+    """
+    namen: set[str] = set()
+    index = 3
+    while index < len(teile):
+        teil = teile[index]
+        # Auch `-k=x`, `-kx`, `--deselect=x`: pytest nimmt alle Formen (gegnerisches Review).
+        if teil.startswith(("-k", "-m", "--deselect")):
+            return None
+        if teil in PYTEST_OPTIONEN_MIT_WERT:
+            index += 2
+            continue
+        if not teil.startswith("-"):
+            if "::" in teil:
+                namen.add(teil.rsplit("::", 1)[1].split("[", 1)[0])
+            else:
+                ziel = WURZEL / teil
+                dateien = [ziel] if ziel.is_file() else sorted(ziel.rglob("test_*.py"))
+                for d in dateien:
+                    namen.update(re.findall(r"^\s*(?:async\s+)?def\s+(test_\w+)",
+                                            d.read_text(encoding="utf-8", errors="replace"),
+                                            re.MULTILINE))
+        index += 1
+    return namen
+
+
+def _von_pytest_gesammelt(teile: list[str], env: dict) -> set[str]:
+    """`--collect-only` des Plankommandos; die Plan-`env` gilt wie im Treiber."""
+    lauf = subprocess.run(
+        # Das `-q` des Plans weg: zweimal `-q` druckt nur Zaehler je Datei, keine nodeids.
+        [sys.executable, *(t for t in teile[1:] if t != "-q"),
+         "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=WURZEL, capture_output=True, env={**os.environ, **env}, timeout=120)
+    ausgabe = lauf.stdout.decode("utf-8", errors="replace")
+    namen = {z.strip().rsplit("::", 1)[1].split("[", 1)[0]
+             for z in ausgabe.splitlines() if "::" in z}
+    # rc 5 = nichts gesammelt; leer waere sonst „alles fehlt" ohne Ursache.
+    assert lauf.returncode == 0 and namen, f"collect-only rc {lauf.returncode}:\n{ausgabe[-800:]}"
+    return namen
+
+
+def test_jeder_rot_und_gruen_name_wird_vom_testkommando_gesammelt():
+    """Ein `gruen`-Name, den das Testkommando nie startet, ist eine Gegenprobe ohne Lauf (#706).
+
+    `nur_benannte` haengt `-k` an, das filtert nur INNERHALB der gesammelten Tests. Steht ein
+    Name in `pfade`, aber nicht in der nodeid-Liste des Kommandos, laeuft er nie — und
+    „darf nicht rot werden" ist dann immer erfuellt. Der Waechter darueber sieht das nicht,
+    er sucht nur im Text der `pfade`.
+
+    Getragene Grenzen: gesammelt ist nicht gelaufen (ein `pytest.skip` bleibt stumm, #710);
+    und der Teilstring-Vergleich wie im Treiber laesst einen gekuerzten Namen auf einen
+    laengeren gesammelten Test fallen — dann urteilt die Gegenprobe ueber den falschen.
+    """
+    fehlend, uebersprungen = [], []
+    geprueft = 0
+    for datei in plaene():
+        plan = json.loads(datei.read_text(encoding="utf-8"))
+        teile = mutation._direkte_kommando_teile(plan["test"])
+        if not teile or teile[:3] != ["python", "-m", "pytest"]:
+            continue
+        namen = _gesammelte_testnamen(teile)
+        if namen is None:
+            # Eigener Filter: statisch nicht nachrechenbar, also pytest selbst fragen (~1 s).
+            uebersprungen.append(datei.name)
+            namen = _von_pytest_gesammelt(teile, plan.get("env", {}))
+        for m in plan["mutationen"]:
+            for art in ("rot", "gruen"):
+                for name in m.get(art, []):
+                    geprueft += 1
+                    # Teilstring wie im Treiber: Plaene duerfen Kurznamen ohne `test_` tragen.
+                    kern = name.split("[")[0]
+                    if not any(kern in n for n in namen):
+                        fehlend.append(f"{datei.name}/{m['id']}: {art} `{name}`")
+    assert geprueft > 0, "kein einziger rot/gruen-Name geprueft — die Schleife lief leer"
+    assert not fehlend, (
+        f"{len(fehlend)} von {geprueft} Testnamen sammelt das Testkommando ihres Plans nicht"
+        f" (per collect-only wegen eigenem Filter: {uebersprungen}):\n  " + "\n  ".join(fehlend[:10]))
 
 
 def test_globale_pfade_existieren_und_ziehen_JEDEN_plan():

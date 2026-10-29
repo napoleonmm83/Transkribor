@@ -5,6 +5,8 @@
     "scripts/test_mutationen_lauf.py",
     "scripts/test_mutationsplaene.py",
     "scripts/mutationen/deckel_finally.json",
+    "scripts/mutationen/cross_platform_alias_identity.json",
+    "scripts/mutationen/rename-base-feld.json",
     ".github/workflows/test.yml"
   ],
   "mutationen": [
@@ -300,6 +302,30 @@
       "nach": "    if not gewaehlt:",
       "rot": [
         "test_nur_browser_plaene_gewaehlt_heisst_nicht_keiner"
+      ]
+    },
+    {
+      "id": "L26 eine gruen-Gegenprobe faellt aus dem Testkommando (#706)",
+      "datei": "scripts/mutationen/cross_platform_alias_identity.json",
+      "von": " webtool/test_jobs.py::test_request_startet_sofort_wenn_frei",
+      "nach": "",
+      "rot": [
+        "test_jeder_rot_und_gruen_name_wird_vom_testkommando_gesammelt"
+      ],
+      "gruen": [
+        "test_jeder_rot_und_gruen_name_existiert_wirklich"
+      ]
+    },
+    {
+      "id": "L27 ein Plan-eigenes -k schliesst einen rot-Namen aus (#706, collect-only-Zweig)",
+      "datei": "scripts/mutationen/rename-base-feld.json",
+      "von": "-k \\\"zweimal_umbenennen or ",
+      "nach": "-k \\\"",
+      "rot": [
+        "test_jeder_rot_und_gruen_name_wird_vom_testkommando_gesammelt"
+      ],
+      "gruen": [
+        "test_jeder_rot_und_gruen_name_existiert_wirklich"
       ]
     }
   ],
