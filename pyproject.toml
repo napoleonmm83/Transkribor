@@ -17,7 +17,7 @@ dev = [
   "pytest==9.1.1",
   "hypothesis==6.169.4",
   "mutmut==3.8.0",
-  "av>=11,<19",
+  "av>=19,<20",
 ]
 
 [tool.ruff]
