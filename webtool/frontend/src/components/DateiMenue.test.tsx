@@ -11,7 +11,13 @@ import type { ProjectFile } from '@/lib/types'
 
 vi.mock('@/lib/api')
 
-const datei = (p: Partial<ProjectFile> = {}): ProjectFile =>
+// Die Meldung nach dem Umbenennen ist die einzige Stelle, an der der Nutzer erfaehrt, dass der
+// Server einen belegten Namen durchnummeriert hat — also wird sie hier beobachtet.
+const toastMock = vi.hoisted(() => Object.assign(vi.fn(),
+  { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }))
+vi.mock('sonner', () => ({ toast: toastMock }))
+
+const datei =(p: Partial<ProjectFile> = {}): ProjectFile =>
   ({ base: 'a', has_audio: true, has_raw: true, has_edit: false, has_md: false, ...p })
 
 /** Setzt editor.current auf „Datei a ist offen" — mit einem vergiss-Spy. Spielt den Editor, ohne
@@ -324,5 +330,37 @@ describe('Sprache, Sprecher & Korrektur', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Markdown herunterladen/ }))
     expect(api.fileMarkdownUrl).toHaveBeenCalledWith('P', 'a')
     expect(api.triggerDownload).toHaveBeenCalledWith('/api/projects/P/files/a/export/md', 'a.md')
+  })
+})
+
+describe('Umbenennen: der Server nummeriert einen belegten Namen durch', () => {
+  const umbenennen = async (eingabe: string) => {
+    zeigen(datei())
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Umbenennen' }))
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Neuer Name' }), { target: { value: eingabe } })
+    fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }))
+    await waitFor(() => expect(api.renameFile).toHaveBeenCalledWith('P', 'a', eingabe))
+  }
+
+  it('sagt an, wenn der vergebene Name vom getippten abweicht', async () => {
+    // Zwei Menschen heissen Antonia: der Nutzer tippt `Antonia`, der Server vergibt `Antonia-2`.
+    // Ein stilles Umbenennen liesse ihn einen Namen sehen, den er nie eingetippt hat.
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Antonia-2' })
+    await umbenennen('Antonia')
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1))
+    const text = String(toastMock.success.mock.calls[0][0])
+    expect(text).toContain('„Antonia“ gab es schon')
+    expect(text).toContain('„Antonia-2“')
+  })
+
+  it('meldet im Normalfall unveraendert den neuen Namen', async () => {
+    // Gegenprobe: ohne Abweichung darf der Hinweis nicht kommen (Daueralarm waere derselbe Schaden).
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Neu' })
+    await umbenennen('Neu')
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1))
+    const text = String(toastMock.success.mock.calls[0][0])
+    expect(text).toBe('„a“ heisst jetzt „Neu“')
+    expect(text).not.toContain('gab es schon')
   })
 })
