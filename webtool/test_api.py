@@ -3562,12 +3562,12 @@ def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path, monkey
     import webtool.app as appmod
     monkeypatch.setattr(appmod, "_UMBENENNEN_VERSUCHE", 1)
     t = _artefakte(tmp_path)
-    (t / "Ziel.md").write_text("belegt", encoding="utf-8")     # nur EIN Name kollidiert
+    (t / "Ziel.correction.json").write_text("belegt", encoding="utf-8")     # nur EIN Name kollidiert
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
     assert r.status_code == 409
     assert (t / "S1.json").exists() and (t / "S1.edit.json").exists()
     assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
-    assert (t / "Ziel.md").read_text(encoding="utf-8") == "belegt"
+    assert (t / "Ziel.correction.json").read_text(encoding="utf-8") == "belegt"
 
 
 def _fremde_aufnahme(tmp_path, base, ton_endung=".mp3", mit_text=True):
@@ -3613,11 +3613,13 @@ def test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch(client, tmp_pa
 def test_datei_umbenennen_nummeriert_auch_bei_belegtem_sidecar_durch(client, tmp_path):
     """Es muss nicht der Ton kollidieren — ein einziges Sidecar mit dem Zielnamen genuegt."""
     t = _artefakte(tmp_path)
-    (t / "Ziel.md").write_text("belegt", encoding="utf-8")
+    # `.correction.json` zaehlt NICHT als „bekannte Aufnahme“ (gemessen; `.md` schon): dieses
+    # Sidecar sieht nur die Einzelpruefung der Zieldateien — und genau die gilt es zu halten.
+    (t / "Ziel.correction.json").write_text("belegt", encoding="utf-8")
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
     assert r.status_code == 200 and r.json()["name"] == "Ziel-2"
-    assert (t / "Ziel.md").read_text(encoding="utf-8") == "belegt"
-    assert (t / "Ziel-2.md").exists()
+    assert (t / "Ziel.correction.json").read_text(encoding="utf-8") == "belegt"
+    assert (t / "Ziel-2.correction.json").exists()
 
 
 def test_datei_umbenennen_zaehlt_fremden_ton_anderer_endung_als_belegt(client, tmp_path):

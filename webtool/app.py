@@ -1857,9 +1857,12 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         def paare_fuer(kandidat: str):
             """(Paare, None), wenn `kandidat` als Name frei ist, sonst (None, belegter Dateiname)."""
             # Eine fremde Aufnahme, die nur Artefakte traegt, deren Endung die eigene nicht hat
-            # (nur `Antonia.json`, kein Ton), kollidiert mit keiner eigenen Zieldatei — sie ist
-            # trotzdem eine Aufnahme der Dateiliste, und der eigene Ton wanderte daneben. Dieselbe
-            # Menge, die `_transkript_gehoert_zu` fuer die Zuordnung benutzt.
+            # (nur `Antonia.json` ohne Ton, oder nur `Antonia.wav` ohne Transkript), kollidiert mit
+            # keiner eigenen Zieldatei — sie ist trotzdem eine Aufnahme der Dateiliste, und der
+            # eigene Ton wanderte daneben (zwei Toene bzw. fremder Text ueber fremdem Ton).
+            # Dieselbe Menge, die `_transkript_gehoert_zu` fuer die Zuordnung benutzt. Sie kennt
+            # NICHT jedes Sidecar (`.edit.json`, `.correction.json`, `.diar.json` zaehlen nicht,
+            # gemessen) — die Einzelpruefung unten bleibt deshalb fuer genau diese Faelle.
             form = paths.namensform(kandidat)
             if form != paths.namensform(base) and form in bekannte_basen:
                 return None, kandidat
@@ -1870,13 +1873,6 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                 if not _ziel_frei(p, ziel):
                     return None, kandidat + rest
                 paare.append((p, ziel))
-            # Fremder Ton anderer Endung: kollidiert mit keinem abgeleiteten Dateinamen (eine
-            # reine Audiodatei hat kein Sidecar), aber danach gaebe es zwei Toene zu EINER Aufnahme.
-            for ext in AUDIO_EXT:
-                fremd = os.path.join(adir, kandidat + ext)
-                if os.path.exists(fremd) and not any(
-                        os.path.exists(p) and os.path.samefile(p, fremd) for p in treffer):
-                    return None, kandidat + ext
             return paare, None
 
         # Ein belegter Name ist kein Fehler, den der Nutzer ausbaden soll: zwei verschiedene
