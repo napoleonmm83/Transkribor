@@ -1,5 +1,5 @@
 {
-  "test": "python -m pytest webtool/test_jobs.py webtool/test_api.py -k \"fertig or umbenennen or neu_transkribieren_bleibt\" -q",
+  "test": "python -m pytest webtool/test_jobs.py webtool/test_api.py -k \"fertig or umbenennen or neu_transkribieren_bleibt or rename_base\" -q",
   "pfade": [
     "webtool/jobs.py",
     "webtool/app.py",
@@ -68,12 +68,13 @@
       ]
     },
     {
-      "id": "R6 der alte Name bleibt nach dem Umbenennen im Lauf stehen (kein remove_base)",
+      "id": "R6 die umbenannte Aufnahme wird im laufenden Job nicht umgehaengt",
       "datei": "webtool/app.py",
-      "von": "jobs.remove_base(project, base)\n        # `umbenannt`",
-      "nach": "pass\n        # `umbenannt`",
+      "von": "jobs.rename_base(project, base, neu)",
+      "nach": "pass",
       "rot": [
-        "test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs"
+        "test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs",
+        "test_datei_umbenennen_rundreise_im_lauf_bleibt_fertig_und_gesperrt"
       ],
       "gruen": [
         "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
@@ -94,8 +95,8 @@
     {
       "id": "R8 das Suffix hat ein anderes Format als bei fetch.unique_base",
       "datei": "webtool/app.py",
-      "von": "f\"{neu}-{versuch}\"",
-      "nach": "f\"{neu}{versuch}\"",
+      "von": "f\"{wunsch}-{versuch}\"",
+      "nach": "f\"{wunsch}{versuch}\"",
       "rot": [
         "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch",
         "test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch"
@@ -126,6 +127,90 @@
       ],
       "gruen": [
         "test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf"
+      ]
+    },
+    {
+      "id": "R11 ein fremdes Transkript ohne Ton zaehlt nicht als belegt",
+      "datei": "webtool/app.py",
+      "von": "if form != paths.namensform(base) and form in bekannte_basen:",
+      "nach": "if False:",
+      "rot": [
+        "test_datei_umbenennen_zaehlt_ein_fremdes_transkript_ohne_ton_als_belegt"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ]
+    },
+    {
+      "id": "R12 die Durchnummerierung auf dem eigenen Namen benennt die Aufnahme auf sich selbst um",
+      "datei": "webtool/app.py",
+      "von": "if versuch > 1 and paths.namensform(kandidat) == paths.namensform(base):",
+      "nach": "if False:",
+      "rot": [
+        "test_datei_umbenennen_auf_den_eigenen_durchnummerierten_namen_aendert_nichts"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ]
+    },
+    {
+      "id": "R13 der Server meldet nie, dass er durchnummeriert hat",
+      "datei": "webtool/app.py",
+      "von": "\"durchnummeriert\": neu != wunsch}",
+      "nach": "\"durchnummeriert\": False}",
+      "rot": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_den_reinen_schreibweisenwechsel_nicht"
+      ]
+    },
+    {
+      "id": "R14 rename_base nimmt den neuen Namen nicht in den Bereich auf",
+      "datei": "webtool/jobs.py",
+      "von": "r[\"bases\"].add(neu)",
+      "nach": "pass",
+      "rot": [
+        "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
+      ],
+      "gruen": [
+        "test_rename_base_ruehrt_einen_lauf_ohne_die_aufnahme_nicht_an"
+      ]
+    },
+    {
+      "id": "R15 rename_base bucht den alten Namen nicht als entfernt",
+      "datei": "webtool/jobs.py",
+      "von": "r[menge].update(alt_namen or {alt})",
+      "nach": "pass",
+      "rot": [
+        "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
+      ],
+      "gruen": [
+        "test_rename_base_ruehrt_einen_lauf_ohne_die_aufnahme_nicht_an"
+      ]
+    },
+    {
+      "id": "R16 rename_base hebt eine fruehere Loeschbuchung des neuen Namens nicht auf",
+      "datei": "webtool/jobs.py",
+      "von": "_entferne_base_aliases(r.setdefault(menge, set()), neu)",
+      "nach": "pass",
+      "rot": [
+        "test_rename_base_hebt_eine_fruehere_loeschung_des_neuen_namens_auf"
+      ],
+      "gruen": [
+        "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
+      ]
+    },
+    {
+      "id": "R17 ein reiner Schreibweisenwechsel wird als Loeschung gebucht",
+      "datei": "webtool/jobs.py",
+      "von": "if _gleiche_base(alt, neu):",
+      "nach": "if False:",
+      "rot": [
+        "test_rename_base_bucht_bei_reinem_schreibweisenwechsel_nichts_als_entfernt"
+      ],
+      "gruen": [
+        "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
       ]
     }
   ]

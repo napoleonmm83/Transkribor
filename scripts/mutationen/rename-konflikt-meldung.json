@@ -6,10 +6,10 @@
   ],
   "mutationen": [
     {
-      "id": "F1 die Meldung nennt nie den vergebenen Namen (Abweichung wird verschwiegen)",
+      "id": "F1 die Meldung nennt nie den vergebenen Namen (Durchnummerierung wird verschwiegen)",
       "datei": "webtool/frontend/src/components/DateiMenue.tsx",
-      "von": "toast.success(res.name === neu\n",
-      "nach": "toast.success(true\n",
+      "von": "toast.success(res.durchnummeriert\n",
+      "nach": "toast.success(false\n",
       "rot": [
         "sagt an, wenn der vergebene Name vom getippten abweicht"
       ],
@@ -20,10 +20,23 @@
     {
       "id": "F2 die Meldung behauptet immer einen Namenskonflikt (Daueralarm)",
       "datei": "webtool/frontend/src/components/DateiMenue.tsx",
-      "von": "toast.success(res.name === neu\n",
-      "nach": "toast.success(false\n",
+      "von": "toast.success(res.durchnummeriert\n",
+      "nach": "toast.success(true\n",
       "rot": [
-        "meldet im Normalfall unveraendert den neuen Namen"
+        "meldet im Normalfall unveraendert den neuen Namen",
+        "verlaesst sich auf das Flag des Servers, nicht auf einen Namensvergleich"
+      ],
+      "gruen": [
+        "sagt an, wenn der vergebene Name vom getippten abweicht"
+      ]
+    },
+    {
+      "id": "F3 bei unveraendertem Namen wird trotzdem umbenannt gemeldet und der Editor vergessen",
+      "datei": "webtool/frontend/src/components/DateiMenue.tsx",
+      "von": "if (res.durchnummeriert && res.name === file.base) {",
+      "nach": "if (false) {",
+      "rot": [
+        "laesst den Editor in Ruhe, wenn die Durchnummerierung bei der Aufnahme selbst ankommt"
       ],
       "gruen": [
         "sagt an, wenn der vergebene Name vom getippten abweicht"
