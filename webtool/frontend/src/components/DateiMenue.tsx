@@ -114,7 +114,11 @@ export function DateiMenue({ project, file, aiReason }: {
     const res = await renameFile(project, file.base, neu)
     editorVergessen(e)   // sonst spuelte der Flush die alte Fassung als Waise ans alte Base
     if (passenderEditor()) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
-    toast.success(`„${file.base}“ heisst jetzt „${res.name}“`)
+    // Der Server nummeriert einen belegten Namen durch (`Antonia` -> `Antonia-2`): kein Konflikt
+    // fuer den Nutzer, aber er soll erfahren, dass die Aufnahme anders heisst als eingetippt.
+    toast.success(res.name === neu
+      ? `„${file.base}“ heisst jetzt „${res.name}“`
+      : `„${neu}“ gab es schon — die Aufnahme heisst jetzt „${res.name}“`)
     nachladen()
   }
 
