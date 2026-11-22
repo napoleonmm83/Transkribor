@@ -29,7 +29,7 @@ hat. Lesbar, aber unschön — das ist Absicht.
 ## Unveröffentlicht
 
 **Behoben**
-- Beim Umbenennen einer Aufnahme bleiben ihre Einstellungen (Sprache, Sprecherzahl, Korrektur-Tiefe) erhalten; bisher fiel sie danach still auf die Projekt-Standards zurück.
+- Beim Umbenennen einer Aufnahme bleiben ihre Einstellungen (Sprache, „Enthält weitere Sprachen“, Sprecherzahl, Korrektur-Tiefe) erhalten; bisher fiel sie danach still auf die Projekt-Standards zurück.
 
 ## v0.62.0 — 2026-11-22
 
