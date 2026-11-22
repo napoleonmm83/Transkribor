@@ -1873,6 +1873,15 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                 if not _ziel_frei(p, ziel):
                     return None, kandidat + rest
                 paare.append((p, ziel))
+            # `_doc_felder` schreibt nach dem Umbenennen `base`/`audio` in `<kandidat>.edit.json`.
+            # Hat die eigene Aufnahme kein edit.json, steht dieses Ziel nicht in `paare` — ein
+            # vorhandenes, verwaistes (CodeRabbit, major) gehoert dann einer fremden Aufnahme und
+            # darf nicht umgeschrieben werden. `.edit.json` zaehlt nicht zu den Endungen, an denen
+            # `bekannte_basen` eine Aufnahme erkennt, die Pruefung oben sieht es also nicht.
+            doc = _edit_path(project, kandidat)
+            if os.path.exists(doc) and not any(os.path.samefile(doc, z) for _, z in paare
+                                               if os.path.exists(z)):
+                return None, kandidat + ".edit.json"
             return paare, None
 
         # Ein belegter Name ist kein Fehler, den der Nutzer ausbaden soll: zwei verschiedene
