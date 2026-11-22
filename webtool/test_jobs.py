@@ -954,6 +954,23 @@ def test_rename_base_bucht_bei_reinem_schreibweisenwechsel_nichts_als_entfernt(m
         _lauf_austragen("rb-4", "transcribe")
 
 
+def test_rename_base_laesst_die_loeschbuchung_in_einem_lauf_stehen_der_alt_nie_kannte():
+    """CodeRabbit (minor): ein Job, dessen Bereich die Aufnahme nie enthielt, hat mit der
+    umbenannten nichts zu tun. Dort bezeichnet `neu` weiter eine ANDERE, geloeschte Identitaet,
+    deren alte Urteile unterdrueckt bleiben muessen. Der alte Name wird dort trotzdem gebucht
+    (wie bei `remove_base`)."""
+    _lauf_eintragen("rb-5", "transcribe", bases={"B"}, aktiv={}, gesehen={"B"})
+    with jobs._lock:
+        jobs._jobs["rb-5"]["entfernt"] = {"Neu"}
+        jobs._jobs["rb-5"]["entfernt_je"] = {"Neu"}
+    try:
+        jobs.rename_base("P_fertig", "A", "Neu")
+        r = jobs._jobs["rb-5"]
+        assert r["entfernt"] == {"Neu", "A"} and r["entfernt_je"] == {"Neu", "A"}
+    finally:
+        _lauf_austragen("rb-5", "transcribe")
+
+
 def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
     """Nur die erste zaehlt — sonst koennte Transkripttext, der zufaellig so beginnt, die
     Sperre aufweichen."""

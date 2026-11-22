@@ -201,6 +201,30 @@
       "gruen": [
         "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
       ]
+    },
+    {
+      "id": "R18 rename_base hebt die Loeschbuchung des neuen Namens auch in Jobs auf, die die Aufnahme nie kannten",
+      "datei": "webtool/jobs.py",
+      "von": "if kannte_alt:",
+      "nach": "if True:",
+      "rot": [
+        "test_rename_base_laesst_die_loeschbuchung_in_einem_lauf_stehen_der_alt_nie_kannte"
+      ],
+      "gruen": [
+        "test_rename_base_hebt_eine_fruehere_loeschung_des_neuen_namens_auf"
+      ]
+    },
+    {
+      "id": "R19 ein verwaistes fremdes edit.json wird beim Umbenennen umgeschrieben",
+      "datei": "webtool/app.py",
+      "von": "if os.path.exists(doc) and not any(",
+      "nach": "if False and not any(",
+      "rot": [
+        "test_datei_umbenennen_schreibt_nicht_in_ein_fremdes_edit_dokument_ohne_aufnahme"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ]
     }
   ]
 }

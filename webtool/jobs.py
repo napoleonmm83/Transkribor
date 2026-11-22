@@ -1527,15 +1527,21 @@ def rename_base(project: str, alt: str, neu: str) -> None:
                 if alt_namen:
                     r["bases"].difference_update(alt_namen)
                     r["bases"].add(neu)
+            kannte_alt = bool(alt_namen)
             if r.get("gesehen") is not None and any(_gleiche_base(n, alt) for n in r["gesehen"]):
                 r["gesehen"].add(neu)    # alt bleibt: `gesehen` ist Historie
+                kannte_alt = True
             if _gleiche_base(alt, neu):
                 continue
-            # `neu` bezeichnet jetzt die fertige Aufnahme: eine alte Loeschbuchung dieses Namens
-            # hielte sie sonst fuer eine neu hochgeladene, noch nicht begonnene.
             for menge in ("entfernt", "entfernt_je"):
-                _entferne_base_aliases(r.setdefault(menge, set()), neu)
-                r[menge].update(alt_namen or {alt})
+                # `neu` bezeichnet NUR in einem Job, der `alt` kannte, jetzt die fertige Aufnahme:
+                # dort hielte eine alte Loeschbuchung dieses Namens sie fuer eine neu hochgeladene,
+                # noch nicht begonnene. In einem Job, der `alt` nie kannte, bleibt `neu` eine andere
+                # (geloeschte) Identitaet, deren alte Urteile unterdrueckt bleiben muessen.
+                if kannte_alt:
+                    _entferne_base_aliases(r.setdefault(menge, set()), neu)
+                # Der alte Name wird in JEDEM Job gebucht, wie bei `remove_base`.
+                r.setdefault(menge, set()).update(alt_namen or {alt})
 
 
 def betrifft(project: str, base: str, active_only: bool = False,

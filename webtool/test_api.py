@@ -3655,6 +3655,19 @@ def test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf(client, tmp_pat
     assert (t / "S1.json").exists() and (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
 
 
+def test_datei_umbenennen_schreibt_nicht_in_ein_fremdes_edit_dokument_ohne_aufnahme(client, tmp_path):
+    """`Antonia.edit.json` ohne Ton und ohne Roh-JSON (CodeRabbit, major). Die eigene Aufnahme hat
+    kein `edit.json`, also kollidiert kein eigenes Ziel — und `_doc_felder` schriebe danach `base`
+    und `audio` der EIGENEN Aufnahme in das fremde Dokument. `.edit.json` zaehlt nicht zu den
+    Endungen, an denen `_bekannte_aufnahmebasen` eine Aufnahme erkennt (gemessen)."""
+    t = tmp_path / "Demo" / "transkripte"
+    fremd = {"base": "Antonia", "summary": "fremder Text"}
+    (t / "Antonia.edit.json").write_text(json.dumps(fremd), encoding="utf-8")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["name"] == "Antonia-2"
+    assert json.loads((t / "Antonia.edit.json").read_text(encoding="utf-8")) == fremd
+
+
 def _transcribe_lauf_eintragen(jid, bases, gesehen, aktiv=None):
     import webtool.jobs as jobs_mod
     with jobs_mod._lock:
