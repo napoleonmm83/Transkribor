@@ -3688,6 +3688,67 @@ def test_datei_umbenennen_schreibt_nicht_in_ein_fremdes_edit_dokument_ohne_aufna
     assert json.loads((t / "Antonia.edit.json").read_text(encoding="utf-8")) == fremd
 
 
+def _datei_einstellungen_setzen(client, base="S1"):
+    r = client.put(f"/api/projects/Demo/files/{base}/einstellungen",
+                   json={"sprache": "en", "korrektur": "leicht", "sprecher": 3})
+    assert r.status_code == 200, r.text
+    return {k: r.json()[k] for k in ("sprache", "korrektur", "sprecher")}
+
+
+def test_datei_umbenennen_einstellungen_wandern_mit(client, tmp_path):
+    """#714: der Eintrag in `projekt.json` haengt am Namen. Ohne Uebernahme fiel die Aufnahme nach
+    dem Umbenennen still auf die Projekt-Standards zurueck — eine Neu-Transkription lief dann mit
+    falscher Sprache und automatischer Sprecherzahl."""
+    from webtool import projekt
+    vorher = _datei_einstellungen_setzen(client)
+    assert vorher == {"sprache": "en", "korrektur": "leicht", "sprecher": 3}
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 200, r.text
+    nachher = client.get("/api/projects/Demo/files/Neu/einstellungen").json()
+    assert {k: nachher[k] for k in vorher} == vorher
+    assert "S1" not in projekt.laden("Demo")["dateien"]
+
+
+def test_datei_umbenennen_einstellungen_folgen_dem_durchnummerierten_namen(client, tmp_path):
+    """Die Einstellungen ziehen mit dem VERGEBENEN Namen, nicht mit dem getippten."""
+    from webtool import projekt
+    _fremde_aufnahme(tmp_path, "Antonia")
+    _datei_einstellungen_setzen(client)
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["name"] == "Antonia-2"
+    d = projekt.laden("Demo")["dateien"]
+    assert d["Antonia-2"]["sprache"] == "en" and d["Antonia-2"]["sprecher"] == 3
+    assert "Antonia" not in d, "die fremde Aufnahme `Antonia` darf keinen Eintrag bekommen"
+
+
+def test_datei_umbenennen_ohne_namenswechsel_laesst_die_einstellungen_stehen(client, tmp_path):
+    """`Antonia-2` wuenscht sich `Antonia` (belegt): der Name bleibt, also bleibt auch der Eintrag."""
+    from webtool import projekt
+    _fremde_aufnahme(tmp_path, "Antonia")
+    _fremde_aufnahme(tmp_path, "Antonia-2")
+    _datei_einstellungen_setzen(client, base="Antonia-2")
+    r = client.post("/api/projects/Demo/files/Antonia-2/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["umbenannt"] == 0
+    d = projekt.laden("Demo")["dateien"]
+    assert d["Antonia-2"]["sprache"] == "en" and "Antonia" not in d
+
+
+def test_datei_umbenennen_gelingt_auch_wenn_das_verschieben_der_einstellungen_scheitert(
+        client, tmp_path, monkeypatch):
+    """Die Dateien liegen dann schon um: ein Fehler bei `projekt.json` darf das Umbenennen nicht
+    als gescheitert melden (der Nutzer versuchte es sonst erneut und bekaeme `S1-2`)."""
+    from webtool import projekt
+
+    def kaputt(*_a, **_k):
+        raise OSError("Platte voll")
+
+    monkeypatch.setattr(projekt, "umbenennen_datei", kaputt)
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Neu"
+    assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
+
+
 def _transcribe_lauf_eintragen(jid, bases, gesehen, aktiv=None):
     import webtool.jobs as jobs_mod
     with jobs_mod._lock:

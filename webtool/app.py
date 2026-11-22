@@ -1954,6 +1954,19 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
             _doc_felder(ziel, **felder)
             with suppress(OSError):
                 os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))
+        # Die Datei-Einstellungen (Sprache, Sprecherzahl, Tiefe) liegen in `projekt.json` unter dem
+        # NAMEN der Aufnahme (#714): ohne diesen Schritt blieb der Eintrag beim alten Namen liegen,
+        # und die umbenannte Aufnahme fiel still auf die Projekt-Standards zurueck. Mit dem
+        # VERGEBENEN Namen (`neu` ist nach der Durchnummerierung `Antonia-2`, nicht der getippte).
+        # Ein Fehler hier laesst das Umbenennen NICHT scheitern — die Dateien liegen schon um, und
+        # ein zweiter Versuch des Nutzers bekaeme einen weiteren Namen (`Neu-2`); dieselbe Regel wie
+        # bei `_doc_felder`.
+        if neu != base:
+            try:
+                _projekt.umbenennen_datei(project, base, neu)
+            except (OSError, ValueError) as e:
+                print(f"⚠ Datei-Einstellungen nicht nach „{neu}“ uebernommen "
+                      f"({type(e).__name__}: {e})", flush=True)
         # Ein laufender Job fuehrt die Aufnahme unter dem neuen Namen weiter (umgehaengt, nicht
         # entfernt: sonst kennte er `neu` nicht, und „Neu transkribieren“ ginge daneben durch), und
         # der ALTE Name wird dort eine entfernte Identitaet (#479/#489). Erst NACH dem gelungenen
