@@ -419,3 +419,82 @@ def test_datei_ansicht_liefert_sprecher_aus_demselben_lesevorgang(tmp_path, monk
     with open(projekt._pfad("p"), "w", encoding="utf-8") as fh:
         fh.write('{"dateien": {"a": {"sprecher": true}}}')
     assert projekt.datei_ansicht("p", "a")["sprecher"] is None
+
+
+# ---- Umbenennen nimmt den Datei-Eintrag mit (#714) ----
+
+def test_umbenennen_datei_nimmt_alle_schluessel_mit(tmp_path, monkeypatch):
+    """Der Eintrag `dateien[<base>]` haengt am Namen: ohne diese Funktion blieb er beim Umbenennen
+    unter dem alten Namen liegen, und die Aufnahme fiel still auf die Projekt-Standards zurueck."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "alt", sprache="en", korrektur="leicht", mehrsprachig=True, sprecher=3)
+    projekt.setze_datei("p", "nachbar", sprache="fr")
+    projekt.umbenennen_datei("p", "alt", "neu")
+    d = projekt.laden("p")["dateien"]
+    assert d["neu"] == {"sprache": "en", "korrektur": "leicht", "mehrsprachig": True, "sprecher": 3}
+    assert "alt" not in d
+    assert d["nachbar"] == {"sprache": "fr"}, "ein Nachbar-Eintrag darf nicht angefasst werden"
+    # Und die Leser sehen es unter dem neuen Namen:
+    assert projekt.datei_sprache("p", "neu") == "en" and projekt.datei_sprecher("p", "neu") == 3
+
+
+def test_umbenennen_datei_laesst_die_projektwerte_stehen(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.speichern("p", {"sprache": "de", "korrektur": "leicht", "mehrsprachig": True})
+    projekt.setze_datei("p", "alt", sprecher=2)
+    projekt.umbenennen_datei("p", "alt", "neu")
+    d = projekt.laden("p")
+    assert (d["sprache"], d["korrektur"], d["mehrsprachig"]) == ("de", "leicht", True)
+
+
+def test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen(tmp_path, monkeypatch):
+    """Der Zielname war auf der Platte frei: ein Eintrag dort gehoert einer GELOESCHTEN Aufnahme
+    (`delete_file` raeumt ihn nicht ab). Die umbenannte Aufnahme hatte keinen eigenen und soll
+    nicht den einer fremden erben."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "geloescht", sprache="en", sprecher=4)
+    projekt.setze_datei("p", "andere", sprache="fr")
+    projekt.umbenennen_datei("p", "ohne_eintrag", "geloescht")
+    d = projekt.laden("p")["dateien"]
+    assert "geloescht" not in d
+    assert d["andere"] == {"sprache": "fr"}
+
+
+def test_umbenennen_datei_legt_keine_projekt_json_an(tmp_path, monkeypatch):
+    """Ein Projekt ohne `projekt.json` (Legacy) bekommt durch ein Umbenennen keine."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.umbenennen_datei("p", "alt", "neu")
+    assert not os.path.exists(projekt._pfad("p"))
+
+
+def test_umbenennen_datei_kaputte_projekt_json_bleibt_unberuehrt(tmp_path, monkeypatch):
+    """Eine unlesbare Datei hat nichts zu verschieben — und ein Schreiben wuerde sie mit Defaults
+    ueberbuegeln (#196). Weder neu geschrieben noch beiseitegelegt."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    os.makedirs(paths.project_dir("p"), exist_ok=True)
+    inhalt = b'{"dateien": {"alt": {"sprache": "en"}'          # abgeschnitten
+    with open(projekt._pfad("p"), "wb") as fh:
+        fh.write(inhalt)
+    projekt.umbenennen_datei("p", "alt", "neu")
+    with open(projekt._pfad("p"), "rb") as fh:
+        assert fh.read() == inhalt
+    assert not [n for n in os.listdir(paths.project_dir("p")) if "kaputt" in n]
+
+
+def test_umbenennen_datei_gleicher_name_ist_ein_noop(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprache="en")
+    stand = os.stat(projekt._pfad("p")).st_mtime_ns
+    projekt.umbenennen_datei("p", "a", "a")
+    assert projekt.laden("p")["dateien"]["a"] == {"sprache": "en"}
+    assert os.stat(projekt._pfad("p")).st_mtime_ns == stand, "es wurde neu geschrieben"
+
+
+def test_umbenennen_datei_verschiebt_den_schluessel_auch_bei_reinem_schreibweisenwechsel(tmp_path, monkeypatch):
+    """Die Leser schlagen den Eintrag mit dem EXAKTEN Namen nach: nach `S1` -> `s1` liest man
+    unter `s1`, auch wenn das Dateisystem beide fuer dieselbe Datei haelt."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "S1", sprecher=3)
+    projekt.umbenennen_datei("p", "S1", "s1")
+    d = projekt.laden("p")["dateien"]
+    assert d == {"s1": {"sprecher": 3}}

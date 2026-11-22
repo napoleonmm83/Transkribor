@@ -153,6 +153,40 @@ def setze_datei(project: str, base: str, sprache=None, korrektur=None, mehrsprac
         return cur
 
 
+def umbenennen_datei(project: str, alt: str, neu: str) -> None:
+    """Den Datei-Eintrag einer umbenannten Aufnahme von `alt` nach `neu` verschieben (#714).
+
+    `dateien[<base>]` haengt am NAMEN: `rename_file` benennt Ton, Transkripte und Sidecars um,
+    und ohne diesen Schritt blieb der Eintrag unter dem alten Namen liegen — die Aufnahme fiel
+    still auf die Projekt-Standards zurueck (Sprache, Sprecherzahl, Tiefe).
+
+    Hat `alt` KEINEN Eintrag, wird ein vorhandener unter `neu` entfernt: der Zielname war auf der
+    Platte frei, ein Eintrag dort gehoert einer geloeschten Aufnahme (`delete_file` raeumt ihn
+    nicht ab), und die umbenannte soll ihn nicht erben.
+
+    **Eine unlesbare Datei bleibt unberuehrt** (weder neu geschrieben noch beiseitegelegt wie in
+    `setze_datei`): es gibt nichts zu verschieben, und ein Schreiben wuerde sie mit Defaults
+    ueberbuegeln (#196). Geschrieben wird nur bei einer tatsaechlichen Aenderung, ein Projekt ohne
+    `projekt.json` bekommt also keine. Die Schluessel werden EXAKT verglichen, wie bei allen
+    Lesern — nach `S1` -> `s1` liest man unter `s1`.
+    """
+    if alt == neu:
+        return
+    with _gesperrt(project):
+        cur, kaputt = _lesen(project)
+        if kaputt:
+            return
+        dateien = cur["dateien"]
+        if alt not in dateien and neu not in dateien:
+            return
+        eintrag = dateien.pop(alt, None)
+        if eintrag is None:
+            dateien.pop(neu, None)
+        else:
+            dateien[neu] = eintrag
+        _write(project, cur)
+
+
 def datei_sprache(project: str, base: str) -> str:
     d = laden(project)
     return d["dateien"].get(base, {}).get("sprache") or d["sprache"]
