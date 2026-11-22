@@ -1961,12 +1961,11 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # Ein Fehler hier laesst das Umbenennen NICHT scheitern — die Dateien liegen schon um, und
         # ein zweiter Versuch des Nutzers bekaeme einen weiteren Namen (`Neu-2`); dieselbe Regel wie
         # bei `_doc_felder`.
-        if neu != base:
-            try:
-                _projekt.umbenennen_datei(project, base, neu)
-            except (OSError, ValueError) as e:
-                print(f"⚠ Datei-Einstellungen nicht nach „{neu}“ uebernommen "
-                      f"({type(e).__name__}: {e})", flush=True)
+        try:
+            _projekt.umbenennen_datei(project, base, neu)      # bei gleichem Namen ein No-op
+        except (OSError, ValueError) as e:
+            print(f"⚠ Datei-Einstellungen nicht nach „{neu}“ uebernommen "
+                  f"({type(e).__name__}: {e})", flush=True)
         # Ein laufender Job fuehrt die Aufnahme unter dem neuen Namen weiter (umgehaengt, nicht
         # entfernt: sonst kennte er `neu` nicht, und „Neu transkribieren“ ginge daneben durch), und
         # der ALTE Name wird dort eine entfernte Identitaet (#479/#489). Erst NACH dem gelungenen

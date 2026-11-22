@@ -1,0 +1,124 @@
+{
+  "test": "python -m pytest webtool/test_projekt.py webtool/test_api.py -k \"umbenennen_datei or einstellungen_wandern or einstellungen_folgen or ohne_namenswechsel or verschieben_der_einstellungen\" -q",
+  "pfade": [
+    "webtool/projekt.py",
+    "webtool/app.py",
+    "webtool/test_projekt.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "E1 gleicher Name wird trotzdem neu geschrieben",
+      "datei": "webtool/projekt.py",
+      "von": "    if alt == neu:\n        return",
+      "nach": "    if False:\n        return",
+      "rot": [
+        "test_umbenennen_datei_gleicher_name_ist_ein_noop"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
+      ]
+    },
+    {
+      "id": "E2 ohne den Frueh-Rueckweg wird eine unlesbare projekt.json (und ein Legacy-Projekt) beschrieben",
+      "datei": "webtool/projekt.py",
+      "von": "        if alt not in dateien and neu not in dateien:\n            return",
+      "nach": "        if False:\n            return",
+      "rot": [
+        "test_umbenennen_datei_kaputte_projekt_json_bleibt_unberuehrt",
+        "test_umbenennen_datei_legt_keine_projekt_json_an"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
+      ]
+    },
+    {
+      "id": "E3 die Altlast unter dem neuen Namen bleibt stehen",
+      "datei": "webtool/projekt.py",
+      "von": "            dateien.pop(neu, None)",
+      "nach": "            pass",
+      "rot": [
+        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
+      ]
+    },
+    {
+      "id": "E4 der Eintrag wird nicht unter dem neuen Namen abgelegt",
+      "datei": "webtool/projekt.py",
+      "von": "            dateien[neu] = eintrag",
+      "nach": "            pass",
+      "rot": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit",
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
+      ]
+    },
+    {
+      "id": "E5 der Eintrag bleibt unter dem alten Namen stehen (kopiert statt verschoben)",
+      "datei": "webtool/projekt.py",
+      "von": "        eintrag = dateien.pop(alt, None)",
+      "nach": "        eintrag = dateien.get(alt)",
+      "rot": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit",
+        "test_umbenennen_datei_verschiebt_den_schluessel_auch_bei_reinem_schreibweisenwechsel"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
+      ]
+    },
+    {
+      "id": "E6 die Aenderung wird nicht geschrieben",
+      "datei": "webtool/projekt.py",
+      "von": "            dateien[neu] = eintrag\n        _write(project, cur)",
+      "nach": "            dateien[neu] = eintrag\n        pass",
+      "rot": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit",
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_legt_keine_projekt_json_an"
+      ]
+    },
+    {
+      "id": "E7 rename_file ruft die Uebernahme gar nicht auf",
+      "datei": "webtool/app.py",
+      "von": "_projekt.umbenennen_datei(project, base, neu)      # bei gleichem Namen ein No-op",
+      "nach": "pass",
+      "rot": [
+        "test_datei_umbenennen_einstellungen_wandern_mit",
+        "test_datei_umbenennen_einstellungen_folgen_dem_durchnummerierten_namen"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_ohne_namenswechsel_laesst_die_einstellungen_stehen"
+      ]
+    },
+    {
+      "id": "E8 die Einstellungen ziehen mit dem getippten statt dem vergebenen Namen",
+      "datei": "webtool/app.py",
+      "von": "_projekt.umbenennen_datei(project, base, neu)",
+      "nach": "_projekt.umbenennen_datei(project, base, wunsch)",
+      "rot": [
+        "test_datei_umbenennen_einstellungen_folgen_dem_durchnummerierten_namen"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ]
+    },
+    {
+      "id": "E9 ein Fehler bei projekt.json macht das Umbenennen zum Fehlschlag",
+      "datei": "webtool/app.py",
+      "von": "        except (OSError, ValueError) as e:\n            print(f\"⚠ Datei-Einstellungen",
+      "nach": "        except KeyError as e:\n            print(f\"⚠ Datei-Einstellungen",
+      "rot": [
+        "test_datei_umbenennen_gelingt_auch_wenn_das_verschieben_der_einstellungen_scheitert"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ]
+    }
+  ]
+}

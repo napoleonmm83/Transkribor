@@ -166,17 +166,18 @@ def umbenennen_datei(project: str, alt: str, neu: str) -> None:
 
     **Eine unlesbare Datei bleibt unberuehrt** (weder neu geschrieben noch beiseitegelegt wie in
     `setze_datei`): es gibt nichts zu verschieben, und ein Schreiben wuerde sie mit Defaults
-    ueberbuegeln (#196). Geschrieben wird nur bei einer tatsaechlichen Aenderung, ein Projekt ohne
-    `projekt.json` bekommt also keine. Die Schluessel werden EXAKT verglichen, wie bei allen
+    ueberbuegeln (#196). Geschrieben wird nur bei einer tatsaechlichen Aenderung — beide Namen
+    fehlen in `dateien`, dann endet die Funktion vorher —, ein Projekt ohne `projekt.json` bekommt
+    also keine. Die Schluessel werden EXAKT verglichen, wie bei allen
     Lesern — nach `S1` -> `s1` liest man unter `s1`.
     """
     if alt == neu:
         return
     with _gesperrt(project):
-        cur, kaputt = _lesen(project)
-        if kaputt:
-            return
+        cur, _kaputt = _lesen(project)
         dateien = cur["dateien"]
+        # Traegt zugleich den Schutz der unlesbaren Datei: `_lesen` liefert dafuer LEERE `dateien`,
+        # beide Namen fehlen, und es wird nichts geschrieben (test_umbenennen_datei_kaputte_…).
         if alt not in dateien and neu not in dateien:
             return
         eintrag = dateien.pop(alt, None)
