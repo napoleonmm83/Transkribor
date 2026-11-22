@@ -169,7 +169,7 @@
     {
       "id": "R15 rename_base bucht den alten Namen nicht als entfernt",
       "datei": "webtool/jobs.py",
-      "von": "r[menge].update(alt_namen or {alt})",
+      "von": "r.setdefault(menge, set()).update(alt_namen or {alt})",
       "nach": "pass",
       "rot": [
         "test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um"
