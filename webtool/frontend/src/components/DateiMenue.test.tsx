@@ -335,7 +335,9 @@ describe('Sprache, Sprecher & Korrektur', () => {
 
 describe('Umbenennen: der Server nummeriert einen belegten Namen durch', () => {
   const umbenennen = async (eingabe: string) => {
-    zeigen(datei())
+    // Ohne Roh-Transkript holt der Dialog keine Sprechernamen (`getDoc`): der Test steht damit auch
+    // allein, ohne die Mock-Reste der Nachbartests. Mit `-t` laeuft er so in der Mutationsprobe.
+    zeigen(datei({ has_raw: false }))
     await menueOeffnen()
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Umbenennen' }))
     fireEvent.change(await screen.findByRole('textbox', { name: 'Neuer Name' }), { target: { value: eingabe } })
