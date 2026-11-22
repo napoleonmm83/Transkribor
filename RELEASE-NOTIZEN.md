@@ -28,6 +28,12 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+**Neu**
+- Heisst eine Aufnahme schon so, wie du sie nennen willst, hängt Transkribor selbst eine Zahl an („Antonia“ wird „Antonia-2“) und sagt es dir — du musst nicht mehr ausweichen.
+
+**Behoben**
+- Eine Aufnahme, die der laufende Lauf schon ganz transkribiert und korrigiert hat, lässt sich umbenennen, ohne dass du auf das Ende des ganzen Laufs warten musst.
+
 ## v0.61.0 — 2026-10-25
 
 **Neu**
