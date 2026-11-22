@@ -475,7 +475,8 @@ def test_umbenennen_datei_ueberlebt_einen_gleichzeitigen_schreiber(tmp_path, mon
     `projekt.json` neben dem Umbenennen. Ohne das projektweite Lock gewinnt der letzte `_write`
     und der andere Eintrag (oder das Verschieben) ist verloren. Deterministisch forciert ueber eine
     Pause im `_write`, die das Fenster aufreisst."""
-    import threading, time
+    import threading
+    import time
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
     projekt.setze_datei("p", "a", sprache="en")
     echt = projekt._write
