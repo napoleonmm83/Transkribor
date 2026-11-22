@@ -1505,7 +1505,9 @@ def rename_base(project: str, alt: str, neu: str) -> None:
     Bereich des Laufs (`bases`) und in `gesehen`, gilt also weiter als fertig (umbenennbar), und
     `betrifft(neu)` sperrt „Neu transkribieren“ weiter. Mit `remove_base` kannte der Lauf `neu`
     nicht, ein Neu-Transkribieren ginge daneben durch und startete eine zweite Transkription
-    derselben Aufnahme (kalter Review, am Fake-Job gemessen). Zweitens ist der ALTE Name wie nach
+    derselben Aufnahme (Befund des kalten Reviews am Fake-Job, heute gehalten von
+    `test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs`, Zeile mit der
+    409-Zusicherung auf `Eins/transcribe`). Zweitens ist der ALTE Name wie nach
     `remove_base` eine entfernte Identitaet (`entfernt`/`entfernt_je`): eine spaeter gleichnamig
     hochgeladene Aufnahme erbt kein Urteil der umbenannten (#479/#489).
 

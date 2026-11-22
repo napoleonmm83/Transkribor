@@ -1862,7 +1862,8 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
             # eigene Ton wanderte daneben (zwei Toene bzw. fremder Text ueber fremdem Ton).
             # Dieselbe Menge, die `_transkript_gehoert_zu` fuer die Zuordnung benutzt. Sie kennt
             # NICHT jedes Sidecar (`.edit.json`, `.correction.json`, `.diar.json` zaehlen nicht,
-            # gemessen) — die Einzelpruefung unten bleibt deshalb fuer genau diese Faelle.
+            # belegt durch `test_bekannte_aufnahmebasen_kennt_nur_manche_endungen`) — die
+            # Einzelpruefung unten bleibt deshalb fuer genau diese Faelle.
             form = paths.namensform(kandidat)
             if form != paths.namensform(base) and form in bekannte_basen:
                 return None, kandidat
