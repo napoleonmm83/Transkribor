@@ -28,6 +28,8 @@ hat. Lesbar, aber unschön — das ist Absicht.
 
 ## Unveröffentlicht
 
+## v0.62.0 — 2026-11-22
+
 **Neu**
 - Heisst eine Aufnahme schon so, wie du sie nennen willst, hängt Transkribor selbst eine Zahl an („Antonia“ wird „Antonia-2“) und sagt es dir — du musst nicht mehr ausweichen.
 
