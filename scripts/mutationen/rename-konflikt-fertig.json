@@ -81,18 +81,6 @@
       ]
     },
     {
-      "id": "R7 fremder Ton anderer Endung gilt nicht als belegt",
-      "datei": "webtool/app.py",
-      "von": "return None, kandidat + ext",
-      "nach": "pass",
-      "rot": [
-        "test_datei_umbenennen_zaehlt_fremden_ton_anderer_endung_als_belegt"
-      ],
-      "gruen": [
-        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
-      ]
-    },
-    {
       "id": "R8 das Suffix hat ein anderes Format als bei fetch.unique_base",
       "datei": "webtool/app.py",
       "von": "f\"{wunsch}-{versuch}\"",
@@ -130,12 +118,13 @@
       ]
     },
     {
-      "id": "R11 ein fremdes Transkript ohne Ton zaehlt nicht als belegt",
+      "id": "R11 eine fremde Aufnahme ohne Gegenstueck (nur Ton anderer Endung / nur Transkript) zaehlt nicht als belegt",
       "datei": "webtool/app.py",
       "von": "if form != paths.namensform(base) and form in bekannte_basen:",
       "nach": "if False:",
       "rot": [
-        "test_datei_umbenennen_zaehlt_ein_fremdes_transkript_ohne_ton_als_belegt"
+        "test_datei_umbenennen_zaehlt_ein_fremdes_transkript_ohne_ton_als_belegt",
+        "test_datei_umbenennen_zaehlt_fremden_ton_anderer_endung_als_belegt"
       ],
       "gruen": [
         "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
@@ -193,7 +182,7 @@
       "id": "R16 rename_base hebt eine fruehere Loeschbuchung des neuen Namens nicht auf",
       "datei": "webtool/jobs.py",
       "von": "_entferne_base_aliases(r.setdefault(menge, set()), neu)",
-      "nach": "pass",
+      "nach": "r.setdefault(menge, set())",
       "rot": [
         "test_rename_base_hebt_eine_fruehere_loeschung_des_neuen_namens_auf"
       ],
