@@ -1497,8 +1497,21 @@ def remove_base(project: str, base: str) -> None:
                 r.setdefault("entfernt_je", set()).update(aliases or {base})
 
 
-def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
+def betrifft(project: str, base: str, active_only: bool = False,
+             fertige_frei: bool = False) -> dict | None:
     """Der laufende Job, der GENAU DIESE Aufnahme anfasst — sonst None.
+
+    `fertige_frei=True` (nur `rename_file`): eine Aufnahme, die ein `transcribe`-Lauf schon
+    ganz erledigt hat, zaehlt nicht mehr zu seinem Bereich. Der Bereich ist der Plan beim
+    Start und schrumpft nie — ohne den Schalter bliebe jede fertig transkribierte UND
+    korrigierte Aufnahme bis zum Jobende gesperrt. „Fertig" heisst: der Lauf hat sie
+    angefasst (`gesehen`) und sie steht nicht in `active_bases`. Das traegt, weil `[active]`
+    vor der Transkription gezaehlt bis zum Rueckruf-`[done]` nach der Korrektur haelt
+    (Poolschlange und Korrektur eingeschlossen, `transcribe._freigeben`). NUR fuer
+    `transcribe`: das Glossar eines `correct`-Laufs druckt `[active]`/`[done]` korpusweit
+    VOR der eigenen Korrektur jeder Aufnahme, `gesehen` ohne `active_bases` hiesse dort
+    „fertig", obwohl sie noch aussteht. Eine noch nicht begonnene Aufnahme bleibt gesperrt:
+    der Lauf oeffnet sie spaeter unter dem alten Namen.
 
     Ein Lauf druckt seinen Wirkungsbereich als erste Zeile (`SCOPE_PREFIX`), bevor er
     arbeitet: `transcribe` die noch nicht transkribierten Aufnahmen, `correct` die des
@@ -1540,10 +1553,20 @@ def betrifft(project: str, base: str, active_only: bool = False) -> dict | None:
                         r.get("active_bases", {}), base, unsicher) is not None:
                     return {"id": r["id"], "kind": r["kind"]}
             else:
-                if (r["bases"] is None
-                        or _base_schluessel_geschuetzt(r["bases"], base, unsicher) is not None
-                        or _base_schluessel_geschuetzt(
-                            r.get("active_bases", {}), base, unsicher) is not None):
+                if r["bases"] is None:      # Bereich unbekannt: allumfassend, nie freigeben
+                    return {"id": r["id"], "kind": r["kind"]}
+                aktiv = _base_schluessel_geschuetzt(
+                    r.get("active_bases", {}), base, unsicher) is not None
+                geplant = _base_schluessel_geschuetzt(r["bases"], base, unsicher) is not None
+                # Freigegeben wird nur auf dem ENGEN Weg: exakter Name (bei unklarer
+                # Dateisystemidentitaet gar nicht) und keine Loeschung, deren Nachfolger noch
+                # nicht begonnen hat — `entfernt_je` haelt genau das bis zum ersten `[active]`
+                # der gleichnamigen neuen Datei (#591). `gesehen` ist Historie und kennt den
+                # Unterschied nicht.
+                fertig = (fertige_frei and not unsicher and r["kind"] == "transcribe"
+                          and _base_schluessel(r.get("gesehen", ()), base) is not None
+                          and _base_schluessel(r.get("entfernt_je", ()), base) is None)
+                if aktiv or (geplant and not fertig):
                     return {"id": r["id"], "kind": r["kind"]}
     return None
 

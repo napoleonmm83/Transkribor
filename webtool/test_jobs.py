@@ -812,6 +812,87 @@ def test_ein_leerer_bereich_sperrt_nichts():
         _wait(jid)
 
 
+def _lauf_eintragen(jid, kind, *, bases, aktiv, gesehen, projekt="P_fertig"):
+    """Ein laufender Job mit genau dem Buchfuehrungsstand, den `_verarbeite` aufbaut — ohne
+    Subprozess: die Frage von `betrifft(fertige_frei=True)` haengt nur an diesen drei Mengen."""
+    with jobs._lock:
+        jobs._jobs[jid] = {
+            "id": jid, "project": projekt, "kind": kind, "status": "running",
+            "bases": bases, "active_bases": aktiv, "gesehen": gesehen,
+        }
+        jobs._active[(projekt, kind)] = jid
+
+
+def _lauf_austragen(jid, kind, projekt="P_fertig"):
+    with jobs._lock:
+        jobs._active.pop((projekt, kind), None)
+        jobs._jobs.pop(jid, None)
+
+
+def test_fertige_aufnahme_eines_transcribe_laufs_ist_fuers_umbenennen_frei():
+    """A fertig (angefasst, nichts mehr aktiv), B aktiv, C steht noch aus. Nur A darf weg."""
+    _lauf_eintragen("fertig-1", "transcribe", bases={"A", "B", "C"}, aktiv={"B": 1},
+                    gesehen={"A", "B"})
+    try:
+        assert jobs.betrifft("P_fertig", "A", fertige_frei=True) is None
+        assert jobs.betrifft("P_fertig", "B", fertige_frei=True) == {
+            "id": "fertig-1", "kind": "transcribe"}, "aktiv bleibt gesperrt"
+        assert jobs.betrifft("P_fertig", "C", fertige_frei=True) is not None, \
+            "noch nicht begonnen: der Lauf oeffnet sie unter dem alten Namen"
+        # Gegenprobe: ohne den Schalter aendert sich nichts (retranscribe/delete-Verhalten).
+        assert jobs.betrifft("P_fertig", "A") is not None
+    finally:
+        _lauf_austragen("fertig-1", "transcribe")
+
+
+def test_fertig_gilt_nur_fuer_transcribe_laeufe():
+    """Das korpusweite Glossar eines `correct`-Laufs druckt `[active]`/`[done]` fuer ALLE
+    Aufnahmen, bevor sie ihre eigene Korrektur bekommen — `gesehen` ohne `aktiv` hiesse dort
+    „fertig", obwohl die Aufnahme noch aussteht."""
+    _lauf_eintragen("fertig-2", "correct", bases={"A", "C"}, aktiv={}, gesehen={"A", "C"})
+    try:
+        assert jobs.betrifft("P_fertig", "A", fertige_frei=True) is not None
+    finally:
+        _lauf_austragen("fertig-2", "correct")
+
+
+def test_fertig_setzt_einen_bekannten_bereich_voraus():
+    """Ohne gemeldeten Bereich gilt der Job als allumfassend — auch mit dem Schalter."""
+    _lauf_eintragen("fertig-3", "transcribe", bases=None, aktiv={}, gesehen={"A"})
+    try:
+        assert jobs.betrifft("P_fertig", "A", fertige_frei=True) is not None
+    finally:
+        _lauf_austragen("fertig-3", "transcribe")
+
+
+def test_geloeschte_und_neu_hochgeladene_aufnahme_gilt_nicht_als_fertig():
+    """`gesehen` ist Historie: die alte Aufnahme `A` war fertig, dann wurde sie geloescht und
+    eine neue `A` hochgeladen, die der Lauf noch nicht angefasst hat. `entfernt_je` haelt
+    genau diesen Zustand (#591) — die neue Datei darf nicht als fertig durchgehen."""
+    _lauf_eintragen("fertig-4", "transcribe", bases={"A"}, aktiv={}, gesehen={"A"})
+    with jobs._lock:
+        jobs._jobs["fertig-4"]["entfernt_je"] = {"A"}
+    try:
+        assert jobs.betrifft("P_fertig", "A", fertige_frei=True) is not None
+    finally:
+        _lauf_austragen("fertig-4", "transcribe")
+
+
+def test_fertig_wird_bei_unklarer_dateisystemidentitaet_nicht_freigegeben(monkeypatch):
+    """Die Schutzabfrage matcht dann breit (Namensform statt exaktem Namen) — fuer das
+    SPERREN die richtige Richtung, fuer das FREIGEBEN die falsche."""
+    def fehler(*_args, **_kwargs):
+        raise PermissionError("Projektwurzel nicht lesbar")
+
+    monkeypatch.setattr(jobs.paths, "vorhandener_projektname", fehler)
+    monkeypatch.setattr(jobs.paths, "vorhandene_aufnahmenamen", fehler, raising=False)
+    _lauf_eintragen("fertig-5", "transcribe", bases={"A"}, aktiv={}, gesehen={"A"})
+    try:
+        assert jobs.betrifft("P_fertig", "A", fertige_frei=True) is not None
+    finally:
+        _lauf_austragen("fertig-5", "transcribe")
+
+
 def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
     """Nur die erste zaehlt — sonst koennte Transkripttext, der zufaellig so beginnt, die
     Sperre aufweichen."""
