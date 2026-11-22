@@ -447,17 +447,60 @@ def test_umbenennen_datei_laesst_die_projektwerte_stehen(tmp_path, monkeypatch):
     assert (d["sprache"], d["korrektur"], d["mehrsprachig"]) == ("de", "leicht", True)
 
 
-def test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen(tmp_path, monkeypatch):
-    """Der Zielname war auf der Platte frei: ein Eintrag dort gehoert einer GELOESCHTEN Aufnahme
-    (`delete_file` raeumt ihn nicht ab). Die umbenannte Aufnahme hatte keinen eigenen und soll
-    nicht den einer fremden erben."""
+def test_umbenennen_datei_ohne_eintrag_laesst_einen_eintrag_unter_dem_zielnamen_stehen(tmp_path, monkeypatch):
+    """Regression zu einem Befund des Reviews (gemessen): `S1` wurde VOR diesem Fix auf `Antonia`
+    umbenannt, der Eintrag blieb unter `S1` liegen — und wer jetzt zurueckbenennt, will ihn
+    wiederhaben. Eine Entfernung unter dem Zielnamen loeschte ihn endgueltig (auf master haette das
+    Zurueckbenennen ihn wiederhergestellt). Gleiches gilt, wenn das Verschieben vorher scheiterte."""
     monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
-    projekt.setze_datei("p", "geloescht", sprache="en", sprecher=4)
-    projekt.setze_datei("p", "andere", sprache="fr")
-    projekt.umbenennen_datei("p", "ohne_eintrag", "geloescht")
-    d = projekt.laden("p")["dateien"]
-    assert "geloescht" not in d
-    assert d["andere"] == {"sprache": "fr"}
+    projekt.setze_datei("p", "S1", sprache="en", korrektur="leicht", sprecher=3)
+    projekt.umbenennen_datei("p", "Antonia", "S1")             # `Antonia` hat keinen Eintrag
+    assert projekt.laden("p")["dateien"] == {
+        "S1": {"sprache": "en", "korrektur": "leicht", "sprecher": 3}}
+
+
+def test_umbenennen_datei_der_alte_eintrag_gewinnt_gegen_einen_vorhandenen_unter_dem_neuen_namen(
+        tmp_path, monkeypatch):
+    """Stehen Eintraege unter BEIDEN Namen, gehoert der unter `alt` der umbenannten Aufnahme: er
+    ersetzt den unter `neu` (nicht umgekehrt — sonst ginge der eigene verloren)."""
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "alt", sprache="en", sprecher=3)
+    projekt.setze_datei("p", "neu", sprache="fr", korrektur="leicht")
+    projekt.umbenennen_datei("p", "alt", "neu")
+    assert projekt.laden("p")["dateien"] == {"neu": {"sprache": "en", "sprecher": 3}}
+
+
+def test_umbenennen_datei_ueberlebt_einen_gleichzeitigen_schreiber(tmp_path, monkeypatch):
+    """Dieselbe Race wie bei `setze_datei` (#134): der fetch-Subprozess und jeder Upload schreiben
+    `projekt.json` neben dem Umbenennen. Ohne das projektweite Lock gewinnt der letzte `_write`
+    und der andere Eintrag (oder das Verschieben) ist verloren. Deterministisch forciert ueber eine
+    Pause im `_write`, die das Fenster aufreisst."""
+    import threading, time
+    monkeypatch.setenv("TRANSKRIBOR_PROJEKTE", str(tmp_path))
+    projekt.setze_datei("p", "a", sprache="en")
+    echt = projekt._write
+
+    def langsam(project, data):
+        time.sleep(0.05)            # Fenster auf: beide haben denselben Stand gelesen
+        echt(project, data)
+
+    monkeypatch.setattr(projekt, "_write", langsam)
+    fehler = []
+
+    def lauf(fn, *args, **kw):
+        try:
+            fn(*args, **kw)
+        except Exception as e:      # pragma: no cover
+            fehler.append(e)
+
+    ts = [threading.Thread(target=lauf, args=(projekt.umbenennen_datei, "p", "a", "c")),
+          threading.Thread(target=lauf, args=(projekt.setze_datei, "p", "b"), kwargs={"sprache": "fr"})]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    assert not fehler
+    assert projekt.laden("p")["dateien"] == {"c": {"sprache": "en"}, "b": {"sprache": "fr"}}
 
 
 def test_umbenennen_datei_legt_keine_projekt_json_an(tmp_path, monkeypatch):

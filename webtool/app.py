@@ -1958,12 +1958,16 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # NAMEN der Aufnahme (#714): ohne diesen Schritt blieb der Eintrag beim alten Namen liegen,
         # und die umbenannte Aufnahme fiel still auf die Projekt-Standards zurueck. Mit dem
         # VERGEBENEN Namen (`neu` ist nach der Durchnummerierung `Antonia-2`, nicht der getippte).
-        # Ein Fehler hier laesst das Umbenennen NICHT scheitern — die Dateien liegen schon um, und
-        # ein zweiter Versuch des Nutzers bekaeme einen weiteren Namen (`Neu-2`); dieselbe Regel wie
-        # bei `_doc_felder`.
+        # Ein Fehler hier laesst das Umbenennen NICHT scheitern: die Dateien liegen schon um, ein
+        # Fehlschlag waere eine falsche Auskunft (ein zweiter Versuch fuende die Aufnahme unter dem
+        # alten Namen gar nicht mehr: 404), und er liesse das Umhaengen im laufenden Job darunter
+        # aus. Deshalb `Exception` und nicht nur `OSError`/`ValueError` wie bei `_doc_felder`:
+        # `json.load` wirft bei tief verschachteltem JSON einen `RecursionError` (am Review gemessen,
+        # 500 nach vollzogenem Umbenennen). Der Eintrag bleibt dann unter dem alten Namen liegen —
+        # derselbe Zustand wie vor diesem Fix.
         try:
             _projekt.umbenennen_datei(project, base, neu)      # bei gleichem Namen ein No-op
-        except (OSError, ValueError) as e:
+        except Exception as e:
             print(f"⚠ Datei-Einstellungen nicht nach „{neu}“ uebernommen "
                   f"({type(e).__name__}: {e})", flush=True)
         # Ein laufender Job fuehrt die Aufnahme unter dem neuen Namen weiter (umgehaengt, nicht

@@ -160,31 +160,29 @@ def umbenennen_datei(project: str, alt: str, neu: str) -> None:
     und ohne diesen Schritt blieb der Eintrag unter dem alten Namen liegen — die Aufnahme fiel
     still auf die Projekt-Standards zurueck (Sprache, Sprecherzahl, Tiefe).
 
-    Hat `alt` KEINEN Eintrag, wird ein vorhandener unter `neu` entfernt: der Zielname war auf der
-    Platte frei, ein Eintrag dort gehoert einer geloeschten Aufnahme (`delete_file` raeumt ihn
-    nicht ab), und die umbenannte soll ihn nicht erben.
+    Ein REINES Verschieben: ein vorhandener Eintrag unter `neu` wird ersetzt, hat `alt` keinen,
+    passiert nichts. Insbesondere wird dann ein Eintrag unter `neu` NICHT entfernt, obwohl er der
+    Altlast einer geloeschten Aufnahme gehoeren kann (`delete_file` raeumt ihn nicht ab): er kann
+    ebenso der umbenannten Aufnahme SELBST gehoeren — ein Umbenennen vor diesem Fix liess ihn unter
+    dem alten Namen liegen, und wer zurueckbenennt, will ihn wiederhaben (am Review gemessen:
+    mit einer Entfernung waren die Einstellungen danach endgueltig weg, auf master nicht). Dasselbe
+    gilt fuer den Fehlerpfad in `rename_file`. Eine Altlast zu erben ist der Zustand von master und
+    von jedem Upload; dort gehoert sie bei `delete_file` weggeraeumt, nicht hier.
 
     **Eine unlesbare Datei bleibt unberuehrt** (weder neu geschrieben noch beiseitegelegt wie in
-    `setze_datei`): es gibt nichts zu verschieben, und ein Schreiben wuerde sie mit Defaults
-    ueberbuegeln (#196). Geschrieben wird nur bei einer tatsaechlichen Aenderung — beide Namen
-    fehlen in `dateien`, dann endet die Funktion vorher —, ein Projekt ohne `projekt.json` bekommt
-    also keine. Die Schluessel werden EXAKT verglichen, wie bei allen
-    Lesern — nach `S1` -> `s1` liest man unter `s1`.
+    `setze_datei`): `_lesen` liefert dafuer LEERE `dateien`, `alt` fehlt, die Funktion endet vor
+    dem Schreiben — ein Schreiben wuerde die Datei mit Defaults ueberbuegeln (#196). Aus demselben
+    Grund bekommt ein Projekt ohne `projekt.json` keine. Die Schluessel werden EXAKT verglichen,
+    wie bei allen Lesern — nach `S1` -> `s1` liest man unter `s1`.
     """
     if alt == neu:
         return
     with _gesperrt(project):
         cur, _kaputt = _lesen(project)
         dateien = cur["dateien"]
-        # Traegt zugleich den Schutz der unlesbaren Datei: `_lesen` liefert dafuer LEERE `dateien`,
-        # beide Namen fehlen, und es wird nichts geschrieben (test_umbenennen_datei_kaputte_…).
-        if alt not in dateien and neu not in dateien:
+        if alt not in dateien:
             return
-        eintrag = dateien.pop(alt, None)
-        if eintrag is None:
-            dateien.pop(neu, None)
-        else:
-            dateien[neu] = eintrag
+        dateien[neu] = dateien.pop(alt)
         _write(project, cur)
 
 

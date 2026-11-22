@@ -3733,20 +3733,32 @@ def test_datei_umbenennen_ohne_namenswechsel_laesst_die_einstellungen_stehen(cli
     assert d["Antonia-2"]["sprache"] == "en" and "Antonia" not in d
 
 
+@pytest.mark.parametrize("fehler", [OSError("Platte voll"), ValueError("unlesbar"),
+                                    RecursionError("zu tief verschachtelt")],
+                         ids=["OSError", "ValueError", "RecursionError"])
 def test_datei_umbenennen_gelingt_auch_wenn_das_verschieben_der_einstellungen_scheitert(
-        client, tmp_path, monkeypatch):
+        client, tmp_path, monkeypatch, fehler):
     """Die Dateien liegen dann schon um: ein Fehler bei `projekt.json` darf das Umbenennen nicht
-    als gescheitert melden (der Nutzer versuchte es sonst erneut und bekaeme `S1-2`)."""
+    als gescheitert melden — ein zweiter Versuch des Nutzers fuende `S1` gar nicht mehr (404). Und
+    er darf das Umhaengen im laufenden Job NICHT ausfallen lassen, das danach kommt (Review: ein
+    `RecursionError` aus `json.load` ging am alten `except (OSError, ValueError)` vorbei, gemessen
+    500 nach vollzogenem Umbenennen und `rename_base` nie gerufen)."""
+    import webtool.jobs as jobs_mod
     from webtool import projekt
 
     def kaputt(*_a, **_k):
-        raise OSError("Platte voll")
+        raise fehler
 
     monkeypatch.setattr(projekt, "umbenennen_datei", kaputt)
-    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
-    assert r.status_code == 200, r.text
-    assert r.json()["name"] == "Neu"
-    assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
+    _transcribe_lauf_eintragen("rename-fehler", bases={"S1"}, gesehen={"S1"})
+    try:
+        r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Neu"})
+        assert r.status_code == 200, r.text
+        assert r.json()["name"] == "Neu"
+        assert (tmp_path / "Demo" / "audio" / "Neu.mp3").exists()
+        assert "Neu" in jobs_mod._jobs["rename-fehler"]["bases"], "das Umhaengen im Job blieb aus"
+    finally:
+        _transcribe_lauf_austragen("rename-fehler")
 
 
 def _transcribe_lauf_eintragen(jid, bases, gesehen, aktiv=None):
