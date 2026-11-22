@@ -240,7 +240,10 @@ sie sich nicht. *(Ab `v0.60.0`.)*
 
 **Ordnung, auch nach hundert Aufnahmen.** Projekte und Aufnahmen lassen sich jederzeit
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
-sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Suchfeld und `Strg+K` führen dich
+sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Gibt es den Namen in diesem Projekt
+schon — zwei Interviews mit einer Antonia —, hängt Transkribor selbst eine Zahl an („Antonia-2“)
+und sagt es dir; du musst nicht ausweichen. *(Ab der nächsten Fassung.)* Suchfeld und `Strg+K`
+führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt. Am Tablet und am
 Touch-Bildschirm sind die `⋯`-Knöpfe ab `v0.49.0` dauerhaft sichtbar: bisher
 erschienen sie nur beim Darüberfahren mit der Maus oder wenn du sie mit der Tastatur
@@ -302,9 +305,14 @@ Platznummer: beim Korrigieren arbeitet Transkribor mehrere Aufnahmen gleichzeiti
 schmalen Dateileiste des Editors bleibt es beim kurzen „In Warteschlange“ — dort würde der
 längere Text die Dateinamen verdrängen.
 
-Solange eine solche Aufnahme zum laufenden Lauf gehört, lässt sie sich nicht umbenennen und
-nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte warten“.
-Löschen geht weiterhin, solange gerade nicht an ihr gerechnet wird.
+Solange eine solche Aufnahme noch aussteht oder gerade bearbeitet wird, lässt sie sich nicht
+umbenennen und nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte
+warten“. Löschen geht weiterhin, solange gerade nicht an ihr gerechnet wird.
+
+Eine Aufnahme, die der laufende Lauf schon ganz erledigt hat — transkribiert *und* korrigiert —,
+lässt sich dagegen **ab der nächsten Fassung** sofort umbenennen, auch wenn der Lauf für die
+übrigen noch weiterrechnet. In Fassungen bis einschliesslich `v0.61.0` galt die Sperre bis zum
+Ende des ganzen Laufs. Neu transkribieren bleibt bis dahin gesperrt.
 
 Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du seit `v0.32.0` selbst ein,
 unter **Einstellungen › Tempo der Korrektur** (in Fassungen bis einschliesslich `v0.31.0`
