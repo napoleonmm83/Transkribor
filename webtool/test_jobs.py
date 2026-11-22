@@ -893,6 +893,67 @@ def test_fertig_wird_bei_unklarer_dateisystemidentitaet_nicht_freigegeben(monkey
         _lauf_austragen("fertig-5", "transcribe")
 
 
+def test_rename_base_haengt_die_aufnahme_unter_dem_neuen_namen_um():
+    """Nach dem Umbenennen lebt die Aufnahme unter `neu` weiter — im Bereich UND in `gesehen`,
+    sonst gilt `neu` dem Lauf als unbekannt, und `Neu transkribieren` ginge neben dem laufenden
+    Job durch (zwei Transkriptionen derselben Aufnahme, Review). Der ALTE Name wird wie nach
+    `remove_base` eine entfernte Identitaet."""
+    _lauf_eintragen("rb-1", "transcribe", bases={"A", "B"}, aktiv={}, gesehen={"A"})
+    try:
+        jobs.rename_base("P_fertig", "A", "Neu")
+        r = jobs._jobs["rb-1"]
+        assert r["bases"] == {"Neu", "B"}
+        assert {"A", "Neu"} <= r["gesehen"]
+        assert r["entfernt"] == {"A"} and r["entfernt_je"] == {"A"}
+        # Folge: weiter fertig (umbenennbar), aber `Neu transkribieren` bleibt gesperrt.
+        assert jobs.betrifft("P_fertig", "Neu", fertige_frei=True) is None
+        assert jobs.betrifft("P_fertig", "Neu") is not None
+    finally:
+        _lauf_austragen("rb-1", "transcribe")
+
+
+def test_rename_base_ruehrt_einen_lauf_ohne_die_aufnahme_nicht_an():
+    _lauf_eintragen("rb-2", "transcribe", bases={"B"}, aktiv={}, gesehen={"B"})
+    try:
+        jobs.rename_base("P_fertig", "A", "Neu")
+        r = jobs._jobs["rb-2"]
+        assert r["bases"] == {"B"} and r["gesehen"] == {"B"}, "ein Lauf lernt keine fremde Aufnahme"
+    finally:
+        _lauf_austragen("rb-2", "transcribe")
+
+
+def test_rename_base_hebt_eine_fruehere_loeschung_des_neuen_namens_auf():
+    """`neu` bezeichnet jetzt die fertige Aufnahme: eine alte Loeschbuchung dieses Namens im Lauf
+    hielte sie sonst fuer eine neu hochgeladene, noch nicht begonnene (`entfernt_je`)."""
+    _lauf_eintragen("rb-3", "transcribe", bases={"A"}, aktiv={}, gesehen={"A"})
+    with jobs._lock:
+        jobs._jobs["rb-3"]["entfernt"] = {"Neu"}
+        jobs._jobs["rb-3"]["entfernt_je"] = {"Neu"}
+    try:
+        jobs.rename_base("P_fertig", "A", "Neu")
+        r = jobs._jobs["rb-3"]
+        assert "Neu" not in r["entfernt"] and "Neu" not in r["entfernt_je"]
+        assert r["entfernt_je"] == {"A"}
+    finally:
+        _lauf_austragen("rb-3", "transcribe")
+
+
+def test_rename_base_bucht_bei_reinem_schreibweisenwechsel_nichts_als_entfernt(monkeypatch):
+    """Auf einem case-insensitiven Dateisystem ist `S1` -> `s1` dieselbe Aufnahme: nur die
+    Beschriftung wechselt. Als `entfernt` gebucht, unterdrueckte die Oberflaeche die Urteile
+    einer Aufnahme, die weiterlebt."""
+    import ntpath
+    monkeypatch.setattr(jobs.os.path, "normcase", ntpath.normcase)
+    _lauf_eintragen("rb-4", "transcribe", bases={"S1"}, aktiv={}, gesehen={"S1"})
+    try:
+        jobs.rename_base("P_fertig", "S1", "s1")
+        r = jobs._jobs["rb-4"]
+        assert r["bases"] == {"s1"}
+        assert not r.get("entfernt") and not r.get("entfernt_je")
+    finally:
+        _lauf_austragen("rb-4", "transcribe")
+
+
 def test_eine_spaetere_scope_zeile_aendert_den_bereich_nicht():
     """Nur die erste zaehlt — sonst koennte Transkripttext, der zufaellig so beginnt, die
     Sperre aufweichen."""

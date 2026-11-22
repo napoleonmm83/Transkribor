@@ -342,7 +342,8 @@ export async function renameProject(project: string, name: string): Promise<{ na
 }
 /** Aufnahme umbenennen: Audio UND alle abgeleiteten Dateien in einem Zug — der Basisname
  *  ist die Verbindung zwischen beiden. */
-export async function renameFile(project: string, base: string, name: string): Promise<{ name: string }> {
+export async function renameFile(project: string, base: string, name: string):
+    Promise<{ name: string; durchnummeriert?: boolean }> {
   return jn(await post(`/api/projects/${enc(project)}/files/${enc(base)}/rename`, { name }))
 }
 export async function deleteProject(project: string): Promise<void> {

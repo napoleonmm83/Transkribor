@@ -3590,6 +3590,9 @@ def test_datei_umbenennen_nummeriert_einen_belegten_namen_durch(client, tmp_path
     assert r.status_code == 200, r.text
     assert r.json()["name"] == "Antonia-2"
     assert r.json()["umbenannt"] == 10
+    # Der Server sagt selbst, DASS durchnummeriert wurde — das Frontend vergleicht keine Namen
+    # (Pythons strip() und JavaScripts trim() entfernen nicht dieselben Zeichen).
+    assert r.json()["durchnummeriert"] is True
     assert (audio / "Antonia-2.mp3").exists() and (t / "Antonia-2.edit.json").exists()
     assert not list(t.glob("S1.*")) and not (audio / "S1.mp3").exists()
     # Die vorhandene Antonia bleibt unberuehrt.
@@ -3633,6 +3636,9 @@ def test_datei_umbenennen_nummeriert_den_reinen_schreibweisenwechsel_nicht(clien
     _artefakte(tmp_path)
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "s1"})
     assert r.status_code == 200 and r.json()["name"] == "s1"
+    assert r.json()["durchnummeriert"] is False
+    # Auf ubuntu ist `s1` ein ANDERER Name als `S1`: dort prueft der Test nur die Flag-Richtung;
+    # der samefile-Zweig laeuft nur auf case-insensitiven Dateisystemen (Windows, macOS).
 
 
 def test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf(client, tmp_path, monkeypatch):
@@ -3678,11 +3684,72 @@ def test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs(client
         frei = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Eins"})
         assert frei.status_code == 200, frei.text
         assert (tmp_path / "Demo" / "audio" / "Eins.mp3").exists()
+        lauf = jobs_mod._jobs["rename-lauf"]
         # Der alte Name ist fuer den laufenden Job eine entfernte Identitaet: eine spaeter
         # gleichnamig hochgeladene Aufnahme erbte sonst das Urteil der umbenannten (#479/#489).
-        assert "S1" in jobs_mod._jobs["rename-lauf"]["entfernt_je"]
+        assert "S1" in lauf["entfernt_je"]
+        # Die Aufnahme lebt unter dem neuen Namen im Bereich des Laufs weiter (umgehaengt, nicht
+        # entfernt) — sonst kennt der Lauf `Eins` nicht, und `Neu transkribieren` ginge daneben
+        # durch (zwei Transkriptionen derselben Aufnahme).
+        assert "Eins" in lauf["bases"] and "S1" not in lauf["bases"] and "Eins" in lauf["gesehen"]
+        assert client.post("/api/projects/Demo/files/Eins/transcribe").status_code == 409
+        assert (tmp_path / "Demo" / "transkripte" / "Eins.json").exists()
     finally:
         _transcribe_lauf_austragen("rename-lauf")
+
+
+def test_datei_umbenennen_rundreise_im_lauf_bleibt_fertig_und_gesperrt(client, tmp_path):
+    """S1 -> Eins -> S1: nach dem Rueckweg gilt `S1` wieder als fertig und ist NICHT als entfernt
+    gebucht (der alte Eintrag von `S1` haette sie sonst fuer eine neue, nicht begonnene gehalten)."""
+    import webtool.jobs as jobs_mod
+    _transcribe_lauf_eintragen("rename-rund", bases={"S1"}, gesehen={"S1"})
+    try:
+        assert client.post("/api/projects/Demo/files/S1/rename", json={"name": "Eins"}).status_code == 200
+        assert client.post("/api/projects/Demo/files/Eins/rename", json={"name": "S1"}).status_code == 200
+        lauf = jobs_mod._jobs["rename-rund"]
+        assert "S1" in lauf["bases"] and "S1" in lauf["gesehen"]
+        assert "S1" not in lauf["entfernt_je"], "die lebende Aufnahme gilt nicht als geloescht"
+        assert client.post("/api/projects/Demo/files/S1/transcribe").status_code == 409
+    finally:
+        _transcribe_lauf_austragen("rename-rund")
+
+
+def test_datei_umbenennen_auf_den_eigenen_durchnummerierten_namen_aendert_nichts(client, tmp_path):
+    """`Antonia` und `Antonia-2` gibt es, der Editor steht auf `Antonia-2`, getippt wird `Antonia`.
+    Die Durchnummerierung landet auf der Aufnahme selbst: kein Umbenennen auf sich selbst, kein
+    neu geschriebenes Dokument (das liesse den naechsten Autosave in einen falschen 409 laufen),
+    keine Buchung als geloescht — und der Nutzer erfaehrt, dass der Name bleibt."""
+    import webtool.jobs as jobs_mod
+    t = tmp_path / "Demo" / "transkripte"
+    _fremde_aufnahme(tmp_path, "Antonia")
+    _fremde_aufnahme(tmp_path, "Antonia-2")
+    (t / "Antonia-2.edit.json").write_text(json.dumps({"base": "Antonia-2"}), encoding="utf-8")
+    stand = (t / "Antonia-2.edit.json").stat().st_mtime_ns
+    _transcribe_lauf_eintragen("rename-selbst", bases={"Antonia-2"}, gesehen={"Antonia-2"})
+    try:
+        r = client.post("/api/projects/Demo/files/Antonia-2/rename", json={"name": "Antonia"})
+        assert r.status_code == 200, r.text
+        assert r.json()["name"] == "Antonia-2" and r.json()["umbenannt"] == 0
+        assert r.json()["durchnummeriert"] is True
+        assert (t / "Antonia-2.edit.json").stat().st_mtime_ns == stand, "Dokument neu geschrieben"
+        lauf = jobs_mod._jobs["rename-selbst"]
+        assert "Antonia-2" in lauf["bases"] and not lauf.get("entfernt_je")
+    finally:
+        _transcribe_lauf_austragen("rename-selbst")
+
+
+def test_datei_umbenennen_zaehlt_ein_fremdes_transkript_ohne_ton_als_belegt(client, tmp_path):
+    """`Antonia.json` ohne Ton ist in der Dateiliste eine Aufnahme. Ohne eigene Pruefung wanderte
+    der eigene Ton daneben und beide waeren EINE Aufnahme (fremde Zusammenfassung ueber fremdem Ton)."""
+    t = tmp_path / "Demo" / "transkripte"
+    # Die EIGENE Aufnahme hat nur Ton: haette sie ein `S1.json`, kollidierte schon der Dateiname
+    # (`Antonia.json`), und der Fehlerfall waere gar nicht erreicht.
+    (t / "S1.json").unlink()
+    (t / "Antonia.json").write_text(json.dumps({"fremd": True}), encoding="utf-8")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["name"] == "Antonia-2"
+    assert json.loads((t / "Antonia.json").read_text(encoding="utf-8")) == {"fremd": True}
+    assert not (tmp_path / "Demo" / "audio" / "Antonia.mp3").exists()
 
 
 def test_datei_umbenennen_sperrt_eine_aktive_aufnahme_weiter(client, tmp_path):
