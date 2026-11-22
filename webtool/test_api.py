@@ -3613,7 +3613,8 @@ def test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch(client, tmp_pa
 def test_datei_umbenennen_nummeriert_auch_bei_belegtem_sidecar_durch(client, tmp_path):
     """Es muss nicht der Ton kollidieren — ein einziges Sidecar mit dem Zielnamen genuegt."""
     t = _artefakte(tmp_path)
-    # `.correction.json` zaehlt NICHT als „bekannte Aufnahme“ (gemessen; `.md` schon): dieses
+    # `.correction.json` zaehlt NICHT als „bekannte Aufnahme“, `.md` schon (belegt durch
+    # `test_bekannte_aufnahmebasen_kennt_nur_manche_endungen`): dieses
     # Sidecar sieht nur die Einzelpruefung der Zieldateien — und genau die gilt es zu halten.
     (t / "Ziel.correction.json").write_text("belegt", encoding="utf-8")
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
@@ -3655,11 +3656,30 @@ def test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf(client, tmp_pat
     assert (t / "S1.json").exists() and (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
 
 
+def test_bekannte_aufnahmebasen_kennt_nur_manche_endungen(client, tmp_path):
+    """Belegt die Voraussetzung der Kommentare in `paare_fuer`: eine Base gilt als bekannte
+    Aufnahme, wenn sie `.md`, `.json` oder `.raw.txt` traegt — `.edit.json`, `.correction.json` und
+    `.diar.json` allein machen sie NICHT dazu. Deshalb braucht `paare_fuer` neben dem Abgleich mit
+    den bekannten Aufnahmen die Einzelpruefung der Zieldateien. Wird `_bekannte_aufnahmebasen`
+    erweitert, kann diese Einzelpruefung entbehrlich werden: dann Test UND Kommentare anpassen."""
+    import webtool.app as appmod
+    from webtool import paths
+    t = tmp_path / "Demo" / "transkripte"
+    for name in ("Kennt.md", "Kennt2.raw.txt", "Nicht.edit.json", "Nicht2.correction.json",
+                 "Nicht3.diar.json"):
+        (t / name).write_text("x", encoding="utf-8")
+    bekannt = appmod._bekannte_aufnahmebasen("Demo")
+    assert {paths.namensform("Kennt"), paths.namensform("Kennt2")} <= bekannt
+    for nicht in ("Nicht", "Nicht2", "Nicht3"):
+        assert paths.namensform(nicht) not in bekannt, nicht
+
+
 def test_datei_umbenennen_schreibt_nicht_in_ein_fremdes_edit_dokument_ohne_aufnahme(client, tmp_path):
     """`Antonia.edit.json` ohne Ton und ohne Roh-JSON (CodeRabbit, major). Die eigene Aufnahme hat
     kein `edit.json`, also kollidiert kein eigenes Ziel — und `_doc_felder` schriebe danach `base`
     und `audio` der EIGENEN Aufnahme in das fremde Dokument. `.edit.json` zaehlt nicht zu den
-    Endungen, an denen `_bekannte_aufnahmebasen` eine Aufnahme erkennt (gemessen)."""
+    Endungen, an denen `_bekannte_aufnahmebasen` eine Aufnahme erkennt (belegt durch
+    `test_bekannte_aufnahmebasen_kennt_nur_manche_endungen`)."""
     t = tmp_path / "Demo" / "transkripte"
     fremd = {"base": "Antonia", "summary": "fremder Text"}
     (t / "Antonia.edit.json").write_text(json.dumps(fremd), encoding="utf-8")
