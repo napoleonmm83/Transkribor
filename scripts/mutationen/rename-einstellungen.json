@@ -20,9 +20,9 @@
       ]
     },
     {
-      "id": "E2 ohne den Frueh-Rueckweg wird eine unlesbare projekt.json (und ein Legacy-Projekt) beschrieben",
+      "id": "E2 ohne den Frueh-Rueckweg wird bei fehlendem Eintrag weitergemacht (unlesbare Datei, Legacy-Projekt)",
       "datei": "webtool/projekt.py",
-      "von": "        if alt not in dateien and neu not in dateien:\n            return",
+      "von": "        if alt not in dateien:\n            return",
       "nach": "        if False:\n            return",
       "rot": [
         "test_umbenennen_datei_kaputte_projekt_json_bleibt_unberuehrt",
@@ -33,48 +33,23 @@
       ]
     },
     {
-      "id": "E3 die Altlast unter dem neuen Namen bleibt stehen",
+      "id": "E3 der Eintrag wird kopiert statt verschoben (bleibt unter dem alten Namen)",
       "datei": "webtool/projekt.py",
-      "von": "            dateien.pop(neu, None)",
-      "nach": "            pass",
-      "rot": [
-        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
-      ],
-      "gruen": [
-        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
-      ]
-    },
-    {
-      "id": "E4 der Eintrag wird nicht unter dem neuen Namen abgelegt",
-      "datei": "webtool/projekt.py",
-      "von": "            dateien[neu] = eintrag",
-      "nach": "            pass",
-      "rot": [
-        "test_umbenennen_datei_nimmt_alle_schluessel_mit",
-        "test_datei_umbenennen_einstellungen_wandern_mit"
-      ],
-      "gruen": [
-        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
-      ]
-    },
-    {
-      "id": "E5 der Eintrag bleibt unter dem alten Namen stehen (kopiert statt verschoben)",
-      "datei": "webtool/projekt.py",
-      "von": "        eintrag = dateien.pop(alt, None)",
-      "nach": "        eintrag = dateien.get(alt)",
+      "von": "        dateien[neu] = dateien.pop(alt)",
+      "nach": "        dateien[neu] = dict(dateien[alt])",
       "rot": [
         "test_umbenennen_datei_nimmt_alle_schluessel_mit",
         "test_umbenennen_datei_verschiebt_den_schluessel_auch_bei_reinem_schreibweisenwechsel"
       ],
       "gruen": [
-        "test_umbenennen_datei_ohne_eintrag_entfernt_die_altlast_unter_dem_neuen_namen"
+        "test_umbenennen_datei_ohne_eintrag_laesst_einen_eintrag_unter_dem_zielnamen_stehen"
       ]
     },
     {
-      "id": "E6 die Aenderung wird nicht geschrieben",
+      "id": "E4 der Eintrag wird entfernt, aber nicht unter dem neuen Namen abgelegt",
       "datei": "webtool/projekt.py",
-      "von": "            dateien[neu] = eintrag\n        _write(project, cur)",
-      "nach": "            dateien[neu] = eintrag\n        pass",
+      "von": "        dateien[neu] = dateien.pop(alt)",
+      "nach": "        dateien.pop(alt)",
       "rot": [
         "test_umbenennen_datei_nimmt_alle_schluessel_mit",
         "test_datei_umbenennen_einstellungen_wandern_mit"
@@ -84,7 +59,44 @@
       ]
     },
     {
-      "id": "E7 rename_file ruft die Uebernahme gar nicht auf",
+      "id": "E5 ein vorhandener Eintrag unter dem neuen Namen gewinnt gegen den eigenen (setdefault)",
+      "datei": "webtool/projekt.py",
+      "von": "        dateien[neu] = dateien.pop(alt)",
+      "nach": "        dateien.setdefault(neu, dateien.pop(alt))",
+      "rot": [
+        "test_umbenennen_datei_der_alte_eintrag_gewinnt_gegen_einen_vorhandenen_unter_dem_neuen_namen"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
+      ]
+    },
+    {
+      "id": "E6 die Aenderung wird nicht geschrieben",
+      "datei": "webtool/projekt.py",
+      "von": "        dateien[neu] = dateien.pop(alt)\n        _write(project, cur)",
+      "nach": "        dateien[neu] = dateien.pop(alt)\n        pass",
+      "rot": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit",
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_legt_keine_projekt_json_an"
+      ]
+    },
+    {
+      "id": "E7 das Verschieben laeuft ohne das projektweite Lock (Race mit Upload/fetch, #134)",
+      "datei": "webtool/projekt.py",
+      "von": "    with _gesperrt(project):\n        cur, _kaputt = _lesen(project)",
+      "nach": "    if True:\n        cur, _kaputt = _lesen(project)",
+      "rot": [
+        "test_umbenennen_datei_ueberlebt_einen_gleichzeitigen_schreiber"
+      ],
+      "gruen": [
+        "test_umbenennen_datei_nimmt_alle_schluessel_mit"
+      ]
+    },
+    {
+      "id": "E8 rename_file ruft die Uebernahme gar nicht auf",
       "datei": "webtool/app.py",
       "von": "_projekt.umbenennen_datei(project, base, neu)      # bei gleichem Namen ein No-op",
       "nach": "pass",
@@ -97,7 +109,7 @@
       ]
     },
     {
-      "id": "E8 die Einstellungen ziehen mit dem getippten statt dem vergebenen Namen",
+      "id": "E9 die Einstellungen ziehen mit dem getippten statt dem vergebenen Namen",
       "datei": "webtool/app.py",
       "von": "_projekt.umbenennen_datei(project, base, neu)",
       "nach": "_projekt.umbenennen_datei(project, base, wunsch)",
@@ -109,10 +121,22 @@
       ]
     },
     {
-      "id": "E9 ein Fehler bei projekt.json macht das Umbenennen zum Fehlschlag",
+      "id": "E10 ein Fehler bei projekt.json macht das Umbenennen zum Fehlschlag",
       "datei": "webtool/app.py",
-      "von": "        except (OSError, ValueError) as e:\n            print(f\"⚠ Datei-Einstellungen",
+      "von": "        except Exception as e:\n            print(f\"⚠ Datei-Einstellungen",
       "nach": "        except KeyError as e:\n            print(f\"⚠ Datei-Einstellungen",
+      "rot": [
+        "test_datei_umbenennen_gelingt_auch_wenn_das_verschieben_der_einstellungen_scheitert"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_einstellungen_wandern_mit"
+      ]
+    },
+    {
+      "id": "E11 nur OSError wird gefangen: ein ValueError oder RecursionError aus projekt.json bricht ab",
+      "datei": "webtool/app.py",
+      "von": "        except Exception as e:\n            print(f\"⚠ Datei-Einstellungen",
+      "nach": "        except OSError as e:\n            print(f\"⚠ Datei-Einstellungen",
       "rot": [
         "test_datei_umbenennen_gelingt_auch_wenn_das_verschieben_der_einstellungen_scheitert"
       ],
