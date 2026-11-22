@@ -1554,7 +1554,8 @@ def _datei_weg(project: str, base: str, mit_audio: bool) -> int:
 _KIND_TEXT = {"transcribe": "Verarbeitung", "correct": "Korrektur", "fetch": "Import"}
 
 
-def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> None:
+def _keine_jobs(project: str, base: str = None, active_only: bool = False,
+                fertige_frei: bool = False) -> None:
     """Dateien wegzuraeumen, waehrend ein Lauf sie schreibt, ist ein Datenrennen: die
     Korrektur haelt Pfade ueber Minuten offen und schriebe die geloeschte edit.json neu.
 
@@ -1570,7 +1571,8 @@ def _keine_jobs(project: str, base: str = None, active_only: bool = False) -> No
         laufend = offen[0] if offen else jobs.vorgemerkt_fuer(project)
         wen = "Im Projekt wird"
     else:
-        laufend, wen = jobs.betrifft(project, base, active_only=active_only), f"„{base}“ wird"
+        laufend, wen = (jobs.betrifft(project, base, active_only=active_only,
+                                      fertige_frei=fertige_frei), f"„{base}“ wird")
     if laufend:
         was = _KIND_TEXT.get(laufend["kind"], laufend["kind"])
         raise HTTPException(status_code=409,
@@ -1679,6 +1681,12 @@ def retranscribe_file(project: str, base: str):
 
 class RenameBody(BaseModel):
     name: str
+
+
+# Wie viele Namen (`Name`, `Name-2`, … `Name-99`) das Umbenennen einer Aufnahme durchprobiert,
+# bevor es mit 409 aufgibt. Eine Obergrenze, damit ein Verzeichnis voller Dubletten keine
+# unbegrenzte Schleife unter der Dateisperre bedeutet.
+_UMBENENNEN_VERSUCHE = 99
 
 
 def _neuer_name(roh: str) -> str:
@@ -1804,7 +1812,9 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # geschaffen; sie schliesst es nur, wenn die Frage INNERHALB gestellt wird.
         # Die `HTTPException` verlaesst das `with` und gibt die Sperre frei — dasselbe
         # Verhalten wie bei den zwei Nachbarn, nichts Neues.
-        _keine_jobs(project, base)
+        # `fertige_frei`: eine im laufenden Lauf schon ganz erledigte Aufnahme darf umbenannt
+        # werden (siehe `jobs.betrifft`) — nur hier, `retranscribe_file` behaelt den weiten Bereich.
+        _keine_jobs(project, base, fertige_frei=True)
         tdir = paths.transkripte_dir(project)
         # glob.escape wie in _datei_weg: safe_name laesst `[` durch, der URL-Import legt
         # "Video [dQw4w9].m4a" an, und ungeschuetzt liest glob das `[` als Zeichenklasse.
@@ -1844,13 +1854,35 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                 ordner, glob.escape(base) + ".*.weg"))
                 if os.path.isfile(p) and _weg_alter(p) is None
                 and _weg_aufnahme(p) == base)
-        paare = []
-        for p in treffer:
-            rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
-            ziel = os.path.join(os.path.dirname(p), neu + rest)
-            if not _ziel_frei(p, ziel):
-                raise HTTPException(status_code=409, detail=f"gibt es schon: {neu + rest}")
-            paare.append((p, ziel))
+        def paare_fuer(kandidat: str):
+            """(Paare, None), wenn `kandidat` als Name frei ist, sonst (None, belegter Dateiname)."""
+            paare = []
+            for p in treffer:
+                rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
+                ziel = os.path.join(os.path.dirname(p), kandidat + rest)
+                if not _ziel_frei(p, ziel):
+                    return None, kandidat + rest
+                paare.append((p, ziel))
+            # Fremder Ton anderer Endung: kollidiert mit keinem abgeleiteten Dateinamen (eine
+            # reine Audiodatei hat kein Sidecar), aber danach gaebe es zwei Toene zu EINER Aufnahme.
+            for ext in AUDIO_EXT:
+                fremd = os.path.join(adir, kandidat + ext)
+                if os.path.exists(fremd) and not any(
+                        os.path.exists(p) and os.path.samefile(p, fremd) for p in treffer):
+                    return None, kandidat + ext
+            return paare, None
+
+        # Ein belegter Name ist kein Fehler, den der Nutzer ausbaden soll: zwei verschiedene
+        # Menschen heissen Antonia. Dasselbe Schema wie `fetch.unique_base` (`Name-2`, `Name-3`),
+        # und die Antwort traegt den VERGEBENEN Namen — das Frontend sagt ihn an.
+        for versuch in range(1, _UMBENENNEN_VERSUCHE + 1):
+            kandidat = neu if versuch == 1 else f"{neu}-{versuch}"
+            paare, belegt = paare_fuer(kandidat)
+            if paare is not None:
+                neu = kandidat
+                break
+        else:
+            raise HTTPException(status_code=409, detail=f"gibt es schon: {belegt}")
         # Die Kollisionspruefung oben beantwortet „ist der Zielname frei?" — sie sieht keine
         # offenen Griffe. Genau daran zerbrach die Schleife: gemessen blieb `A_fremd_neu.json`
         # neben `A_fremd.raw.txt` liegen, die Aufnahme gab es zweimal halb (#451). Alles oder
@@ -1901,6 +1933,10 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
             _doc_felder(ziel, **felder)
             with suppress(OSError):
                 os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))
+        # Der alte Name ist fuer einen laufenden Job eine entfernte Identitaet, genau wie nach
+        # `delete_file`: eine spaeter gleichnamig hochgeladene Aufnahme erbte sonst das Urteil
+        # der umbenannten (#479/#489). Erst NACH dem gelungenen Umbenennen, wie beim Loeschen.
+        jobs.remove_base(project, base)
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #

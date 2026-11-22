@@ -3552,10 +3552,15 @@ def test_datei_loeschen_bricht_bei_mehrdeutigem_transkript_der_zielaufnahme_ab(
     assert (audio / "S1.edit.mp3").read_bytes() == b"Ton"
 
 
-def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path):
+def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path, monkeypatch):
     """Der wichtige Teil ist nicht der 409, sondern dass NICHTS umbenannt wurde: eine halb
     umbenannte Aufnahme gibt es zweimal halb, und der Basisname ist die einzige Verbindung
-    zwischen Ton und Transkript."""
+    zwischen Ton und Transkript.
+
+    Mit EINEM Versuch erreichbar: sonst liesse die automatische Durchnummerierung (`Ziel-2`)
+    den Konflikt gar nicht mehr bis hierher."""
+    import webtool.app as appmod
+    monkeypatch.setattr(appmod, "_UMBENENNEN_VERSUCHE", 1)
     t = _artefakte(tmp_path)
     (t / "Ziel.md").write_text("belegt", encoding="utf-8")     # nur EIN Name kollidiert
     r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
@@ -3563,6 +3568,142 @@ def test_datei_umbenennen_bricht_ab_BEVOR_etwas_wandert(client, tmp_path):
     assert (t / "S1.json").exists() and (t / "S1.edit.json").exists()
     assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
     assert (t / "Ziel.md").read_text(encoding="utf-8") == "belegt"
+
+
+def _fremde_aufnahme(tmp_path, base, ton_endung=".mp3", mit_text=True):
+    """Eine zweite, eigenstaendige Aufnahme neben S1 — der Gegenstand der Kollision."""
+    (tmp_path / "Demo" / "audio" / f"{base}{ton_endung}").write_bytes(b"fremder Ton " + base.encode())
+    if mit_text:
+        (tmp_path / "Demo" / "transkripte" / f"{base}.json").write_text(
+            json.dumps({"fremd": base}), encoding="utf-8")
+
+
+def test_datei_umbenennen_nummeriert_einen_belegten_namen_durch(client, tmp_path):
+    """Zwei verschiedene Menschen heissen Antonia: der Nutzer tippt `Antonia`, das System
+    nimmt `Antonia-2` (dasselbe Schema wie `fetch.unique_base`) — kein 409, keine Rueckfrage."""
+    t = _artefakte(tmp_path)
+    audio = tmp_path / "Demo" / "audio"
+    _fremde_aufnahme(tmp_path, "Antonia")
+
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Antonia-2"
+    assert r.json()["umbenannt"] == 10
+    assert (audio / "Antonia-2.mp3").exists() and (t / "Antonia-2.edit.json").exists()
+    assert not list(t.glob("S1.*")) and not (audio / "S1.mp3").exists()
+    # Die vorhandene Antonia bleibt unberuehrt.
+    assert (audio / "Antonia.mp3").read_bytes() == b"fremder Ton Antonia"
+    assert json.loads((t / "Antonia.json").read_text(encoding="utf-8")) == {"fremd": "Antonia"}
+    # Das Dokument traegt den VERGEBENEN Namen, nicht den getippten.
+    assert json.loads((t / "Antonia-2.edit.json").read_text(encoding="utf-8"))["base"] == "Antonia-2"
+
+
+def test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch(client, tmp_path):
+    _artefakte(tmp_path)
+    _fremde_aufnahme(tmp_path, "Antonia")
+    _fremde_aufnahme(tmp_path, "Antonia-2")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["name"] == "Antonia-3"
+
+
+def test_datei_umbenennen_nummeriert_auch_bei_belegtem_sidecar_durch(client, tmp_path):
+    """Es muss nicht der Ton kollidieren — ein einziges Sidecar mit dem Zielnamen genuegt."""
+    t = _artefakte(tmp_path)
+    (t / "Ziel.md").write_text("belegt", encoding="utf-8")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Ziel"})
+    assert r.status_code == 200 and r.json()["name"] == "Ziel-2"
+    assert (t / "Ziel.md").read_text(encoding="utf-8") == "belegt"
+    assert (t / "Ziel-2.md").exists()
+
+
+def test_datei_umbenennen_zaehlt_fremden_ton_anderer_endung_als_belegt(client, tmp_path):
+    """`Antonia.wav` ohne Transkript kollidiert mit keinem der abgeleiteten Dateinamen —
+    ohne eigene Pruefung gaebe es danach zwei Toene zu EINER Aufnahme."""
+    _artefakte(tmp_path)
+    _fremde_aufnahme(tmp_path, "Antonia", ton_endung=".wav", mit_text=False)
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 200 and r.json()["name"] == "Antonia-2"
+    assert (tmp_path / "Demo" / "audio" / "Antonia.wav").exists()
+    assert not (tmp_path / "Demo" / "audio" / "Antonia.mp3").exists()
+
+
+def test_datei_umbenennen_nummeriert_den_reinen_schreibweisenwechsel_nicht(client, tmp_path):
+    """`S1` -> `s1` ist dieselbe Datei (auf Windows case-insensitiv) und KEIN Konflikt."""
+    _artefakte(tmp_path)
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "s1"})
+    assert r.status_code == 200 and r.json()["name"] == "s1"
+
+
+def test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf(client, tmp_path, monkeypatch):
+    """Die Durchnummerierung hat eine Obergrenze — dann bleibt es beim 409 und es wandert nichts."""
+    import webtool.app as appmod
+    monkeypatch.setattr(appmod, "_UMBENENNEN_VERSUCHE", 2)
+    t = _artefakte(tmp_path)
+    _fremde_aufnahme(tmp_path, "Antonia")
+    _fremde_aufnahme(tmp_path, "Antonia-2")
+    r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Antonia"})
+    assert r.status_code == 409
+    assert (t / "S1.json").exists() and (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+
+
+def _transcribe_lauf_eintragen(jid, bases, gesehen, aktiv=None):
+    import webtool.jobs as jobs_mod
+    with jobs_mod._lock:
+        jobs_mod._jobs[jid] = {
+            "id": jid, "project": "Demo", "kind": "transcribe", "status": "running",
+            "bases": set(bases), "active_bases": dict(aktiv or {}), "gesehen": set(gesehen),
+        }
+        jobs_mod._active[("Demo", "transcribe")] = jid
+
+
+def _transcribe_lauf_austragen(jid):
+    import webtool.jobs as jobs_mod
+    with jobs_mod._lock:
+        jobs_mod._active.pop(("Demo", "transcribe"), None)
+        jobs_mod._jobs.pop(jid, None)
+
+
+def test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs(client, tmp_path):
+    """Ein Lauf transkribiert viele Aufnahmen: die fertige (S1) muss umbenennbar sein, die noch
+    ausstehende (S2) bleibt gesperrt — der Lauf oeffnet sie spaeter unter dem alten Namen."""
+    import webtool.jobs as jobs_mod
+    _fremde_aufnahme(tmp_path, "S2", mit_text=False)
+    _transcribe_lauf_eintragen("rename-lauf", bases={"S1", "S2"}, gesehen={"S1"})
+    try:
+        gesperrt = client.post("/api/projects/Demo/files/S2/rename", json={"name": "Zwei"})
+        assert gesperrt.status_code == 409, gesperrt.text
+        assert (tmp_path / "Demo" / "audio" / "S2.mp3").exists()
+
+        frei = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Eins"})
+        assert frei.status_code == 200, frei.text
+        assert (tmp_path / "Demo" / "audio" / "Eins.mp3").exists()
+        # Der alte Name ist fuer den laufenden Job eine entfernte Identitaet: eine spaeter
+        # gleichnamig hochgeladene Aufnahme erbte sonst das Urteil der umbenannten (#479/#489).
+        assert "S1" in jobs_mod._jobs["rename-lauf"]["entfernt_je"]
+    finally:
+        _transcribe_lauf_austragen("rename-lauf")
+
+
+def test_datei_umbenennen_sperrt_eine_aktive_aufnahme_weiter(client, tmp_path):
+    _transcribe_lauf_eintragen("rename-aktiv", bases={"S1"}, gesehen={"S1"}, aktiv={"S1": 1})
+    try:
+        r = client.post("/api/projects/Demo/files/S1/rename", json={"name": "Eins"})
+        assert r.status_code == 409, r.text
+        assert (tmp_path / "Demo" / "audio" / "S1.mp3").exists()
+    finally:
+        _transcribe_lauf_austragen("rename-aktiv")
+
+
+def test_neu_transkribieren_bleibt_fuer_fertige_aufnahmen_waehrend_eines_laufs_gesperrt(
+        client, tmp_path):
+    """Der Schalter gilt NUR fuers Umbenennen: `retranscribe_file` behaelt den weiten Bereich."""
+    _transcribe_lauf_eintragen("retrans-lauf", bases={"S1"}, gesehen={"S1"})
+    try:
+        r = client.post("/api/projects/Demo/files/S1/transcribe")
+        assert r.status_code == 409, r.text
+    finally:
+        _transcribe_lauf_austragen("retrans-lauf")
 
 
 def test_datei_umbenennen_unbekannt_gibt_404_und_prueft_namen(client, monkeypatch):
