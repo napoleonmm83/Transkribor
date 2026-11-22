@@ -1856,6 +1856,13 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
                 and _weg_aufnahme(p) == base)
         def paare_fuer(kandidat: str):
             """(Paare, None), wenn `kandidat` als Name frei ist, sonst (None, belegter Dateiname)."""
+            # Eine fremde Aufnahme, die nur Artefakte traegt, deren Endung die eigene nicht hat
+            # (nur `Antonia.json`, kein Ton), kollidiert mit keiner eigenen Zieldatei — sie ist
+            # trotzdem eine Aufnahme der Dateiliste, und der eigene Ton wanderte daneben. Dieselbe
+            # Menge, die `_transkript_gehoert_zu` fuer die Zuordnung benutzt.
+            form = paths.namensform(kandidat)
+            if form != paths.namensform(base) and form in bekannte_basen:
+                return None, kandidat
             paare = []
             for p in treffer:
                 rest = os.path.basename(p)[len(base):]      # ".edit.json", ".mp3", ".part1.correction.json"
@@ -1875,8 +1882,16 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
         # Ein belegter Name ist kein Fehler, den der Nutzer ausbaden soll: zwei verschiedene
         # Menschen heissen Antonia. Dasselbe Schema wie `fetch.unique_base` (`Name-2`, `Name-3`),
         # und die Antwort traegt den VERGEBENEN Namen — das Frontend sagt ihn an.
+        wunsch = neu
         for versuch in range(1, _UMBENENNEN_VERSUCHE + 1):
-            kandidat = neu if versuch == 1 else f"{neu}-{versuch}"
+            kandidat = wunsch if versuch == 1 else f"{wunsch}-{versuch}"
+            if versuch > 1 and paths.namensform(kandidat) == paths.namensform(base):
+                # Die Durchnummerierung ist bei der Aufnahme SELBST angekommen (`Antonia-2`
+                # wuenscht sich `Antonia`, das belegt ist): der Name bleibt. Sonst wuerde sie auf
+                # sich selbst umbenannt (`_ziel_frei` meldet die eigene Datei per samefile als
+                # frei), das Dokument neu geschrieben — der naechste Autosave liefe in einen
+                # falschen 409 — und die weiterlebende Aufnahme im Lauf als geloescht gebucht.
+                return {"ok": True, "name": base, "umbenannt": 0, "durchnummeriert": True}
             paare, belegt = paare_fuer(kandidat)
             if paare is not None:
                 neu = kandidat
@@ -1933,17 +1948,23 @@ def _rename_file_unter_projektlebenszyklus(project: str, base: str, neu: str):
             _doc_felder(ziel, **felder)
             with suppress(OSError):
                 os.utime(ziel, ns=(st.st_atime_ns, st.st_mtime_ns))
-        # Der alte Name ist fuer einen laufenden Job eine entfernte Identitaet, genau wie nach
-        # `delete_file`: eine spaeter gleichnamig hochgeladene Aufnahme erbte sonst das Urteil
-        # der umbenannten (#479/#489). Erst NACH dem gelungenen Umbenennen, wie beim Loeschen.
-        jobs.remove_base(project, base)
+        # Ein laufender Job fuehrt die Aufnahme unter dem neuen Namen weiter (umgehaengt, nicht
+        # entfernt: sonst kennte er `neu` nicht, und „Neu transkribieren“ ginge daneben durch), und
+        # der ALTE Name wird dort eine entfernte Identitaet (#479/#489). Erst NACH dem gelungenen
+        # Umbenennen, wie beim Loeschen.
+        if neu != base:
+            jobs.rename_base(project, base, neu)
         # `umbenannt` nennt dem Nutzer die Dateien SEINER Aufnahme, nicht unsichtbare
         # Ueberbleibsel — dieselbe Regel wie `geloescht` in `_datei_weg`.
         #
         # Seit #509 stehen alte Sicherungen ebenfalls in `paare`, bleiben fuer die Anzahl aber
         # unsichtbar: `umbenannt` beschreibt die sichtbaren Dateien der Aufnahme.
         return {"ok": True, "name": neu,
-                "umbenannt": sum(1 for p, _ in paare if not p.endswith(".weg"))}
+                "umbenannt": sum(1 for p, _ in paare if not p.endswith(".weg")),
+                # Der Server sagt selbst, ob er durchnummeriert hat: das Frontend vergleichen zu
+                # lassen, ginge bei Namen schief, die Pythons strip() und JavaScripts trim()
+                # verschieden behandeln.
+                "durchnummeriert": neu != wunsch}
 
 
 @app.get("/api/projects/{project}/files/{base}")

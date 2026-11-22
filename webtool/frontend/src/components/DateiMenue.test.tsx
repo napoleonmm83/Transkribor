@@ -348,7 +348,7 @@ describe('Umbenennen: der Server nummeriert einen belegten Namen durch', () => {
   it('sagt an, wenn der vergebene Name vom getippten abweicht', async () => {
     // Zwei Menschen heissen Antonia: der Nutzer tippt `Antonia`, der Server vergibt `Antonia-2`.
     // Ein stilles Umbenennen liesse ihn einen Namen sehen, den er nie eingetippt hat.
-    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Antonia-2' })
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Antonia-2', durchnummeriert: true })
     await umbenennen('Antonia')
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1))
     const text = String(toastMock.success.mock.calls[0][0])
@@ -358,11 +358,40 @@ describe('Umbenennen: der Server nummeriert einen belegten Namen durch', () => {
 
   it('meldet im Normalfall unveraendert den neuen Namen', async () => {
     // Gegenprobe: ohne Abweichung darf der Hinweis nicht kommen (Daueralarm waere derselbe Schaden).
-    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Neu' })
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Neu', durchnummeriert: false })
     await umbenennen('Neu')
     await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1))
     const text = String(toastMock.success.mock.calls[0][0])
     expect(text).toBe('„a“ heisst jetzt „Neu“')
     expect(text).not.toContain('gab es schon')
+  })
+
+  it('verlaesst sich auf das Flag des Servers, nicht auf einen Namensvergleich', async () => {
+    // Pythons strip() und JavaScripts trim() entfernen nicht dieselben Zeichen: weicht der Name
+    // aus anderem Grund ab, ist das keine Durchnummerierung und darf nicht so gemeldet werden.
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'Anders', durchnummeriert: false })
+    await umbenennen('Neu')
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalledTimes(1))
+    expect(String(toastMock.success.mock.calls[0][0])).toBe('„a“ heisst jetzt „Anders“')
+  })
+
+  it('laesst den Editor in Ruhe, wenn die Durchnummerierung bei der Aufnahme selbst ankommt', async () => {
+    // `Antonia-2` wuenscht sich `Antonia` (belegt): der Name bleibt, nichts wurde geschrieben. Keine
+    // Erfolgsmeldung "heisst jetzt", kein `vergiss` — sonst verwirft der Editor ungespeicherte Arbeit
+    // fuer ein Umbenennen, das nicht stattfand.
+    const vergiss = vi.fn()
+    vi.mocked(api.renameFile).mockResolvedValue({ name: 'a', durchnummeriert: true })
+    render(<Huelle pfad="/p/P/a"><OffeneDatei vergiss={vergiss} /><DateiMenue project="P" file={datei({ has_raw: false })} /></Huelle>)
+    // Der Editor hat ungespeicherte Aenderungen (`OffeneDatei`: dirty) -> die Rueckfrage kommt.
+    const rueckfrage = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    await menueOeffnen()
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Umbenennen' }))
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Neuer Name' }), { target: { value: 'Antonia' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Umbenennen' }))
+    await waitFor(() => expect(toastMock.info).toHaveBeenCalledTimes(1))
+    expect(String(toastMock.info.mock.calls[0][0])).toBe('„Antonia“ gab es schon — „a“ behält ihren Namen')
+    expect(toastMock.success).not.toHaveBeenCalled()
+    expect(vergiss).not.toHaveBeenCalled()
+    rueckfrage.mockRestore()
   })
 })

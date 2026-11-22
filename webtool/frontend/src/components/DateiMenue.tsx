@@ -112,13 +112,22 @@ export function DateiMenue({ project, file, aiReason }: {
       `„${file.base}“ hat ungespeicherte Änderungen.\n\n`
       + 'Beim Umbenennen wird die Datei neu geladen — die Änderungen gehen verloren.')) return false
     const res = await renameFile(project, file.base, neu)
+    if (res.durchnummeriert && res.name === file.base) {
+      // Der Name bleibt: `neu` ist belegt, und die erste freie Nummer ist die Aufnahme selbst
+      // (`Antonia-2` wuenscht sich `Antonia`). Es wurde nichts umbenannt und nichts geschrieben —
+      // der Editor bleibt unangetastet, kein `vergiss`, keine Navigation.
+      toast.info(`„${neu}“ gab es schon — „${file.base}“ behält ihren Namen`)
+      return
+    }
     editorVergessen(e)   // sonst spuelte der Flush die alte Fassung als Waise ans alte Base
     if (passenderEditor()) navigate(`/p/${encodeURIComponent(project)}/${encodeURIComponent(res.name)}`, { replace: true })
     // Der Server nummeriert einen belegten Namen durch (`Antonia` -> `Antonia-2`): kein Konflikt
     // fuer den Nutzer, aber er soll erfahren, dass die Aufnahme anders heisst als eingetippt.
-    toast.success(res.name === neu
-      ? `„${file.base}“ heisst jetzt „${res.name}“`
-      : `„${neu}“ gab es schon — die Aufnahme heisst jetzt „${res.name}“`)
+    // Der SERVER sagt, ob er durchnummeriert hat: ein Namensvergleich im Browser ginge bei Namen
+    // schief, die Pythons strip() und JavaScripts trim() verschieden behandeln.
+    toast.success(res.durchnummeriert
+      ? `„${neu}“ gab es schon — die Aufnahme heisst jetzt „${res.name}“`
+      : `„${file.base}“ heisst jetzt „${res.name}“`)
     nachladen()
   }
 

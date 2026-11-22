@@ -1497,6 +1497,47 @@ def remove_base(project: str, base: str) -> None:
                 r.setdefault("entfernt_je", set()).update(aliases or {base})
 
 
+def rename_base(project: str, alt: str, neu: str) -> None:
+    """Haengt eine umbenannte Aufnahme in den laufenden Jobs des Projekts um — statt sie wie
+    `remove_base` zu entfernen.
+
+    Der Unterschied traegt zwei Dinge. Erstens lebt die Aufnahme unter `neu` weiter: sie bleibt im
+    Bereich des Laufs (`bases`) und in `gesehen`, gilt also weiter als fertig (umbenennbar), und
+    `betrifft(neu)` sperrt „Neu transkribieren“ weiter. Mit `remove_base` kannte der Lauf `neu`
+    nicht, ein Neu-Transkribieren ginge daneben durch und startete eine zweite Transkription
+    derselben Aufnahme (kalter Review, am Fake-Job gemessen). Zweitens ist der ALTE Name wie nach
+    `remove_base` eine entfernte Identitaet (`entfernt`/`entfernt_je`): eine spaeter gleichnamig
+    hochgeladene Aufnahme erbt kein Urteil der umbenannten (#479/#489).
+
+    Nur Jobs, in deren Bereich `alt` stand, lernen `neu` — ein Lauf, den die Aufnahme nie betraf,
+    bekommt sie nicht. Ein reiner Schreibweisenwechsel auf einem case-insensitiven Dateisystem
+    (`S1` -> `s1`) ist dieselbe Aufnahme: dort wechselt nur die Beschriftung, nichts gilt als
+    entfernt.
+    """
+    with _lock:
+        for (proj, _kind), jid in _active.items():
+            if not _gleiches_projekt(proj, project):
+                continue
+            r = _jobs.get(jid)
+            if r is None:
+                continue
+            alt_namen = set()
+            if r.get("bases") is not None:
+                alt_namen = {n for n in r["bases"] if _gleiche_base(n, alt)}
+                if alt_namen:
+                    r["bases"].difference_update(alt_namen)
+                    r["bases"].add(neu)
+            if r.get("gesehen") is not None and any(_gleiche_base(n, alt) for n in r["gesehen"]):
+                r["gesehen"].add(neu)    # alt bleibt: `gesehen` ist Historie
+            if _gleiche_base(alt, neu):
+                continue
+            # `neu` bezeichnet jetzt die fertige Aufnahme: eine alte Loeschbuchung dieses Namens
+            # hielte sie sonst fuer eine neu hochgeladene, noch nicht begonnene.
+            for menge in ("entfernt", "entfernt_je"):
+                _entferne_base_aliases(r.setdefault(menge, set()), neu)
+                r[menge].update(alt_namen or {alt})
+
+
 def betrifft(project: str, base: str, active_only: bool = False,
              fertige_frei: bool = False) -> dict | None:
     """Der laufende Job, der GENAU DIESE Aufnahme anfasst — sonst None.

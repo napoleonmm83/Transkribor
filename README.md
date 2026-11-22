@@ -309,10 +309,12 @@ Solange eine solche Aufnahme noch aussteht oder gerade bearbeitet wird, lässt s
 umbenennen und nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte
 warten“. Löschen geht weiterhin, solange gerade nicht an ihr gerechnet wird.
 
-Eine Aufnahme, die der laufende Lauf schon ganz erledigt hat — transkribiert *und* korrigiert —,
-lässt sich dagegen **ab der nächsten Fassung** sofort umbenennen, auch wenn der Lauf für die
-übrigen noch weiterrechnet. In Fassungen bis einschliesslich `v0.61.0` galt die Sperre bis zum
-Ende des ganzen Laufs. Neu transkribieren bleibt bis dahin gesperrt.
+Eine Aufnahme, die der laufende Lauf schon ganz erledigt hat, lässt sich dagegen **ab der
+nächsten Fassung** sofort umbenennen, auch wenn der Lauf für die übrigen noch weiterrechnet.
+„Erledigt“ heisst: der Lauf hat sie transkribiert und, wo eine KI eingestellt ist, korrigiert.
+In Fassungen bis einschliesslich `v0.61.0` galt die Sperre bis zum Ende des ganzen Laufs. Neu
+transkribieren lässt sich so eine Aufnahme weiterhin erst nach dem Lauf — auch nach dem
+Umbenennen.
 
 Wie viele Aufnahmen gleichzeitig korrigiert werden, stellst du seit `v0.32.0` selbst ein,
 unter **Einstellungen › Tempo der Korrektur** (in Fassungen bis einschliesslich `v0.31.0`
