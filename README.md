@@ -242,7 +242,7 @@ sie sich nicht. *(Ab `v0.60.0`.)*
 umbenennen — beim Umbenennen einer Aufnahme bietet dir Transkribor die Namen der Sprecher an,
 sodass aus `01172464` ein „Hans Müller, Garage Rüthi“ wird. Gibt es den Namen in diesem Projekt
 schon — zwei Interviews mit einer Antonia —, hängt Transkribor selbst eine Zahl an („Antonia-2“)
-und sagt es dir; du musst nicht ausweichen. *(Ab der nächsten Fassung.)* Suchfeld und `Strg+K`
+und sagt es dir; du musst nicht ausweichen. *(Ab `v0.62.0`.)* Suchfeld und `Strg+K`
 führen dich
 auch in grossen Sammlungen mit einem Griff zum richtigen Projekt. Am Tablet und am
 Touch-Bildschirm sind die `⋯`-Knöpfe ab `v0.49.0` dauerhaft sichtbar: bisher
@@ -309,8 +309,7 @@ Solange eine solche Aufnahme noch aussteht oder gerade bearbeitet wird, lässt s
 umbenennen und nicht neu transkribieren; Transkribor sagt dann „wird gerade bearbeitet — bitte
 warten“. Löschen geht weiterhin, solange gerade nicht an ihr gerechnet wird.
 
-Eine Aufnahme, die der laufende Lauf schon ganz erledigt hat, lässt sich dagegen **ab der
-nächsten Fassung** sofort umbenennen, auch wenn der Lauf für die übrigen noch weiterrechnet.
+Eine Aufnahme, die der laufende Lauf schon ganz erledigt hat, lässt sich dagegen **ab `v0.62.0`** sofort umbenennen, auch wenn der Lauf für die übrigen noch weiterrechnet.
 „Erledigt“ heisst: der Lauf hat sie transkribiert und, wo eine KI eingestellt ist, korrigiert.
 In Fassungen bis einschliesslich `v0.61.0` galt die Sperre bis zum Ende des ganzen Laufs. Neu
 transkribieren lässt sich so eine Aufnahme weiterhin erst nach dem Lauf — auch nach dem
