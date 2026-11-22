@@ -1,0 +1,132 @@
+{
+  "test": "python -m pytest webtool/test_jobs.py webtool/test_api.py -k \"fertig or umbenennen or neu_transkribieren_bleibt\" -q",
+  "pfade": [
+    "webtool/jobs.py",
+    "webtool/app.py",
+    "webtool/test_jobs.py",
+    "webtool/test_api.py"
+  ],
+  "mutationen": [
+    {
+      "id": "R1 auch correct-Laeufe geben fertige Aufnahmen frei (das Glossar bucht dort korpusweit)",
+      "datei": "webtool/jobs.py",
+      "von": "not unsicher and r[\"kind\"] == \"transcribe\"",
+      "nach": "not unsicher",
+      "rot": [
+        "test_fertig_gilt_nur_fuer_transcribe_laeufe"
+      ],
+      "gruen": [
+        "test_fertige_aufnahme_eines_transcribe_laufs_ist_fuers_umbenennen_frei"
+      ]
+    },
+    {
+      "id": "R2 eine geloeschte und neu hochgeladene Aufnahme gilt als fertig (entfernt_je ignoriert)",
+      "datei": "webtool/jobs.py",
+      "von": "\n                          and _base_schluessel(r.get(\"entfernt_je\", ()), base) is None)",
+      "nach": ")",
+      "rot": [
+        "test_geloeschte_und_neu_hochgeladene_aufnahme_gilt_nicht_als_fertig"
+      ],
+      "gruen": [
+        "test_fertige_aufnahme_eines_transcribe_laufs_ist_fuers_umbenennen_frei"
+      ]
+    },
+    {
+      "id": "R3 bei unklarer Dateisystemidentitaet wird freigegeben statt gesperrt",
+      "datei": "webtool/jobs.py",
+      "von": "fertige_frei and not unsicher and",
+      "nach": "fertige_frei and",
+      "rot": [
+        "test_fertig_wird_bei_unklarer_dateisystemidentitaet_nicht_freigegeben"
+      ],
+      "gruen": [
+        "test_fertige_aufnahme_eines_transcribe_laufs_ist_fuers_umbenennen_frei"
+      ]
+    },
+    {
+      "id": "R4 ein unbekannter Bereich gibt fertige Aufnahmen frei",
+      "datei": "webtool/jobs.py",
+      "von": "# Bereich unbekannt: allumfassend, nie freigeben\n                    return {\"id\": r[\"id\"], \"kind\": r[\"kind\"]}",
+      "nach": "# R4: Bereich unbekannt wird als leer behandelt\n                    r = dict(r, bases=set())",
+      "rot": [
+        "test_fertig_setzt_einen_bekannten_bereich_voraus"
+      ],
+      "gruen": [
+        "test_fertige_aufnahme_eines_transcribe_laufs_ist_fuers_umbenennen_frei"
+      ]
+    },
+    {
+      "id": "R5 rename_file setzt fertige_frei nicht",
+      "datei": "webtool/app.py",
+      "von": "_keine_jobs(project, base, fertige_frei=True)",
+      "nach": "_keine_jobs(project, base)",
+      "rot": [
+        "test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_sperrt_eine_aktive_aufnahme_weiter"
+      ]
+    },
+    {
+      "id": "R6 der alte Name bleibt nach dem Umbenennen im Lauf stehen (kein remove_base)",
+      "datei": "webtool/app.py",
+      "von": "jobs.remove_base(project, base)\n        # `umbenannt`",
+      "nach": "pass\n        # `umbenannt`",
+      "rot": [
+        "test_datei_umbenennen_geht_fuer_fertige_aufnahme_waehrend_eines_laufs"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ]
+    },
+    {
+      "id": "R7 fremder Ton anderer Endung gilt nicht als belegt",
+      "datei": "webtool/app.py",
+      "von": "return None, kandidat + ext",
+      "nach": "pass",
+      "rot": [
+        "test_datei_umbenennen_zaehlt_fremden_ton_anderer_endung_als_belegt"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch"
+      ]
+    },
+    {
+      "id": "R8 das Suffix hat ein anderes Format als bei fetch.unique_base",
+      "datei": "webtool/app.py",
+      "von": "f\"{neu}-{versuch}\"",
+      "nach": "f\"{neu}{versuch}\"",
+      "rot": [
+        "test_datei_umbenennen_nummeriert_einen_belegten_namen_durch",
+        "test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_den_reinen_schreibweisenwechsel_nicht"
+      ]
+    },
+    {
+      "id": "R9 ein belegtes Sidecar zaehlt nicht als Kollision",
+      "datei": "webtool/app.py",
+      "von": "return None, kandidat + rest",
+      "nach": "pass",
+      "rot": [
+        "test_datei_umbenennen_nummeriert_auch_bei_belegtem_sidecar_durch"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_nummeriert_den_reinen_schreibweisenwechsel_nicht"
+      ]
+    },
+    {
+      "id": "R10 die Durchnummerierung bricht nach dem ersten Versuch ab",
+      "datei": "webtool/app.py",
+      "von": "range(1, _UMBENENNEN_VERSUCHE + 1)",
+      "nach": "range(1, 2)",
+      "rot": [
+        "test_datei_umbenennen_zaehlt_bis_zum_ersten_freien_namen_hoch"
+      ],
+      "gruen": [
+        "test_datei_umbenennen_gibt_nach_zu_vielen_belegten_namen_auf"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "test": "npm --prefix webtool/frontend test -- --run src/components/DateiMenue.test.tsx -t \"Umbenennen: der Server nummeriert\"",
+  "pfade": [
+    "webtool/frontend/src/components/DateiMenue.tsx",
+    "webtool/frontend/src/components/DateiMenue.test.tsx"
+  ],
+  "mutationen": [
+    {
+      "id": "F1 die Meldung nennt nie den vergebenen Namen (Abweichung wird verschwiegen)",
+      "datei": "webtool/frontend/src/components/DateiMenue.tsx",
+      "von": "toast.success(res.name === neu\n",
+      "nach": "toast.success(true\n",
+      "rot": [
+        "sagt an, wenn der vergebene Name vom getippten abweicht"
+      ],
+      "gruen": [
+        "meldet im Normalfall unveraendert den neuen Namen"
+      ]
+    },
+    {
+      "id": "F2 die Meldung behauptet immer einen Namenskonflikt (Daueralarm)",
+      "datei": "webtool/frontend/src/components/DateiMenue.tsx",
+      "von": "toast.success(res.name === neu\n",
+      "nach": "toast.success(false\n",
+      "rot": [
+        "meldet im Normalfall unveraendert den neuen Namen"
+      ],
+      "gruen": [
+        "sagt an, wenn der vergebene Name vom getippten abweicht"
+      ]
+    }
+  ]
+}
