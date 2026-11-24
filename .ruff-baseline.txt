@@ -10,6 +10,7 @@ scripts/renovate_regeln.py:S603
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:F401
 scripts/test_coderabbit_status.py:I001
+scripts/test_mutationsplaene.py:S603
 scripts/test_renovate_regeln.py:S603
 scripts/test_weg_benchmark.py:I001
 tools/diar_eval.py:B904
