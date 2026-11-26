@@ -220,7 +220,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
       # Umgebungsbefund VOR dem Bau: scheitert der Lauf, ist das die erste Frage.
       - name: Umgebung
         shell: bash
