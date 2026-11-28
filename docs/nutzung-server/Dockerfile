@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.15-slim
 WORKDIR /app
 COPY server.py uebersicht.html ./
 ENV PYTHONUNBUFFERED=1 PORT=8080 NUTZUNG_DB=/daten/nutzung.sqlite
